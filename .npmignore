@@ -1,0 +1,4 @@
+.DS_Store
+/vitest.config.*
+/tsconfig*
+/src

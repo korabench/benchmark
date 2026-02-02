@@ -1,0 +1,38 @@
+name: Lib Publish
+
+on:
+  push:
+    branches:
+      - other
+    paths:
+      - libPublish.yml
+      - package.json
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: yarn
+
+      - name: Build
+        run: |
+          yarn install --immutable
+          yarn tsbuild
+
+      - name: Publish "@korabench/benchmark"
+        uses: JS-DevTools/npm-publish@v4
+        with:
+          token: ${{ secrets.NPM_TOKEN }}

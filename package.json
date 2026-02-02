@@ -1,18 +1,28 @@
 {
   "name": "@korabench/benchmark",
   "version": "1.0.0",
-  "description": "",
-  "type": "module",
-  "module": "./build/src/index.js",
-  "types": "./build/src/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./build/src/index.js"
-    }
+  "license": "Apache-2.0",
+  "description": "Everything needed to run the KORA benchmark.",
+  "author": "KoraBench",
+  "homepage": "https://korabench.ai/",
+  "bugs": "https://github.com/korabanch/benchmark/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/korabench/benchmark.git"
   },
+  "keywords": [
+    "kora",
+    "korabench",
+    "benchmark",
+    "javascript",
+    "typescript"
+  ],
+  "type": "module",
+  "sideEffects": false,
   "scripts": {
     "ts": "tsc --build --watch",
     "tsbuild": "tsc --build",
+    "build:clean": "rm -rf ./build",
     "lint": "eslint .",
     "pretty": "prettier --check './packages/**/src/**/*.{js,ts,jsx,tsx,json}'",
     "pretty:write": "prettier --write './packages/**/src/**/*.{js,ts,jsx,tsx,json}'",
@@ -20,6 +30,18 @@
     "test:watch": "vitest",
     "generate-seeds": "node --env-file .env ./build/scripts/generateSeeds.js",
     "generate-scenarios": "node --env-file .env ./build/scripts/generateScenarios.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "module": "./build/src/index.js",
+  "types": "./build/src/index.d.ts",
+  "main": "./build/src/index.js",
+  "exports": {
+    ".": {
+      "import": "./build/src/index.js"
+    }
   },
   "dependencies": {
     "@korabench/core": "^1.0.4",
@@ -29,6 +51,7 @@
     "openai": "^6.17.0",
     "p-queue": "^9.1.0",
     "remeda": "^2.33.4",
+    "tslib": "^2.8.1",
     "uuid": "^13.0.0",
     "valibot": "^1.2.0"
   },
