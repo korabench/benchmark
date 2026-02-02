@@ -1,6 +1,4 @@
-packages/app-website/src/routeTree.gen.ts
-packages/lib-benchmark/src/data/*
-packages/lib-infra/src/drivers/db/drizzle/*/snapshot.json
+src/data/*
 **/tsconfig.json
 **/wrangler.jsonc
 **/worker-configuration.d.ts
