@@ -24,7 +24,7 @@ function findPackageRoot() {
 const pkg = findPackageRoot();
 const dataPath = path.join(pkg.root, "data");
 
-const defaultSeedsPath = path.join(dataPath, "seeds.jsonl");
+const defaultSeedsPath = path.join(dataPath, "scenarioSeeds.jsonl");
 const defaultScenariosPath = path.join(dataPath, "scenarios.jsonl");
 const defaultResultsPath = path.join(dataPath, "results.json");
 
