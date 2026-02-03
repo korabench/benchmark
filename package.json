@@ -28,7 +28,8 @@
     "pretty:write": "prettier --write './src/**/*.{js,ts,jsx,tsx,json}'",
     "test": "vitest run",
     "test:watch": "vitest",
-    "kora": "node ./build/src/cli.js"
+    "kora": "node ./build/src/cli.js",
+    "kora:env": "node --env-file=.env ./build/src/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -60,7 +61,8 @@
     "streaming-iterables": "^8.0.1",
     "tslib": "^2.8.1",
     "uuid": "^13.0.0",
-    "valibot": "^1.2.0"
+    "valibot": "^1.2.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@commander-js/extra-typings": "^14.0.0",
