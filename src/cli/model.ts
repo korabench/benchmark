@@ -1,6 +1,6 @@
 import {ModelMessage} from "@korabench/core";
 import {toJsonSchema} from "@valibot/to-json-schema";
-import {generateText, gateway, jsonSchema, Output} from "ai";
+import {gateway, generateText, jsonSchema, Output} from "ai";
 import * as v from "valibot";
 
 export async function getStructuredResponse<T>(
@@ -24,6 +24,7 @@ export async function getStructuredResponse<T>(
     output: Output.object({schema: jsonSchema(outputSchema)}),
     maxOutputTokens: maxTokens,
     temperature: options?.temperature,
+    maxRetries: 5,
   });
 
   return v.parse(outputType, result.output);
@@ -47,6 +48,7 @@ export async function getTextResponse(
       })),
     maxOutputTokens: maxTokens,
     temperature: options?.temperature,
+    maxRetries: 5,
   });
 
   return result.text;

@@ -8,15 +8,21 @@ import {expandScenariosCommand} from "./cli/expandScenariosCommand.js";
 import {generateSeeds} from "./cli/generateSeedsCommand.js";
 import {runCommand} from "./cli/runCommand.js";
 
-function metaToPaths(meta: ImportMeta) {
-  const filePath = fileURLToPath(meta.url);
-  const directoryPath = dirname(filePath);
-  return {directoryPath, filePath};
+function findPackageRoot() {
+  const filePath = fileURLToPath(import.meta.url);
+  const result = finder(dirname(filePath)).next().value;
+  if (!result || !result.__path) {
+    throw new Error("Could not find package.json");
+  }
+
+  return {
+    root: dirname(result.__path),
+    version: result.version || "0.0.0",
+  };
 }
 
-const {directoryPath} = metaToPaths(import.meta);
-const dataPath = path.resolve(directoryPath, "..", "..", "data");
-const version = finder(directoryPath).next().value?.version || "0.0.0";
+const pkg = findPackageRoot();
+const dataPath = path.join(pkg.root, "data");
 
 const defaultSeedsPath = path.join(dataPath, "seeds.jsonl");
 const defaultScenariosPath = path.join(dataPath, "scenarios.jsonl");
@@ -33,7 +39,7 @@ const program = new Command()
   )
   .name("kora")
   .description("CLI tool to run the KORA benchmark.")
-  .version(version, "-v, --version")
+  .version(pkg.version, "-v, --version")
   .option("-d, --debug", "print full errors and debug information");
 
 export type Program = typeof program;
