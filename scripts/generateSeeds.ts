@@ -91,6 +91,10 @@ async function processTask(task: Task): Promise<ScenarioSeedSlice> {
   const seeds: ScenarioSeed[] = result.seeds.map(seed => ({
     ...seed,
     id: uuid(),
+    riskCategoryId: riskCategory.id,
+    riskId: risk.id,
+    ageRange,
+    motivation,
   }));
 
   return {

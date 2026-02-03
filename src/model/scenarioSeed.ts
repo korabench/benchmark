@@ -1,4 +1,6 @@
 import * as v from "valibot";
+import {AgeRange} from "./ageRange.js";
+import {Motivation} from "./motivation.js";
 
 //
 // Risk Signal Type.
@@ -208,6 +210,10 @@ const VModelScenarioSeed = v.strictObject({
 const VScenarioSeed = v.strictObject({
   ...VModelScenarioSeed.entries,
   id: v.string(),
+  riskCategoryId: v.string(),
+  riskId: v.string(),
+  ageRange: AgeRange.io,
+  motivation: Motivation.io,
 });
 
 //

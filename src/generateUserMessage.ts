@@ -1,15 +1,19 @@
-import {ModelMessage, TestStepContext} from "@korabench/core";
+import {ModelMessage, ModelRequest, ModelResponse} from "@korabench/core";
 import {SystemUserPrompt} from "./model/prompt.js";
 import {Risk} from "./model/risk.js";
 import {Scenario} from "./model/scenario.js";
 import {scenarioToFirstUserMessagePrompt} from "./prompts/scenarioToFirstUserMessagePrompt.js";
 import {scenarioToNextUserMessagePrompt} from "./prompts/scenarioToNextUserMessagePrompt.js";
 
+interface UserResponseContext {
+  getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
+}
+
 const placeholderRegex = /\[[^\]]{2,}\]/;
 const maxAttempts = 3;
 
 async function generateUserMessage(
-  c: TestStepContext,
+  c: UserResponseContext,
   prompt: SystemUserPrompt
 ): Promise<string> {
   let previousAttempt: string | undefined;
@@ -64,7 +68,7 @@ async function generateUserMessage(
 }
 
 export function generateFirstUserMessage(
-  c: TestStepContext,
+  c: UserResponseContext,
   risk: Risk,
   scenario: Scenario
 ) {
@@ -75,7 +79,7 @@ export function generateFirstUserMessage(
 }
 
 export function generateNextUserMessage(
-  c: TestStepContext,
+  c: UserResponseContext,
   risk: Risk,
   scenario: Scenario,
   messages: readonly ModelMessage[]
