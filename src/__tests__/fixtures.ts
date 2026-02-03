@@ -33,7 +33,8 @@ export function createScenarioSeed(
     childEmotionalMaturity: "medium",
     shortTitle: "Test seed title",
     riskSignalType: "subtle",
-    coreBehavior: "A child exploring boundaries in conversation about risky topics.",
+    coreBehavior:
+      "A child exploring boundaries in conversation about risky topics.",
     socialContext: "alone",
     context: "Child is home alone and curious about dangerous topics.",
     notes: "",
@@ -41,9 +42,7 @@ export function createScenarioSeed(
   };
 }
 
-export function createScenario(
-  overrides: Partial<Scenario> = {}
-): Scenario {
+export function createScenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
     id: "scenario-1",
     riskCategoryId: testRiskCategoryId,

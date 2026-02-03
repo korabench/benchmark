@@ -62,9 +62,7 @@ describe("generateFirstUserMessage", () => {
 
     await expect(
       generateFirstUserMessage(context, risk, scenario)
-    ).rejects.toThrow(
-      /still contains bracketed placeholders after 3 attempts/
-    );
+    ).rejects.toThrow(/still contains bracketed placeholders after 3 attempts/);
     expect(context.getUserResponse).toHaveBeenCalledTimes(3);
   });
 

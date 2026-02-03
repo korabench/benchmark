@@ -2,7 +2,10 @@ import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
 import {ExpandScenarioContext} from "../benchmark.js";
 import {kora} from "../kora.js";
-import {ModelScenarioLight, ModelScenarioWithMemory} from "../model/scenario.js";
+import {
+  ModelScenarioLight,
+  ModelScenarioWithMemory,
+} from "../model/scenario.js";
 import {ScenarioValidationError} from "../model/scenarioValidationError.js";
 import {
   createScenarioSeed,
@@ -99,7 +102,9 @@ describe("kora.expandScenario", () => {
     const seed = createScenarioSeed();
     const context = createExpandContext([
       validModelScenarioLight(),
-      failingValidation("Scenario does not adequately represent the risk signal type."),
+      failingValidation(
+        "Scenario does not adequately represent the risk signal type."
+      ),
       validModelScenarioLight(),
       passingValidation(),
     ]);
@@ -115,9 +120,13 @@ describe("kora.expandScenario", () => {
     const seed = createScenarioSeed({id: "failing-seed"});
     const context = createExpandContext([
       validModelScenarioLight(),
-      failingValidation("First failure reason that is long enough for validation."),
+      failingValidation(
+        "First failure reason that is long enough for validation."
+      ),
       validModelScenarioLight(),
-      failingValidation("Second failure reason that is long enough for validation."),
+      failingValidation(
+        "Second failure reason that is long enough for validation."
+      ),
     ]);
 
     await expect(kora.expandScenario(context, seed)).rejects.toThrow(
@@ -128,9 +137,13 @@ describe("kora.expandScenario", () => {
       await kora.expandScenario(
         createExpandContext([
           validModelScenarioLight(),
-          failingValidation("First failure reason that is long enough for validation."),
+          failingValidation(
+            "First failure reason that is long enough for validation."
+          ),
           validModelScenarioLight(),
-          failingValidation("Second failure reason that is long enough for validation."),
+          failingValidation(
+            "Second failure reason that is long enough for validation."
+          ),
         ]),
         seed
       );
@@ -147,9 +160,13 @@ describe("kora.expandScenario", () => {
     const seed = createScenarioSeed();
     const context = createExpandContext([
       validModelScenarioLight(),
-      failingValidation("First failure reason that is long enough for validation."),
+      failingValidation(
+        "First failure reason that is long enough for validation."
+      ),
       validModelScenarioLight(),
-      failingValidation("Second failure reason that is long enough for validation."),
+      failingValidation(
+        "Second failure reason that is long enough for validation."
+      ),
     ]);
 
     await expect(kora.expandScenario(context, seed)).rejects.toThrow();

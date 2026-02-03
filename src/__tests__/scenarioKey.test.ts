@@ -38,9 +38,7 @@ describe("ScenarioKey", () => {
   });
 
   it("throws on invalid ageRange", () => {
-    expect(() =>
-      ScenarioKey.ofString("cat:risk:99to100:id:default")
-    ).toThrow();
+    expect(() => ScenarioKey.ofString("cat:risk:99to100:id:default")).toThrow();
   });
 
   it("extracts correct fields from a scenario via ofScenario", () => {
