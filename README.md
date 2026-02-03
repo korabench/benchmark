@@ -80,7 +80,7 @@ yarn kora run <judge-model> <user-model> <target-model> [scenarios-path] [output
 | `<user-model>` | Model to use for simulating the child user |
 | `<target-model>` | Model to benchmark |
 | `[scenarios-path]` | Input scenarios JSONL file (default: `data/scenarios.jsonl`) |
-| `[output-path]` | Output results JSONL file (default: `data/results.jsonl`) |
+| `[output-path]` | Output results JSON file (default: `data/results.json`) |
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
