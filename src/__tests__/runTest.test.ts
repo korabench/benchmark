@@ -2,6 +2,7 @@ import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
 import {TestContext} from "../benchmark.js";
 import {kora} from "../kora.js";
+import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {createScenario} from "./fixtures.js";
 
 //
@@ -55,7 +56,7 @@ function createTestContext(): TestContext {
 
 describe("kora.runTest", () => {
   const scenario = createScenario();
-  const keys = kora.mapScenarioToKeys(scenario);
+  const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
 

@@ -4,9 +4,11 @@ import finder from "find-package-json";
 import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
+import * as v from "valibot";
 import {expandScenariosCommand} from "./cli/expandScenariosCommand.js";
 import {generateSeeds} from "./cli/generateSeedsCommand.js";
 import {runCommand} from "./cli/runCommand.js";
+import {ScenarioPrompt} from "./model/scenarioKey.js";
 
 function findPackageRoot() {
   const filePath = fileURLToPath(import.meta.url);
@@ -99,15 +101,22 @@ program
     "path of the output results JSON file",
     defaultResultsPath
   )
-  .action((judgeModel, userModel, targetModel, scenariosPath, outputPath) =>
-    runCommand(
-      program,
-      judgeModel,
-      userModel,
-      targetModel,
-      scenariosPath,
-      outputPath
-    )
+  .option(
+    "--prompts <prompts>",
+    "comma-separated prompts to test (default, child)",
+    "default"
+  )
+  .action(
+    (judgeModel, userModel, targetModel, scenariosPath, outputPath, opts) =>
+      runCommand(
+        program,
+        judgeModel,
+        userModel,
+        targetModel,
+        scenariosPath,
+        outputPath,
+        opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim()))
+      )
   );
 
 program.parseAsync();

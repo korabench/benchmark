@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import {ScenarioKey} from "./scenarioKey.js";
+import {ScenarioKey, ScenarioPrompt} from "./scenarioKey.js";
 import {ScenarioSeed} from "./scenarioSeed.js";
 
 //
@@ -84,11 +84,11 @@ const VScenario = v.strictObject({
 // API.
 //
 
-function toKeys(scenario: Scenario): readonly ScenarioKey[] {
-  return [
-    ScenarioKey.ofScenario(scenario, "default"),
-    ScenarioKey.ofScenario(scenario, "child"),
-  ];
+function toKeys(
+  scenario: Scenario,
+  prompts: readonly ScenarioPrompt[]
+): readonly ScenarioKey[] {
+  return prompts.map(p => ScenarioKey.ofScenario(scenario, p));
 }
 
 //

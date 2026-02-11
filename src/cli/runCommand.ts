@@ -1,4 +1,6 @@
 import {Hash, Script} from "@korabench/core";
+import archiver from "archiver";
+import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
@@ -8,6 +10,7 @@ import {TestContext} from "../benchmark.js";
 import {Program} from "../cli.js";
 import {kora} from "../kora.js";
 import {Scenario} from "../model/scenario.js";
+import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {TestResult} from "../model/testResult.js";
 import {getStructuredResponse, getTextResponse} from "./model.js";
 
@@ -47,21 +50,46 @@ async function* readScenariosFromJsonl(
 }
 
 async function* scenariosToTestTasks(
-  filePath: string
+  filePath: string,
+  prompts: readonly ScenarioPrompt[]
 ): AsyncGenerator<TestTask> {
   for await (const scenario of readScenariosFromJsonl(filePath)) {
-    for (const key of kora.mapScenarioToKeys(scenario)) {
+    for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
       yield {scenario, key};
     }
   }
 }
 
-async function countTestTasks(filePath: string): Promise<number> {
+async function countTestTasks(
+  filePath: string,
+  prompts: readonly ScenarioPrompt[]
+): Promise<number> {
   let count = 0;
   for await (const scenario of readScenariosFromJsonl(filePath)) {
-    count += kora.mapScenarioToKeys(scenario).length;
+    count += kora.mapScenarioToKeys(scenario, prompts).length;
   }
   return count;
+}
+
+async function archiveResults(
+  sourceDir: string,
+  files: readonly string[],
+  zipFilePath: string
+): Promise<void> {
+  const output = createWriteStream(zipFilePath);
+  const archive = archiver("zip", {zlib: {level: 9}});
+  const done = new Promise<void>((resolve, reject) => {
+    output.on("close", resolve);
+    archive.on("error", reject);
+  });
+
+  archive.pipe(output);
+  archive.directory(sourceDir, "testResults");
+  for (const file of files) {
+    archive.file(file, {name: path.basename(file)});
+  }
+  await archive.finalize();
+  await done;
 }
 
 async function hasTempFiles(tempDir: string): Promise<boolean> {
@@ -79,7 +107,8 @@ export async function runCommand(
   userModelSlug: string,
   targetModelSlug: string,
   scenariosFilePath: string,
-  outputFilePath: string
+  outputFilePath: string,
+  prompts: readonly ScenarioPrompt[]
 ) {
   const context: TestContext = {
     getUserResponse: async request => ({
@@ -115,13 +144,13 @@ export async function runCommand(
 
   await fs.mkdir(tempDir, {recursive: true});
 
-  const totalTests = await countTestTasks(scenariosFilePath);
+  const totalTests = await countTestTasks(scenariosFilePath, prompts);
   const progress = Script.progress(totalTests, text =>
     process.stdout.write(text)
   );
 
   const {failureCount, testCount, runResult} = await pipeline(
-    () => scenariosToTestTasks(scenariosFilePath),
+    () => scenariosToTestTasks(scenariosFilePath, prompts),
     flatTransform(10, async (task: TestTask): Promise<TaskOutcome[]> => {
       const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
@@ -182,7 +211,12 @@ export async function runCommand(
     runResult ? JSON.stringify(runResult) + "\n" : ""
   );
 
+  // Archive results before cleaning up.
+  const zipFilePath = outputFilePath.replace(/\.json$/, ".zip");
+  await archiveResults(tempDir, [outputFilePath], zipFilePath);
+
   await fs.rm(tempDir, {recursive: true, force: true});
 
   console.log(`\nCompleted ${testCount} tests → ${outputFilePath}`);
+  console.log(`Test results archived → ${zipFilePath}`);
 }

@@ -5,6 +5,7 @@ import {
   TypedModelRequest,
   TypedModelResponse,
 } from "@korabench/core";
+import {ScenarioPrompt} from "./model/scenarioKey.js";
 
 export interface GenerateSeedsContext {
   getResponse: <T>(
@@ -49,7 +50,10 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
     c: ExpandScenarioContext,
     seed: TScenarioSeed
   ): Promise<readonly TScenario[]>;
-  mapScenarioToKeys(scenario: TScenario): readonly string[];
+  mapScenarioToKeys(
+    scenario: TScenario,
+    prompts?: readonly ScenarioPrompt[]
+  ): readonly string[];
   runTest(
     c: TestContext,
     scenario: TScenario,
