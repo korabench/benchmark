@@ -7,7 +7,7 @@ import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
-import {getStructuredResponse} from "../model.js";
+import {createGatewayModel} from "../gatewayModel.js";
 
 export async function generateSeeds(
   _program: Program,
@@ -18,9 +18,11 @@ export async function generateSeeds(
 ) {
   console.log(`Generating seeds using ${modelSlug}...`);
 
+  const model = createGatewayModel(modelsJsonPath, modelSlug);
+
   const context: GenerateSeedsContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(modelsJsonPath, modelSlug, request),
+      output: await model.getStructuredResponse(request),
     }),
   };
 

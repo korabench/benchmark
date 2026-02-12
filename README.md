@@ -14,13 +14,14 @@ Each test is a 3-turn conversation between a simulated child user and the target
 
 - **Node.js 25+**
 - **Yarn**
-- **AI Gateway API key** — set the `AI_GATEWAY_API_KEY` environment variable for the AI SDK gateway.
+- **AI Gateway API key** — set the `AI_GATEWAY_API_KEY` environment variable for the AI SDK gateway. Copy `.env.example` to `.env` and fill in your key.
 
 ## Getting started
 
 Install dependencies and build:
 
 ```bash
+cp .env.example .env   # then add your API key
 yarn && yarn tsbuild
 ```
 
@@ -123,39 +124,40 @@ Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
 Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
 
-To add a custom model, edit `customModel.ts` and replace the `throw` with your implementation:
+To add a custom model, edit `customModel.ts` and implement the `Model` interface:
 
 ```ts
-export async function getCustomTextResponse(
-  modelSlug: string,
-  _request: ModelRequest,
-  retryOptions: RetryOptions
-): Promise<string> {
-  return withRetry(async () => {
-    // Replace this with your custom model call.
-    // request.messages contains the conversation (system, user, assistant messages).
-    // request.maxTokens and request.temperature are optional hints.
-    // Return the model's text response.
-    throw new Error(
-      `Custom model "${modelSlug}" is not implemented. ` +
-        `Provide an implementation in customModel.ts.`
-    );
-  }, retryOptions);
+export async function createCustomModel(modelSlug: string, _scenario: Scenario): Promise<Model> {
+  return {
+    async getTextResponse(request) {
+      // request.messages contains the conversation (system, user, assistant messages).
+      // request.maxTokens and request.temperature are optional hints.
+      // Return the model's text response.
+      throw new Error(`Custom model "${modelSlug}" is not implemented.`);
+    },
+
+    async getStructuredResponse(request) {
+      // request.outputType is the Valibot schema for the expected output.
+      // Return a parsed object matching the schema.
+      throw new Error(`Custom model "${modelSlug}" is not implemented.`);
+    },
+  };
 }
 ```
 
-The function receives:
+The factory receives:
 - `modelSlug` — the full slug (e.g. `custom-my-model`), so you can route to different backends.
-- `request` — a `ModelRequest` with `messages`, optional `maxTokens`, and optional `temperature`.
-- `retryOptions` — pre-configured retry options with exponential backoff. The `withRetry` wrapper handles transient errors automatically.
+- `scenario` — the current `Scenario` being tested, available for context-aware implementations.
+
+Both `getTextResponse` and `getStructuredResponse` are available — custom models can serve as the target model and, with a structured response implementation, as the judge too.
+
+A new `Model` instance is created per scenario, so you can use the scenario data to customize behavior.
 
 Then use the slug on the command line like any other model:
 
 ```bash
 yarn kora run custom-my-model
 ```
-
-Custom model routing is only supported for text responses (the user and target model roles). Judge models and seed/scenario generation require structured output and must use registry models.
 
 ## Evaluating a different model
 
@@ -244,17 +246,24 @@ All commands run with a concurrency of 10 parallel tasks.
 ## Project structure
 
 ```
+.env.example                         Environment variable template
 models.json                          Model registry configuration
-data/                                Risk taxonomy, motivations, scenario data
+data/                                Scenario pipeline output (seeds, scenarios, results)
 packages/
-  benchmark/src/                     Core benchmark logic
-    prompts/                         Prompt templates for each pipeline stage
-    __tests__/                       Test suites
-    benchmark.ts                     Core benchmark interface
-    kora.ts                          KORA benchmark implementation
+  benchmark/
+    data/                            Risk taxonomy and motivations (risks.json, motivations.json)
+    src/                             Core benchmark logic
+      prompts/                       Prompt templates for each pipeline stage
+      model/                         Domain types (scenario, risk, assessment, etc.)
+      __tests__/                     Test suites
+      benchmark.ts                   Core benchmark interface
+      generateUserMessage.ts         User message generation
+      kora.ts                        KORA benchmark implementation
   cli/src/                           CLI package
     commands/                        CLI command implementations
-    model.ts                         Model resolution and AI SDK integration
+    __tests__/                       CLI test suites
+    model.ts                         Model interface definition
+    gatewayModel.ts                  AI SDK gateway model implementation
     modelConfig.ts                   Model registry loader
     customModel.ts                   Custom model hook (edit to add your own)
     retry.ts                         Retry with exponential backoff

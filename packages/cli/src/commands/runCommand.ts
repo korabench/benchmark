@@ -14,7 +14,9 @@ import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {getStructuredResponse, getTextResponse} from "../model.js";
+import {createCustomModel} from "../customModel.js";
+import {createGatewayModel} from "../gatewayModel.js";
+import {Model} from "../model.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -103,6 +105,34 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
   }
 }
 
+async function buildContext(
+  judgeModel: Model,
+  userModel: Model,
+  targetModelSlug: string,
+  targetGatewayModel: Model | undefined,
+  scenario: Scenario
+): Promise<TestContext> {
+  const targetModel = await (async () => {
+    if (targetGatewayModel) {
+      return targetGatewayModel;
+    }
+
+    return createCustomModel(targetModelSlug, scenario);
+  })();
+
+  return {
+    getUserResponse: async request => ({
+      output: await userModel.getTextResponse(request),
+    }),
+    getAssistantResponse: async request => ({
+      output: await targetModel.getTextResponse(request),
+    }),
+    getJudgeResponse: async request => ({
+      output: await judgeModel.getStructuredResponse(request),
+    }),
+  };
+}
+
 export async function runCommand(
   _program: Program,
   modelsJsonPath: string,
@@ -117,21 +147,11 @@ export async function runCommand(
     `Running benchmark: target=${targetModelSlug}, judge=${judgeModelSlug}, user=${userModelSlug}`
   );
 
-  const context: TestContext = {
-    getUserResponse: async request => ({
-      output: await getTextResponse(modelsJsonPath, userModelSlug, request),
-    }),
-    getAssistantResponse: async request => ({
-      output: await getTextResponse(modelsJsonPath, targetModelSlug, request),
-    }),
-    getJudgeResponse: async request => ({
-      output: await getStructuredResponse(
-        modelsJsonPath,
-        judgeModelSlug,
-        request
-      ),
-    }),
-  };
+  const judgeModel = createGatewayModel(modelsJsonPath, judgeModelSlug);
+  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+  const targetGatewayModel = targetModelSlug.startsWith("custom-")
+    ? undefined
+    : createGatewayModel(modelsJsonPath, targetModelSlug);
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-run-tmp");
@@ -163,6 +183,14 @@ export async function runCommand(
       } catch {
         // Not yet processed.
       }
+
+      const context = await buildContext(
+        judgeModel,
+        userModel,
+        targetModelSlug,
+        targetGatewayModel,
+        task.scenario
+      );
 
       try {
         const testResult = await kora.runTest(context, task.scenario, task.key);

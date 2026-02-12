@@ -1,15 +1,23 @@
-import {ModelRequest} from "@korabench/core";
-import {RetryOptions, withRetry} from "./retry.js";
+import {Scenario} from "@korabench/benchmark";
+import {Model} from "./model.js";
 
-export async function getCustomTextResponse(
+export async function createCustomModel(
   modelSlug: string,
-  _request: ModelRequest,
-  retryOptions: RetryOptions
-): Promise<string> {
-  return withRetry(async () => {
-    throw new Error(
-      `Custom model "${modelSlug}" is not implemented. ` +
-        `Provide an implementation in customModel.ts.`
-    );
-  }, retryOptions);
+  _scenario: Scenario
+): Promise<Model> {
+  return {
+    async getTextResponse() {
+      throw new Error(
+        `Custom model "${modelSlug}" is not implemented. ` +
+          `Provide an implementation in customModel.ts.`
+      );
+    },
+
+    async getStructuredResponse() {
+      throw new Error(
+        `Custom model "${modelSlug}" is not implemented. ` +
+          `Provide an implementation in customModel.ts.`
+      );
+    },
+  };
 }

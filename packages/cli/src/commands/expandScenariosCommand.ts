@@ -12,7 +12,7 @@ import * as readline from "node:readline";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {getStructuredResponse, getTextResponse} from "../model.js";
+import {createGatewayModel} from "../gatewayModel.js";
 
 async function* readSeedsFromJsonl(
   filePath: string
@@ -57,12 +57,15 @@ export async function expandScenariosCommand(
     `Expanding scenarios using ${modelSlug} (user: ${userModelSlug})...`
   );
 
+  const model = createGatewayModel(modelsJsonPath, modelSlug);
+  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+
   const context: ExpandScenarioContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(modelsJsonPath, modelSlug, request),
+      output: await model.getStructuredResponse(request),
     }),
     getUserResponse: async request => ({
-      output: await getTextResponse(modelsJsonPath, userModelSlug, request),
+      output: await userModel.getTextResponse(request),
     }),
   };
 

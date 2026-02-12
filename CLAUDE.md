@@ -8,6 +8,7 @@
 - If JavaScript, TypeScript, or JSON files are modified, run:
   - `yarn tsbuild` for typechecking.
   - Ensure type check passes.
+- After any changes, check if `README.md` needs updating (e.g., new files, changed APIs, modified project structure, new CLI options).
 
 ## Code style
 
