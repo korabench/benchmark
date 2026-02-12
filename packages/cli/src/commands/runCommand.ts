@@ -113,6 +113,10 @@ export async function runCommand(
   outputFilePath: string,
   prompts: readonly ScenarioPrompt[]
 ) {
+  console.log(
+    `Running benchmark: target=${targetModelSlug}, judge=${judgeModelSlug}, user=${userModelSlug}`
+  );
+
   const context: TestContext = {
     getUserResponse: async request => ({
       output: await getTextResponse(modelsJsonPath, userModelSlug, request),

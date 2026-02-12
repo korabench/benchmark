@@ -16,6 +16,8 @@ export async function generateSeeds(
   outputFilePath: string,
   options?: GenerateSeedsOptions
 ) {
+  console.log(`Generating seeds using ${modelSlug}...`);
+
   const context: GenerateSeedsContext = {
     getResponse: async request => ({
       output: await getStructuredResponse(modelsJsonPath, modelSlug, request),

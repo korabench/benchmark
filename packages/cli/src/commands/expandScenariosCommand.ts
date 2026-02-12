@@ -53,6 +53,10 @@ export async function expandScenariosCommand(
   seedsFilePath: string,
   outputFilePath: string
 ) {
+  console.log(
+    `Expanding scenarios using ${modelSlug} (user: ${userModelSlug})...`
+  );
+
   const context: ExpandScenarioContext = {
     getResponse: async request => ({
       output: await getStructuredResponse(modelsJsonPath, modelSlug, request),
