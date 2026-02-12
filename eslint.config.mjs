@@ -1,5 +1,4 @@
 import js from "@eslint/js";
-import drizzle from "eslint-plugin-drizzle";
 import react from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import {defineConfig, globalIgnores} from "eslint/config";
@@ -9,7 +8,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts,jsx,tsx}"],
-    plugins: {js, drizzle, react},
+    plugins: {js, react},
     extends: ["js/recommended"],
     languageOptions: {globals: {...globals.browser, ...globals.node}},
     settings: {
@@ -41,8 +40,6 @@ export default defineConfig([
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-empty-object-type": "off",
       "@typescript-eslint/no-unused-vars": ["warn", {argsIgnorePattern: "^_"}],
-      "drizzle/enforce-delete-with-where": ["error", {drizzleObjectName: "db"}],
-      "drizzle/enforce-update-with-where": ["error", {drizzleObjectName: "db"}],
-    },
+},
   },
 ]);

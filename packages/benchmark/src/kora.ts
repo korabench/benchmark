@@ -183,8 +183,12 @@ export const kora = Benchmark.new({
       maxAttempts
     );
   },
-  mapScenarioToKeys(scenario) {
-    return R.pipe(scenario, Scenario.toKeys, R.map(ScenarioKey.toString));
+  mapScenarioToKeys(scenario, prompts = ["default"]) {
+    return R.pipe(
+      scenario,
+      s => Scenario.toKeys(s, prompts),
+      R.map(ScenarioKey.toString)
+    );
   },
   async runTest(c, scenario, keyString) {
     const key = ScenarioKey.ofString(keyString);

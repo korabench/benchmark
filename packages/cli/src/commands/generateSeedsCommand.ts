@@ -1,25 +1,28 @@
+import {
+  GenerateSeedsContext,
+  GenerateSeedsOptions,
+  kora,
+} from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import {GenerateSeedsContext, GenerateSeedsOptions} from "../benchmark.js";
 import {Program} from "../cli.js";
-import {kora} from "../kora.js";
-import {getStructuredResponse} from "./model.js";
+import {createGatewayModel} from "../gatewayModel.js";
 
 export async function generateSeeds(
   _program: Program,
+  modelsJsonPath: string,
   modelSlug: string,
   outputFilePath: string,
   options?: GenerateSeedsOptions
 ) {
+  console.log(`Generating seeds using ${modelSlug}...`);
+
+  const model = createGatewayModel(modelsJsonPath, modelSlug);
+
   const context: GenerateSeedsContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(
-        modelSlug,
-        request.messages,
-        request.outputType,
-        {maxTokens: request.maxTokens}
-      ),
+      output: await model.getStructuredResponse(request),
     }),
   };
 

@@ -9,7 +9,7 @@ import {ScenarioSeed} from "../model/scenarioSeed.js";
 // Helpers.
 //
 
-const dataDir = new URL("../../data", import.meta.url).pathname;
+const dataDir = new URL("../../../../data", import.meta.url).pathname;
 
 async function* readJsonlLines(
   filePath: string

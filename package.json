@@ -1,80 +1,27 @@
 {
-  "name": "@korabench/benchmark",
-  "version": "1.0.0",
-  "license": "Apache-2.0",
-  "description": "Everything needed to run the KORA benchmark.",
-  "author": "KoraBench",
-  "homepage": "https://korabench.ai/",
-  "bugs": "https://github.com/korabanch/benchmark/issues",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/korabench/benchmark.git"
-  },
-  "keywords": [
-    "kora",
-    "korabench",
-    "benchmark",
-    "javascript",
-    "typescript"
+  "name": "@korabench/public",
+  "private": true,
+  "workspaces": [
+    "packages/*"
   ],
-  "type": "module",
-  "sideEffects": false,
+  "packageManager": "yarn@4.12.0",
   "scripts": {
     "ts": "tsc --build --watch",
     "tsbuild": "tsc --build",
-    "build:clean": "rm -rf ./build",
+    "build:clean": "rm -rf ./build ./packages/*/build",
     "lint": "eslint .",
-    "pretty": "prettier --check './src/**/*.{js,ts,jsx,tsx,json}'",
-    "pretty:write": "prettier --write './src/**/*.{js,ts,jsx,tsx,json}'",
+    "pretty": "prettier --check './packages/*/src/**/*.{js,ts,jsx,tsx,json}'",
+    "pretty:write": "prettier --write './packages/*/src/**/*.{js,ts,jsx,tsx,json}'",
     "test": "vitest run",
     "test:watch": "vitest",
-    "kora": "node ./build/src/cli.js",
-    "kora:env": "node --env-file=.env ./build/src/cli.js"
-  },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
-  },
-  "module": "./build/src/index.js",
-  "types": "./build/src/index.d.ts",
-  "main": "./build/src/index.js",
-  "bin": {
-    "kora": "./build/src/cli.js"
-  },
-  "exports": {
-    ".": {
-      "import": "./build/src/index.js"
-    }
-  },
-  "dependencies": {
-    "@inquirer/prompts": "^8.2.0",
-    "@korabench/core": "^1.0.6",
-    "@types/uuid": "^11.0.0",
-    "@valibot/to-json-schema": "^1.5.0",
-    "ai": "^6.0.68",
-    "commander": "^14.0.3",
-    "find-package-json": "^1.2.0",
-    "jsonc-parser": "^3.3.1",
-    "openai": "^6.17.0",
-    "p-queue": "^9.1.0",
-    "remeda": "^2.33.4",
-    "streaming-iterables": "^8.0.1",
-    "tslib": "^2.8.1",
-    "uuid": "^13.0.0",
-    "valibot": "^1.2.0",
-    "zod": "^4.3.6"
+    "kora": "node ./packages/cli/build/src/cli.js",
+    "kora:env": "node --env-file=.env ./packages/cli/build/src/cli.js"
   },
   "devDependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
-    "@eslint/js": "9.39.2",
-    "@types/find-package-json": "^1.2.7",
-    "@types/node": "25.2.0",
-    "@typescript-eslint/eslint-plugin": "8.54.0",
-    "@typescript-eslint/parser": "8.54.0",
-    "@typescript-eslint/utils": "8.54.0",
-    "eslint": "9.39.2",
-    "eslint-config-prettier": "10.1.8",
-    "eslint-plugin-drizzle": "0.2.3",
+    "@eslint/js": "10.0.1",
+    "@typescript-eslint/eslint-plugin": "8.55.0",
+    "@typescript-eslint/parser": "8.55.0",
+    "eslint": "10.0.0",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "7.0.1",
     "globals": "17.3.0",
@@ -82,7 +29,7 @@
     "prettier-plugin-organize-imports": "4.3.0",
     "prettier-plugin-tailwindcss": "0.7.2",
     "typescript": "5.9.3",
-    "typescript-eslint": "8.54.0",
+    "typescript-eslint": "8.55.0",
     "vitest": "4.0.18"
   }
 }

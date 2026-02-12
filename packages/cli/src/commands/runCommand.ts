@@ -1,15 +1,22 @@
+import {
+  kora,
+  Scenario,
+  ScenarioPrompt,
+  TestContext,
+  TestResult,
+} from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
+import archiver from "archiver";
+import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
-import {TestContext} from "../benchmark.js";
 import {Program} from "../cli.js";
-import {kora} from "../kora.js";
-import {Scenario} from "../model/scenario.js";
-import {TestResult} from "../model/testResult.js";
-import {getStructuredResponse, getTextResponse} from "./model.js";
+import {createCustomModel} from "../customModel.js";
+import {createGatewayModel} from "../gatewayModel.js";
+import {Model} from "../model.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -47,21 +54,46 @@ async function* readScenariosFromJsonl(
 }
 
 async function* scenariosToTestTasks(
-  filePath: string
+  filePath: string,
+  prompts: readonly ScenarioPrompt[]
 ): AsyncGenerator<TestTask> {
   for await (const scenario of readScenariosFromJsonl(filePath)) {
-    for (const key of kora.mapScenarioToKeys(scenario)) {
+    for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
       yield {scenario, key};
     }
   }
 }
 
-async function countTestTasks(filePath: string): Promise<number> {
+async function countTestTasks(
+  filePath: string,
+  prompts: readonly ScenarioPrompt[]
+): Promise<number> {
   let count = 0;
   for await (const scenario of readScenariosFromJsonl(filePath)) {
-    count += kora.mapScenarioToKeys(scenario).length;
+    count += kora.mapScenarioToKeys(scenario, prompts).length;
   }
   return count;
+}
+
+async function archiveResults(
+  sourceDir: string,
+  files: readonly string[],
+  zipFilePath: string
+): Promise<void> {
+  const output = createWriteStream(zipFilePath);
+  const archive = archiver("zip", {zlib: {level: 9}});
+  const done = new Promise<void>((resolve, reject) => {
+    output.on("close", resolve);
+    archive.on("error", reject);
+  });
+
+  archive.pipe(output);
+  archive.directory(sourceDir, "testResults");
+  for (const file of files) {
+    archive.file(file, {name: path.basename(file)});
+  }
+  await archive.finalize();
+  await done;
 }
 
 async function hasTempFiles(tempDir: string): Promise<boolean> {
@@ -73,36 +105,53 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
   }
 }
 
+async function buildContext(
+  judgeModel: Model,
+  userModel: Model,
+  targetModelSlug: string,
+  targetGatewayModel: Model | undefined,
+  scenario: Scenario
+): Promise<TestContext> {
+  const targetModel = await (async () => {
+    if (targetGatewayModel) {
+      return targetGatewayModel;
+    }
+
+    return createCustomModel(targetModelSlug, scenario);
+  })();
+
+  return {
+    getUserResponse: async request => ({
+      output: await userModel.getTextResponse(request),
+    }),
+    getAssistantResponse: async request => ({
+      output: await targetModel.getTextResponse(request),
+    }),
+    getJudgeResponse: async request => ({
+      output: await judgeModel.getStructuredResponse(request),
+    }),
+  };
+}
+
 export async function runCommand(
   _program: Program,
+  modelsJsonPath: string,
   judgeModelSlug: string,
   userModelSlug: string,
   targetModelSlug: string,
   scenariosFilePath: string,
-  outputFilePath: string
+  outputFilePath: string,
+  prompts: readonly ScenarioPrompt[]
 ) {
-  const context: TestContext = {
-    getUserResponse: async request => ({
-      output: await getTextResponse(userModelSlug, request.messages, {
-        maxTokens: request.maxTokens,
-        temperature: request.temperature,
-      }),
-    }),
-    getAssistantResponse: async request => ({
-      output: await getTextResponse(targetModelSlug, request.messages, {
-        maxTokens: request.maxTokens,
-        temperature: request.temperature,
-      }),
-    }),
-    getJudgeResponse: async request => ({
-      output: await getStructuredResponse(
-        judgeModelSlug,
-        request.messages,
-        request.outputType,
-        {maxTokens: request.maxTokens}
-      ),
-    }),
-  };
+  console.log(
+    `Running benchmark: target=${targetModelSlug}, judge=${judgeModelSlug}, user=${userModelSlug}`
+  );
+
+  const judgeModel = createGatewayModel(modelsJsonPath, judgeModelSlug);
+  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+  const targetGatewayModel = targetModelSlug.startsWith("custom-")
+    ? undefined
+    : createGatewayModel(modelsJsonPath, targetModelSlug);
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-run-tmp");
@@ -115,13 +164,13 @@ export async function runCommand(
 
   await fs.mkdir(tempDir, {recursive: true});
 
-  const totalTests = await countTestTasks(scenariosFilePath);
+  const totalTests = await countTestTasks(scenariosFilePath, prompts);
   const progress = Script.progress(totalTests, text =>
     process.stdout.write(text)
   );
 
   const {failureCount, testCount, runResult} = await pipeline(
-    () => scenariosToTestTasks(scenariosFilePath),
+    () => scenariosToTestTasks(scenariosFilePath, prompts),
     flatTransform(10, async (task: TestTask): Promise<TaskOutcome[]> => {
       const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
@@ -135,9 +184,17 @@ export async function runCommand(
         // Not yet processed.
       }
 
+      const context = await buildContext(
+        judgeModel,
+        userModel,
+        targetModelSlug,
+        targetGatewayModel,
+        task.scenario
+      );
+
       try {
         const testResult = await kora.runTest(context, task.scenario, task.key);
-        await fs.writeFile(tempFile, JSON.stringify(testResult));
+        await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);
         return [{kind: "success", testResult}];
       } catch (error) {
@@ -176,13 +233,25 @@ export async function runCommand(
   }
 
   // Write reduced result.
+  const result = {
+    target: targetModelSlug,
+    judge: judgeModelSlug,
+    user: userModelSlug,
+    prompts,
+    ...(runResult ?? {}),
+  };
+
   await fs.mkdir(outputDir, {recursive: true});
-  await fs.writeFile(
-    outputFilePath,
-    runResult ? JSON.stringify(runResult) + "\n" : ""
-  );
+  await fs.writeFile(outputFilePath, JSON.stringify(result, null, 2));
+
+  // Archive results before cleaning up.
+  const ext = path.extname(outputFilePath);
+  const zipFilePath =
+    (ext ? outputFilePath.slice(0, -ext.length) : outputFilePath) + ".zip";
+  await archiveResults(tempDir, [outputFilePath], zipFilePath);
 
   await fs.rm(tempDir, {recursive: true, force: true});
 
   console.log(`\nCompleted ${testCount} tests → ${outputFilePath}`);
+  console.log(`Test results archived → ${zipFilePath}`);
 }
