@@ -1,5 +1,6 @@
 import * as v from "valibot";
-import {ScenarioKey, ScenarioPrompt} from "./scenarioKey.js";
+import {ScenarioKey} from "./scenarioKey.js";
+import {ScenarioPrompt} from "./scenarioPrompt.js";
 import {ScenarioSeed} from "./scenarioSeed.js";
 
 //

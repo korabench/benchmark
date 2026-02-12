@@ -2,7 +2,7 @@ import {ModelMessage} from "@korabench/core";
 import * as v from "valibot";
 import {BehaviorAssessment} from "./behaviorAssessment.js";
 import {Scenario} from "./scenario.js";
-import {ScenarioPrompt} from "./scenarioKey.js";
+import {ScenarioPrompt} from "./scenarioPrompt.js";
 import {TestAssessment} from "./testAssessment.js";
 
 //

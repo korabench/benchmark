@@ -1,6 +1,6 @@
 import * as v from "valibot";
 import {AgeRange} from "./ageRange.js";
-import {ScenarioPrompt} from "./scenarioKey.js";
+import {ScenarioPrompt} from "./scenarioPrompt.js";
 
 //
 // Runtime type.

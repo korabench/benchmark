@@ -5,7 +5,8 @@ import {
   TypedModelRequest,
   TypedModelResponse,
 } from "@korabench/core";
-import {ScenarioPrompt} from "./model/scenarioKey.js";
+import {AgeRange} from "./model/ageRange.js";
+import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 
 export interface GenerateSeedsContext {
   getResponse: <T>(
@@ -35,6 +36,7 @@ export interface GenerationEvent<T> {
 
 export interface GenerateSeedsOptions {
   seedsPerTask?: number;
+  ageRanges?: AgeRange[];
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {

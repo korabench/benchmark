@@ -49,13 +49,14 @@ export const kora = Benchmark.new({
     const riskCategories = RiskCategory.listAll();
     const motivations = Motivation.listAll();
     const seedsPerTask = options?.seedsPerTask ?? 8;
+    const ageRanges = options?.ageRanges ?? AgeRange.list;
     const SeedsOutput = v.strictObject({
       seeds: v.array(ModelScenarioSeed.io),
     });
 
     const tasks = riskCategories.flatMap(riskCategory =>
       riskCategory.risks.flatMap(risk =>
-        AgeRange.list.flatMap(ageRange =>
+        ageRanges.flatMap(ageRange =>
           motivations.map(motivation => ({
             riskCategory,
             risk,

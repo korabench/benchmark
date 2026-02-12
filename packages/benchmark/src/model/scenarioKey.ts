@@ -1,45 +1,30 @@
-import {unreachable} from "@korabench/core";
 import * as v from "valibot";
 import {AgeRange} from "./ageRange.js";
 import {Scenario} from "./scenario.js";
+import {ScenarioPrompt} from "./scenarioPrompt.js";
 
 //
 // Runtime type.
 //
-
-const VScenarioPrompt = v.picklist(["default", "child"]);
 
 const VScenarioKey = v.strictObject({
   riskCategoryId: v.string(),
   riskId: v.string(),
   ageRange: AgeRange.io,
   id: v.string(),
-  prompt: VScenarioPrompt,
+  prompt: ScenarioPrompt.io,
 });
 
 //
 // Type exports.
 //
 
-export type ScenarioPrompt = v.InferOutput<typeof VScenarioPrompt>;
+export {ScenarioPrompt} from "./scenarioPrompt.js";
 export interface ScenarioKey extends v.InferOutput<typeof VScenarioKey> {}
 
 //
 // API.
 //
-
-function promptToAgeRange(ageRange: AgeRange, prompt: ScenarioPrompt) {
-  switch (prompt) {
-    case "default":
-      return undefined;
-
-    case "child":
-      return ageRange;
-
-    default:
-      unreachable(prompt);
-  }
-}
 
 function keyOfString(src: string): ScenarioKey {
   const values = src.split(":");
@@ -67,18 +52,12 @@ function keyToString(key: ScenarioKey): string {
 }
 
 function keyToAgeRange(key: ScenarioKey) {
-  return promptToAgeRange(key.ageRange, key.prompt);
+  return ScenarioPrompt.toAgeRange(key.ageRange, key.prompt);
 }
 
 //
 // Exports.
 //
-
-export const ScenarioPrompt = {
-  io: VScenarioPrompt,
-  list: VScenarioPrompt.options,
-  toAgeRange: promptToAgeRange,
-};
 
 export const ScenarioKey = {
   io: VScenarioKey,

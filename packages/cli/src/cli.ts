@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {Command} from "@commander-js/extra-typings";
-import {ScenarioPrompt} from "@korabench/benchmark";
+import {AgeRange, ScenarioPrompt} from "@korabench/benchmark";
 import {existsSync, readFileSync} from "node:fs";
 import * as path from "node:path";
 import {dirname} from "node:path";
@@ -78,9 +78,17 @@ program
     "number of seeds to generate per risk/age/motivation combination",
     "8"
   )
+  .option(
+    "--age-ranges <ranges>",
+    "comma-separated age ranges to generate seeds for (7to9, 10to12, 13to17)",
+    AgeRange.list.join(",")
+  )
   .action((model, opts) =>
     generateSeeds(program, modelsJsonPath, model, opts.output, {
       seedsPerTask: parseInt(opts.seedsPerTask, 10),
+      ageRanges: opts.ageRanges
+        .split(",")
+        .map(r => v.parse(AgeRange.io, r.trim())),
     })
   );
 
@@ -129,7 +137,7 @@ program
   .option(
     "--prompts <prompts>",
     "comma-separated prompts to test (default, child)",
-    "default"
+    ScenarioPrompt.list[0]
   )
   .action((targetModel, judgeModel, userModel, opts) =>
     runCommand(
