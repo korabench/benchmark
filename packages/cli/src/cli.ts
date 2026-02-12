@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import {Command} from "@commander-js/extra-typings";
+import {ScenarioPrompt} from "@korabench/benchmark";
 import {existsSync, readFileSync} from "node:fs";
 import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
-import {ScenarioPrompt} from "@korabench/benchmark";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {runCommand} from "./commands/runCommand.js";
@@ -62,7 +62,7 @@ export type Program = typeof program;
 program
   .command("generate-seeds")
   .description("generate a new set of scenario seeds")
-  .argument("<model>", "model to use for seed generation")
+  .argument("[model]", "model to use for seed generation", "gpt-5.2:high")
   .argument(
     "[output-path]",
     "path of the output seeds JSONL file",
@@ -82,8 +82,12 @@ program
 program
   .command("expand-scenarios")
   .description("transform the seeds into fully fleshed out scenarios")
-  .argument("<model>", "model to use for seed expansion")
-  .argument("<user-model>", "model to use for user message generation")
+  .argument("[model]", "model to use for seed expansion", "gpt-4o")
+  .argument(
+    "[user-model]",
+    "model to use for user message generation",
+    "deepseek-v3"
+  )
   .argument(
     "[seeds-path]",
     "path of the input seeds JSONL file",
@@ -108,8 +112,12 @@ program
 program
   .command("run")
   .description("run the benchmark with the provided scenarios")
-  .argument("<judge-model>", "model to use as judge")
-  .argument("<user-model>", "model to use for user message generation")
+  .argument("[judge-model]", "model to use as judge", "gpt-5.2:high:limited")
+  .argument(
+    "[user-model]",
+    "model to use for user message generation",
+    "deepseek-v3"
+  )
   .argument("<target-model>", "model to benchmark")
   .argument(
     "[scenarios-path]",
