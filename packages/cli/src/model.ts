@@ -37,7 +37,7 @@ export async function getStructuredResponse<T>(
 ): Promise<T> {
   const config = resolveModelConfig(modelsJsonPath, modelSlug);
   const outputSchema = toJsonSchema(request.outputType);
-  const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
+  const maxTokens = request.maxTokens ?? config.maxTokens;
   const temperature = request.temperature ?? config.temperature;
   const retryOptions = buildRetryOptions(config.model, options);
 
@@ -78,7 +78,7 @@ export async function getTextResponse(
   }
 
   const config = resolveModelConfig(modelsJsonPath, modelSlug);
-  const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
+  const maxTokens = request.maxTokens ?? config.maxTokens;
   const temperature = request.temperature ?? config.temperature;
   const retryOptions = buildRetryOptions(config.model, options);
 
