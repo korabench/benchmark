@@ -627,6 +627,7 @@ __metadata:
     streaming-iterables: "npm:^8.0.1"
     tslib: "npm:^2.8.1"
     valibot: "npm:^1.2.0"
+    zod: "npm:^4.3.6"
   bin:
     kora: ./build/src/cli.js
   languageName: unknown
@@ -651,10 +652,7 @@ __metadata:
     "@eslint/js": "npm:10.0.1"
     "@typescript-eslint/eslint-plugin": "npm:8.55.0"
     "@typescript-eslint/parser": "npm:8.55.0"
-    "@typescript-eslint/utils": "npm:8.55.0"
     eslint: "npm:10.0.0"
-    eslint-config-prettier: "npm:10.1.8"
-    eslint-plugin-drizzle: "npm:0.2.3"
     eslint-plugin-react: "npm:7.37.5"
     eslint-plugin-react-hooks: "npm:7.0.1"
     globals: "npm:17.3.0"
@@ -2121,26 +2119,6 @@ __metadata:
   version: 4.0.0
   resolution: "escape-string-regexp@npm:4.0.0"
   checksum: 10c0/9497d4dd307d845bd7f75180d8188bb17ea8c151c1edbf6b6717c100e104d629dc2dfb687686181b0f4b7d732c7dfdc4d5e7a8ff72de1b0ca283a75bbb3a9cd9
-  languageName: node
-  linkType: hard
-
-"eslint-config-prettier@npm:10.1.8":
-  version: 10.1.8
-  resolution: "eslint-config-prettier@npm:10.1.8"
-  peerDependencies:
-    eslint: ">=7.0.0"
-  bin:
-    eslint-config-prettier: bin/cli.js
-  checksum: 10c0/e1bcfadc9eccd526c240056b1e59c5cd26544fe59feb85f38f4f1f116caed96aea0b3b87868e68b3099e55caaac3f2e5b9f58110f85db893e83a332751192682
-  languageName: node
-  linkType: hard
-
-"eslint-plugin-drizzle@npm:0.2.3":
-  version: 0.2.3
-  resolution: "eslint-plugin-drizzle@npm:0.2.3"
-  peerDependencies:
-    eslint: ">=8.0.0"
-  checksum: 10c0/e747b712e74049034e747d6825400cf2122d2b53da46bdf64f3b221da13410d84f53ca050515d9174ae65e287803ae2a48403a3492bb664a8fa65ec9540f658a
   languageName: node
   linkType: hard
 
@@ -4965,7 +4943,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"zod@npm:*, zod@npm:^3.25.0 || ^4.0.0":
+"zod@npm:*, zod@npm:^3.25.0 || ^4.0.0, zod@npm:^4.3.6":
   version: 4.3.6
   resolution: "zod@npm:4.3.6"
   checksum: 10c0/860d25a81ab41d33aa25f8d0d07b091a04acb426e605f396227a796e9e800c44723ed96d0f53a512b57be3d1520f45bf69c0cb3b378a232a00787a2609625307
