@@ -1,5 +1,16 @@
 {
+  "gpt-4o": {
+    "model": "openai/gpt-4o"
+  },
   "gpt-5.2:high": {
+    "model": "openai/gpt-5.2",
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "high"
+      }
+    }
+  },
+  "gpt-5.2:high:limited": {
     "model": "openai/gpt-5.2",
     "maxTokens": 26000,
     "providerOptions": {
