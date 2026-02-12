@@ -9,8 +9,8 @@
     }
   },
   "deepseek-v3": {
-    "model": "deepseek/deepseek-chat",
-    "maxTokens": 26000,
+    "model": "deepseek/deepseek-v3",
+    "maxTokens": 4000,
     "temperature": 0.5
   }
 }
