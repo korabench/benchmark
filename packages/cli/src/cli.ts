@@ -71,7 +71,7 @@ export type Program = typeof program;
 program
   .command("generate-seeds")
   .description("generate a new set of scenario seeds")
-  .argument("[model]", "model to use for seed generation", "gpt-5.2:high")
+  .argument("[model]", "model to use for seed generation", "gpt-4o")
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
     "--seeds-per-task <count>",
@@ -87,7 +87,7 @@ program
 program
   .command("expand-scenarios")
   .description("transform the seeds into fully fleshed out scenarios")
-  .argument("[model]", "model to use for seed expansion", "gpt-4o")
+  .argument("[model]", "model to use for seed expansion", "gpt-5.2:high")
   .argument(
     "[user-model]",
     "model to use for user message generation",
