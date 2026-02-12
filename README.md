@@ -8,7 +8,7 @@ KORA measures the safety of AI models interacting with children across 8 risk ca
 
 The benchmark uses a 3-stage pipeline: **seed generation** creates short scenario outlines from the risk taxonomy, **scenario expansion** turns each seed into a detailed test scenario with validation, and **test runs** execute multi-turn conversations and judge the results.
 
-Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on three behavioral criteria: anthropomorphism, epistemic humility, and human redirection. Every scenario is tested twice — once with no age context in the system prompt (`default`) and once with an age-aware system prompt (`child`).
+Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on three behavioral criteria: anthropomorphism, epistemic humility, and human redirection. Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt) and `child` (age-aware system prompt) — controlled via the `--prompts` flag.
 
 ## Prerequisites
 
@@ -27,13 +27,13 @@ yarn && yarn tsbuild
 Run the benchmark with pre-built scenarios:
 
 ```bash
-yarn kora run <judge-model> <user-model> <target-model>
+yarn kora run <target-model>
 ```
 
-For example, to evaluate `openai/gpt-4o` using `anthropic/claude-sonnet-4` as both judge and user model:
+For example, to evaluate `gpt-4o`:
 
 ```bash
-yarn kora run anthropic/claude-sonnet-4 anthropic/claude-sonnet-4 openai/gpt-4o
+yarn kora run gpt-4o
 ```
 
 ## Pipeline stages
@@ -43,44 +43,46 @@ yarn kora run anthropic/claude-sonnet-4 anthropic/claude-sonnet-4 openai/gpt-4o
 Generates a set of scenario seeds from the risk taxonomy.
 
 ```bash
-yarn kora generate-seeds <model> [output-path]
+yarn kora generate-seeds [model]
 ```
 
-| Argument | Description |
+| Argument / Option | Description |
 |---|---|
-| `<model>` | Model to use for seed generation |
-| `[output-path]` | Output JSONL file (default: `data/seeds.jsonl`) |
+| `[model]` | Model to use for seed generation (default: `gpt-5.2:high`) |
+| `-o, --output <path>` | Output JSONL file (default: `data/scenarioSeeds.jsonl`) |
+| `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`) |
 
 ### `expand-scenarios`
 
 Transforms seeds into fully fleshed-out scenarios with validation.
 
 ```bash
-yarn kora expand-scenarios <model> <user-model> [seeds-path] [output-path]
+yarn kora expand-scenarios [model] [user-model]
 ```
 
-| Argument | Description |
+| Argument / Option | Description |
 |---|---|
-| `<model>` | Model to use for scenario expansion |
-| `<user-model>` | Model to use for generating the first user message |
-| `[seeds-path]` | Input seeds JSONL file (default: `data/seeds.jsonl`) |
-| `[output-path]` | Output scenarios JSONL file (default: `data/scenarios.jsonl`) |
+| `[model]` | Model to use for scenario expansion (default: `gpt-4o`) |
+| `[user-model]` | Model to use for generating the first user message (default: `deepseek-v3`) |
+| `-i, --input <path>` | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`) |
+| `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`) |
 
 ### `run`
 
 Runs the benchmark against the target model.
 
 ```bash
-yarn kora run <judge-model> <user-model> <target-model> [scenarios-path] [output-path]
+yarn kora run <target-model> [judge-model] [user-model]
 ```
 
-| Argument | Description |
+| Argument / Option | Description |
 |---|---|
-| `<judge-model>` | Model to use as judge |
-| `<user-model>` | Model to use for simulating the child user |
 | `<target-model>` | Model to benchmark |
-| `[scenarios-path]` | Input scenarios JSONL file (default: `data/scenarios.jsonl`) |
-| `[output-path]` | Output results JSON file (default: `data/results.json`) |
+| `[judge-model]` | Model to use as judge (default: `gpt-5.2:high:limited`) |
+| `[user-model]` | Model to use for simulating the child user (default: `deepseek-v3`) |
+| `-i, --input <path>` | Input scenarios JSONL file (default: `data/scenarios.jsonl`) |
+| `-o, --output <path>` | Output results JSON file (default: `data/results.json`) |
+| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`) |
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
@@ -94,7 +96,6 @@ Models are configured in a `models.json` file at the project root. The CLI searc
 {
   "gpt-5.2:high": {
     "model": "openai/gpt-5.2",
-    "maxTokens": 26000,
     "providerOptions": {
       "openai": {
         "reasoningEffort": "high"
@@ -102,8 +103,8 @@ Models are configured in a `models.json` file at the project root. The CLI searc
     }
   },
   "deepseek-v3": {
-    "model": "deepseek/deepseek-chat",
-    "maxTokens": 26000,
+    "model": "deepseek/deepseek-v3",
+    "maxTokens": 4000,
     "temperature": 0.5
   }
 }
@@ -151,7 +152,7 @@ The function receives:
 Then use the slug on the command line like any other model:
 
 ```bash
-yarn kora run anthropic/claude-sonnet-4 anthropic/claude-sonnet-4 custom-my-model
+yarn kora run custom-my-model
 ```
 
 Custom model routing is only supported for text responses (the user and target model roles). Judge models and seed/scenario generation require structured output and must use registry models.
@@ -189,6 +190,10 @@ The `run` command produces a result object with this structure:
 
 ```json
 {
+  "target": "gpt-4o",
+  "judge": "gpt-5.2:high:limited",
+  "user": "deepseek-v3",
+  "prompts": ["default"],
   "scores": [
     {
       "riskCategoryId": "...",
@@ -209,16 +214,22 @@ The `run` command produces a result object with this structure:
 
 | Field | Description |
 |---|---|
+| `target` | Target model slug |
+| `judge` | Judge model slug |
+| `user` | User model slug |
+| `prompts` | Prompt variants that were tested |
 | `sums.al` | Total test count |
 | `sums.as` | Safety grades: `[failing, adequate, exemplary]` |
 | `sums.an` | Anthropomorphism: `[failing, adequate, exemplary, occurrenceCount]` |
 | `sums.eh` | Epistemic humility: `[failing, adequate, exemplary, occurrenceCount]` |
 | `sums.hr` | Human redirection: `[failing, adequate, exemplary, occurrenceCount]` |
 
-Scores are grouped by risk category, risk, age range, and prompt variant. Two prompt variants are used:
+Scores are grouped by risk category, risk, age range, and prompt variant. Two prompt variants are available:
 
 - **`default`** — no age context in the system prompt.
 - **`child`** — the system prompt includes the child's age range.
+
+Use `--prompts default,child` to test both variants.
 
 ## Cost and duration
 
@@ -226,7 +237,7 @@ Each pipeline stage makes the following API calls:
 
 - **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
-- **Test run**: 7 calls per test (2 user responses + 3 target model responses + 2 judge responses), with 2 tests per scenario (`default` + `child`).
+- **Test run**: 7 calls per test (2 user responses + 3 target model responses + 2 judge responses), with 1 test per scenario per prompt variant.
 
 All commands run with a concurrency of 10 parallel tasks.
 

@@ -14,8 +14,8 @@
     "pretty:write": "prettier --write './packages/*/src/**/*.{js,ts,jsx,tsx,json}'",
     "test": "vitest run",
     "test:watch": "vitest",
-    "kora": "yarn workspace @korabench/cli kora",
-    "kora:env": "yarn workspace @korabench/cli kora:env"
+    "kora": "node ./packages/cli/build/src/cli.js",
+    "kora:env": "node --env-file=.env ./packages/cli/build/src/cli.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

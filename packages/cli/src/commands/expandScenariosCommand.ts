@@ -99,7 +99,7 @@ export async function expandScenariosCommand(
 
         try {
           const scenarios = await kora.expandScenario(context, seed);
-          await fs.writeFile(tempFile, JSON.stringify(scenarios));
+          await fs.writeFile(tempFile, JSON.stringify(scenarios, null, 2));
           progress.increment(true);
         } catch (error) {
           if (error instanceof ScenarioValidationError) {

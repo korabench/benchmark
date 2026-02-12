@@ -166,7 +166,7 @@ export async function runCommand(
 
       try {
         const testResult = await kora.runTest(context, task.scenario, task.key);
-        await fs.writeFile(tempFile, JSON.stringify(testResult));
+        await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);
         return [{kind: "success", testResult}];
       } catch (error) {
@@ -205,14 +205,21 @@ export async function runCommand(
   }
 
   // Write reduced result.
+  const result = {
+    target: targetModelSlug,
+    judge: judgeModelSlug,
+    user: userModelSlug,
+    prompts,
+    ...(runResult ?? {}),
+  };
+
   await fs.mkdir(outputDir, {recursive: true});
-  await fs.writeFile(
-    outputFilePath,
-    runResult ? JSON.stringify(runResult) + "\n" : ""
-  );
+  await fs.writeFile(outputFilePath, JSON.stringify(result, null, 2));
 
   // Archive results before cleaning up.
-  const zipFilePath = outputFilePath.replace(/\.json$/, ".zip");
+  const ext = path.extname(outputFilePath);
+  const zipFilePath =
+    (ext ? outputFilePath.slice(0, -ext.length) : outputFilePath) + ".zip";
   await archiveResults(tempDir, [outputFilePath], zipFilePath);
 
   await fs.rm(tempDir, {recursive: true, force: true});
