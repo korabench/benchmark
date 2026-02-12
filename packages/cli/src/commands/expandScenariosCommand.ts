@@ -1,12 +1,17 @@
+import {
+  ExpandScenarioContext,
+  kora,
+  Scenario,
+  ScenarioSeed,
+  ScenarioValidationError,
+} from "@korabench/benchmark";
 import {Script} from "@korabench/core";
-import {ExpandScenarioContext, kora, Scenario, ScenarioSeed, ScenarioValidationError} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {resolveModelConfig} from "../modelConfig.js";
 import {getStructuredResponse, getTextResponse} from "../model.js";
 
 async function* readSeedsFromJsonl(
@@ -48,15 +53,12 @@ export async function expandScenariosCommand(
   seedsFilePath: string,
   outputFilePath: string
 ) {
-  const modelConfig = resolveModelConfig(modelsJsonPath, modelSlug);
-  const userConfig = resolveModelConfig(modelsJsonPath, userModelSlug);
-
   const context: ExpandScenarioContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(modelConfig, request),
+      output: await getStructuredResponse(modelsJsonPath, modelSlug, request),
     }),
     getUserResponse: async request => ({
-      output: await getTextResponse(userConfig, request),
+      output: await getTextResponse(modelsJsonPath, userModelSlug, request),
     }),
   };
 

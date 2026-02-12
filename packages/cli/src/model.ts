@@ -2,7 +2,8 @@ import {ModelRequest, TypedModelRequest} from "@korabench/core";
 import {toJsonSchema} from "@valibot/to-json-schema";
 import {gateway, generateText, jsonSchema, Output} from "ai";
 import * as v from "valibot";
-import {ModelConfig} from "./modelConfig.js";
+import {getCustomTextResponse} from "./customModel.js";
+import {resolveModelConfig} from "./modelConfig.js";
 import {createLogRetryHandler, RetryOptions, withRetry} from "./retry.js";
 
 export interface ModelOptions {
@@ -17,19 +18,28 @@ const defaultRetryOptions: RetryOptions = {
   jitterFactor: 0.2,
 };
 
+function buildRetryOptions(
+  label: string,
+  options?: ModelOptions
+): Required<Pick<RetryOptions, "onRetry">> & RetryOptions {
+  return {
+    ...defaultRetryOptions,
+    ...options?.retry,
+    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(label),
+  };
+}
+
 export async function getStructuredResponse<T>(
-  config: ModelConfig,
+  modelsJsonPath: string,
+  modelSlug: string,
   request: TypedModelRequest<T>,
   options?: ModelOptions
 ): Promise<T> {
+  const config = resolveModelConfig(modelsJsonPath, modelSlug);
   const outputSchema = toJsonSchema(request.outputType);
   const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
   const temperature = request.temperature ?? config.temperature;
-  const retryOptions = {
-    ...defaultRetryOptions,
-    ...options?.retry,
-    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(config.model),
-  };
+  const retryOptions = buildRetryOptions(config.model, options);
 
   return withRetry(async () => {
     const result = await generateText({
@@ -54,17 +64,23 @@ export async function getStructuredResponse<T>(
 }
 
 export async function getTextResponse(
-  config: ModelConfig,
+  modelsJsonPath: string,
+  modelSlug: string,
   request: ModelRequest,
   options?: ModelOptions
 ): Promise<string> {
+  if (modelSlug.startsWith("custom-")) {
+    return getCustomTextResponse(
+      modelSlug,
+      request,
+      buildRetryOptions(modelSlug, options)
+    );
+  }
+
+  const config = resolveModelConfig(modelsJsonPath, modelSlug);
   const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
   const temperature = request.temperature ?? config.temperature;
-  const retryOptions = {
-    ...defaultRetryOptions,
-    ...options?.retry,
-    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(config.model),
-  };
+  const retryOptions = buildRetryOptions(config.model, options);
 
   const result = await withRetry(
     () =>

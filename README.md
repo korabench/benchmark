@@ -84,17 +84,77 @@ yarn kora run <judge-model> <user-model> <target-model> [scenarios-path] [output
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
-## Model slugs
+## Model configuration
 
-Models are specified in `provider/model-name` format, as used by the [Vercel AI SDK gateway](https://ai-sdk.dev/docs/ai-sdk-core/provider-management#ai-sdk-providers-gateway).
+### Model registry (`models.json`)
 
-Examples:
+Models are configured in a `models.json` file at the project root. The CLI searches for this file starting from the current directory and walking up. Each entry maps a **model slug** (used on the command line) to its configuration:
 
-- `openai/gpt-4o`
-- `anthropic/claude-sonnet-4`
-- `google/gemini-2.0-flash`
+```json
+{
+  "gpt-5.2:high": {
+    "model": "openai/gpt-5.2",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "high"
+      }
+    }
+  },
+  "deepseek-v3": {
+    "model": "deepseek/deepseek-chat",
+    "maxTokens": 26000,
+    "temperature": 0.5
+  }
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `model` | Yes | Provider/model identifier for the [AI SDK gateway](https://ai-sdk.dev/docs/ai-sdk-core/provider-management#ai-sdk-providers-gateway) (e.g. `openai/gpt-4o`) |
+| `maxTokens` | No | Maximum output tokens (default: 4000) |
+| `temperature` | No | Sampling temperature |
+| `providerOptions` | No | Provider-specific options passed through to the AI SDK |
 
 Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
+
+### Custom models
+
+Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
+
+To add a custom model, edit `customModel.ts` and replace the `throw` with your implementation:
+
+```ts
+export async function getCustomTextResponse(
+  modelSlug: string,
+  _request: ModelRequest,
+  retryOptions: RetryOptions
+): Promise<string> {
+  return withRetry(async () => {
+    // Replace this with your custom model call.
+    // request.messages contains the conversation (system, user, assistant messages).
+    // request.maxTokens and request.temperature are optional hints.
+    // Return the model's text response.
+    throw new Error(
+      `Custom model "${modelSlug}" is not implemented. ` +
+        `Provide an implementation in customModel.ts.`
+    );
+  }, retryOptions);
+}
+```
+
+The function receives:
+- `modelSlug` — the full slug (e.g. `custom-my-model`), so you can route to different backends.
+- `request` — a `ModelRequest` with `messages`, optional `maxTokens`, and optional `temperature`.
+- `retryOptions` — pre-configured retry options with exponential backoff. The `withRetry` wrapper handles transient errors automatically.
+
+Then use the slug on the command line like any other model:
+
+```bash
+yarn kora run anthropic/claude-sonnet-4 anthropic/claude-sonnet-4 custom-my-model
+```
+
+Custom model routing is only supported for text responses (the user and target model roles). Judge models and seed/scenario generation require structured output and must use registry models.
 
 ## Evaluating a different model
 
@@ -173,15 +233,21 @@ All commands run with a concurrency of 10 parallel tasks.
 ## Project structure
 
 ```
-src/
-  cli/           CLI command implementations
-  model/         Data types and validation schemas
-  prompts/       Prompt templates for each pipeline stage
-  __tests__/     Test suites
-  benchmark.ts   Core benchmark interface
-  kora.ts        KORA benchmark implementation
-  index.ts       Public API exports
-data/            Risk taxonomy, motivations, scenario data
+models.json                          Model registry configuration
+data/                                Risk taxonomy, motivations, scenario data
+packages/
+  benchmark/src/                     Core benchmark logic
+    prompts/                         Prompt templates for each pipeline stage
+    __tests__/                       Test suites
+    benchmark.ts                     Core benchmark interface
+    kora.ts                          KORA benchmark implementation
+  cli/src/                           CLI package
+    commands/                        CLI command implementations
+    model.ts                         Model resolution and AI SDK integration
+    modelConfig.ts                   Model registry loader
+    customModel.ts                   Custom model hook (edit to add your own)
+    retry.ts                         Retry with exponential backoff
+    cli.ts                           CLI entry point
 ```
 
 ## Development

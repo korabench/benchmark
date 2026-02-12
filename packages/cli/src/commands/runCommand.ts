@@ -1,4 +1,10 @@
-import {kora, Scenario, ScenarioPrompt, TestContext, TestResult} from "@korabench/benchmark";
+import {
+  kora,
+  Scenario,
+  ScenarioPrompt,
+  TestContext,
+  TestResult,
+} from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
 import archiver from "archiver";
 import {createWriteStream} from "node:fs";
@@ -8,7 +14,6 @@ import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {resolveModelConfig} from "../modelConfig.js";
 import {getStructuredResponse, getTextResponse} from "../model.js";
 
 interface TestTask {
@@ -108,19 +113,19 @@ export async function runCommand(
   outputFilePath: string,
   prompts: readonly ScenarioPrompt[]
 ) {
-  const judgeConfig = resolveModelConfig(modelsJsonPath, judgeModelSlug);
-  const userConfig = resolveModelConfig(modelsJsonPath, userModelSlug);
-  const targetConfig = resolveModelConfig(modelsJsonPath, targetModelSlug);
-
   const context: TestContext = {
     getUserResponse: async request => ({
-      output: await getTextResponse(userConfig, request),
+      output: await getTextResponse(modelsJsonPath, userModelSlug, request),
     }),
     getAssistantResponse: async request => ({
-      output: await getTextResponse(targetConfig, request),
+      output: await getTextResponse(modelsJsonPath, targetModelSlug, request),
     }),
     getJudgeResponse: async request => ({
-      output: await getStructuredResponse(judgeConfig, request),
+      output: await getStructuredResponse(
+        modelsJsonPath,
+        judgeModelSlug,
+        request
+      ),
     }),
   };
 

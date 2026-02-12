@@ -1,9 +1,12 @@
-import {GenerateSeedsContext, GenerateSeedsOptions, kora} from "@korabench/benchmark";
+import {
+  GenerateSeedsContext,
+  GenerateSeedsOptions,
+  kora,
+} from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
-import {resolveModelConfig} from "../modelConfig.js";
 import {getStructuredResponse} from "../model.js";
 
 export async function generateSeeds(
@@ -13,11 +16,9 @@ export async function generateSeeds(
   outputFilePath: string,
   options?: GenerateSeedsOptions
 ) {
-  const config = resolveModelConfig(modelsJsonPath, modelSlug);
-
   const context: GenerateSeedsContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(config, request),
+      output: await getStructuredResponse(modelsJsonPath, modelSlug, request),
     }),
   };
 
