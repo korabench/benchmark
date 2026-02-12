@@ -1,30 +1,43 @@
 #!/usr/bin/env node
 import {Command} from "@commander-js/extra-typings";
-import finder from "find-package-json";
+import {existsSync, readFileSync} from "node:fs";
 import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
-import {expandScenariosCommand} from "./cli/expandScenariosCommand.js";
-import {generateSeeds} from "./cli/generateSeedsCommand.js";
-import {runCommand} from "./cli/runCommand.js";
-import {ScenarioPrompt} from "./model/scenarioKey.js";
+import {ScenarioPrompt} from "@korabench/benchmark";
+import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
+import {generateSeeds} from "./commands/generateSeedsCommand.js";
+import {runCommand} from "./commands/runCommand.js";
 
-function findPackageRoot() {
-  const filePath = fileURLToPath(import.meta.url);
-  const result = finder(dirname(filePath)).next().value;
-  if (!result || !result.__path) {
-    throw new Error("Could not find package.json");
+function findConfigFile(filename: string): string {
+  let dir = process.cwd();
+  while (true) {
+    const candidate = path.join(dir, filename);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) {
+      throw new Error(
+        `Could not find ${filename} in ${process.cwd()} or any parent directory.`
+      );
+    }
+    dir = parent;
   }
-
-  return {
-    root: dirname(result.__path),
-    version: result.version || "0.0.0",
-  };
 }
 
-const pkg = findPackageRoot();
-const dataPath = path.join(pkg.root, "data");
+function readPackageVersion(): string {
+  const pkgPath = path.join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../package.json"
+  );
+  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+  return pkg.version || "0.0.0";
+}
+
+const modelsJsonPath = findConfigFile("models.json");
+const dataPath = path.join(path.dirname(modelsJsonPath), "data");
 
 const defaultSeedsPath = path.join(dataPath, "scenarioSeeds.jsonl");
 const defaultScenariosPath = path.join(dataPath, "scenarios.jsonl");
@@ -41,7 +54,7 @@ const program = new Command()
   )
   .name("kora")
   .description("CLI tool to run the KORA benchmark.")
-  .version(pkg.version, "-v, --version")
+  .version(readPackageVersion(), "-v, --version")
   .option("-d, --debug", "print full errors and debug information");
 
 export type Program = typeof program;
@@ -61,7 +74,7 @@ program
     "8"
   )
   .action((model, outputPath, opts) =>
-    generateSeeds(program, model, outputPath, {
+    generateSeeds(program, modelsJsonPath, model, outputPath, {
       seedsPerTask: parseInt(opts.seedsPerTask, 10),
     })
   );
@@ -82,7 +95,14 @@ program
     defaultScenariosPath
   )
   .action((model, userModel, seedsPath, outputPath) =>
-    expandScenariosCommand(program, model, userModel, seedsPath, outputPath)
+    expandScenariosCommand(
+      program,
+      modelsJsonPath,
+      model,
+      userModel,
+      seedsPath,
+      outputPath
+    )
   );
 
 program
@@ -110,6 +130,7 @@ program
     (judgeModel, userModel, targetModel, scenariosPath, outputPath, opts) =>
       runCommand(
         program,
+        modelsJsonPath,
         judgeModel,
         userModel,
         targetModel,

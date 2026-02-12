@@ -1,0 +1,15 @@
+{
+  "extends": [
+    "../../tsconfig.base"
+  ],
+  "compilerOptions": {
+    "outDir": "./build",
+    "baseUrl": "./src",
+    "declaration": true,
+    "declarationMap": true
+  },
+  "include": [
+    "src",
+    "data/**/*.json"
+  ]
+}

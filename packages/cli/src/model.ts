@@ -1,12 +1,11 @@
-import {ModelMessage} from "@korabench/core";
+import {ModelRequest, TypedModelRequest} from "@korabench/core";
 import {toJsonSchema} from "@valibot/to-json-schema";
 import {gateway, generateText, jsonSchema, Output} from "ai";
 import * as v from "valibot";
+import {ModelConfig} from "./modelConfig.js";
 import {createLogRetryHandler, RetryOptions, withRetry} from "./retry.js";
 
 export interface ModelOptions {
-  maxTokens?: number;
-  temperature?: number;
   retry?: RetryOptions;
 }
 
@@ -19,24 +18,24 @@ const defaultRetryOptions: RetryOptions = {
 };
 
 export async function getStructuredResponse<T>(
-  modelSlug: string,
-  messages: ModelMessage[],
-  outputType: v.BaseSchema<unknown, T, v.BaseIssue<unknown>>,
+  config: ModelConfig,
+  request: TypedModelRequest<T>,
   options?: ModelOptions
 ): Promise<T> {
-  const outputSchema = toJsonSchema(outputType);
-  const maxTokens = options?.maxTokens ?? 4000;
+  const outputSchema = toJsonSchema(request.outputType);
+  const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
+  const temperature = request.temperature ?? config.temperature;
   const retryOptions = {
     ...defaultRetryOptions,
     ...options?.retry,
-    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(modelSlug),
+    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(config.model),
   };
 
   return withRetry(async () => {
     const result = await generateText({
-      model: gateway(modelSlug),
-      system: messages.find(m => m.role === "system")?.content,
-      messages: messages
+      model: gateway(config.model),
+      system: request.messages.find(m => m.role === "system")?.content,
+      messages: request.messages
         .filter(m => m.role !== "system")
         .map(m => ({
           role: m.role as "user" | "assistant",
@@ -44,40 +43,45 @@ export async function getStructuredResponse<T>(
         })),
       output: Output.object({schema: jsonSchema(outputSchema)}),
       maxOutputTokens: maxTokens,
-      temperature: options?.temperature,
+      temperature,
+      providerOptions: config.providerOptions as any,
       maxRetries: 0, // Disable SDK retries; we handle it ourselves
     });
 
     // Validate inside retry so malformed responses are retried
-    return v.parse(outputType, result.output);
+    return v.parse(request.outputType, result.output);
   }, retryOptions);
 }
 
 export async function getTextResponse(
-  modelSlug: string,
-  messages: ModelMessage[],
+  config: ModelConfig,
+  request: ModelRequest,
   options?: ModelOptions
 ): Promise<string> {
-  const maxTokens = options?.maxTokens ?? 4000;
+  const maxTokens = request.maxTokens ?? config.maxTokens ?? 4000;
+  const temperature = request.temperature ?? config.temperature;
   const retryOptions = {
     ...defaultRetryOptions,
     ...options?.retry,
-    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(modelSlug),
+    onRetry: options?.retry?.onRetry ?? createLogRetryHandler(config.model),
   };
 
   const result = await withRetry(
     () =>
       generateText({
-        model: gateway(modelSlug),
-        system: messages.find(m => m.role === "system")?.content,
-        messages: messages
+        model: gateway(config.model),
+        system: request.messages.find(m => m.role === "system")?.content,
+        messages: request.messages
           .filter(m => m.role !== "system")
           .map(m => ({
             role: m.role as "user" | "assistant",
             content: m.content,
           })),
         maxOutputTokens: maxTokens,
-        temperature: options?.temperature,
+        temperature,
+        providerOptions: config.providerOptions as
+          | Record<string, Record<string, never>>
+          | undefined,
         maxRetries: 0, // Disable SDK retries; we handle it ourselves
       }),
     retryOptions

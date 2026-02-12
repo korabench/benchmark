@@ -1,16 +1,13 @@
 import {Script} from "@korabench/core";
+import {ExpandScenarioContext, kora, Scenario, ScenarioSeed, ScenarioValidationError} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
-import {ExpandScenarioContext} from "../benchmark.js";
 import {Program} from "../cli.js";
-import {kora} from "../kora.js";
-import {Scenario} from "../model/scenario.js";
-import {ScenarioSeed} from "../model/scenarioSeed.js";
-import {ScenarioValidationError} from "../model/scenarioValidationError.js";
-import {getStructuredResponse, getTextResponse} from "./model.js";
+import {resolveModelConfig} from "../modelConfig.js";
+import {getStructuredResponse, getTextResponse} from "../model.js";
 
 async function* readSeedsFromJsonl(
   filePath: string
@@ -45,25 +42,21 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
 
 export async function expandScenariosCommand(
   _program: Program,
+  modelsJsonPath: string,
   modelSlug: string,
   userModelSlug: string,
   seedsFilePath: string,
   outputFilePath: string
 ) {
+  const modelConfig = resolveModelConfig(modelsJsonPath, modelSlug);
+  const userConfig = resolveModelConfig(modelsJsonPath, userModelSlug);
+
   const context: ExpandScenarioContext = {
     getResponse: async request => ({
-      output: await getStructuredResponse(
-        modelSlug,
-        request.messages,
-        request.outputType,
-        {maxTokens: request.maxTokens}
-      ),
+      output: await getStructuredResponse(modelConfig, request),
     }),
     getUserResponse: async request => ({
-      output: await getTextResponse(userModelSlug, request.messages, {
-        maxTokens: request.maxTokens,
-        temperature: request.temperature,
-      }),
+      output: await getTextResponse(userConfig, request),
     }),
   };
 

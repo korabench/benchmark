@@ -3,13 +3,14 @@
     "./tsconfig.base"
   ],
   "compilerOptions": {
-    "outDir": "./build",
-    "baseUrl": "./src",
-    "declaration": true,
-    "declarationMap": true
+    "outDir": "./build"
   },
-  "include": [
-    "src",
-    "data/**/*.json"
-  ],
+  "references": [
+    {
+      "path": "./packages/benchmark"
+    },
+    {
+      "path": "./packages/cli"
+    }
+  ]
 }

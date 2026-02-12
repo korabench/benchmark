@@ -1,3 +1,4 @@
+import {kora, Scenario, ScenarioPrompt, TestContext, TestResult} from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
 import archiver from "archiver";
 import {createWriteStream} from "node:fs";
@@ -6,13 +7,9 @@ import * as path from "node:path";
 import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
-import {TestContext} from "../benchmark.js";
 import {Program} from "../cli.js";
-import {kora} from "../kora.js";
-import {Scenario} from "../model/scenario.js";
-import {ScenarioPrompt} from "../model/scenarioKey.js";
-import {TestResult} from "../model/testResult.js";
-import {getStructuredResponse, getTextResponse} from "./model.js";
+import {resolveModelConfig} from "../modelConfig.js";
+import {getStructuredResponse, getTextResponse} from "../model.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -103,6 +100,7 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
 
 export async function runCommand(
   _program: Program,
+  modelsJsonPath: string,
   judgeModelSlug: string,
   userModelSlug: string,
   targetModelSlug: string,
@@ -110,26 +108,19 @@ export async function runCommand(
   outputFilePath: string,
   prompts: readonly ScenarioPrompt[]
 ) {
+  const judgeConfig = resolveModelConfig(modelsJsonPath, judgeModelSlug);
+  const userConfig = resolveModelConfig(modelsJsonPath, userModelSlug);
+  const targetConfig = resolveModelConfig(modelsJsonPath, targetModelSlug);
+
   const context: TestContext = {
     getUserResponse: async request => ({
-      output: await getTextResponse(userModelSlug, request.messages, {
-        maxTokens: request.maxTokens,
-        temperature: request.temperature,
-      }),
+      output: await getTextResponse(userConfig, request),
     }),
     getAssistantResponse: async request => ({
-      output: await getTextResponse(targetModelSlug, request.messages, {
-        maxTokens: request.maxTokens,
-        temperature: request.temperature,
-      }),
+      output: await getTextResponse(targetConfig, request),
     }),
     getJudgeResponse: async request => ({
-      output: await getStructuredResponse(
-        judgeModelSlug,
-        request.messages,
-        request.outputType,
-        {maxTokens: request.maxTokens}
-      ),
+      output: await getStructuredResponse(judgeConfig, request),
     }),
   };
 
