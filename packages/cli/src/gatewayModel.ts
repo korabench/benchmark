@@ -66,9 +66,7 @@ export function createGatewayModel(
       return result.text;
     },
 
-    async getStructuredResponse<T>(
-      request: TypedModelRequest<T>
-    ): Promise<T> {
+    async getStructuredResponse<T>(request: TypedModelRequest<T>): Promise<T> {
       const outputSchema = toJsonSchema(request.outputType);
       const maxTokens = request.maxTokens ?? config.maxTokens;
       const temperature = request.temperature ?? config.temperature;
