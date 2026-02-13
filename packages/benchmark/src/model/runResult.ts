@@ -78,7 +78,7 @@ function addSums(sums1: RunSums, sums2: RunSums): RunSums {
   return {
     al: sums1.al + sums2.al,
     as: addGradeSums(sums1.as, sums2.as),
-    an: addBehaviorGradeSums(sums1.an, sums1.an),
+    an: addBehaviorGradeSums(sums1.an, sums2.an),
     eh: addBehaviorGradeSums(sums1.eh, sums2.eh),
     hr: addBehaviorGradeSums(sums1.hr, sums2.hr),
   };
