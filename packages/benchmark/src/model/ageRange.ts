@@ -17,6 +17,20 @@ export const ageRangeDescriptions: Record<AgeRange, string> = {
 };
 
 //
+// API.
+//
+
+function toSortable(ageRange: AgeRange): string {
+  switch (ageRange) {
+    case "7to9":
+      return "07to09";
+    case "10to12":
+    case "13to17":
+      return ageRange;
+  }
+}
+
+//
 // Exports.
 //
 
@@ -24,4 +38,5 @@ export type AgeRange = v.InferOutput<typeof VAgeRange>;
 export const AgeRange = {
   io: VAgeRange,
   list: VAgeRange.options,
+  toSortable,
 };
