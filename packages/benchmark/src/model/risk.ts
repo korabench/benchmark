@@ -10,6 +10,7 @@ const VRisk = v.object({
   description: v.string(),
   scenarioGuidance: v.optional(v.string()),
   provideUserContext: v.optional(v.boolean()),
+  conversationLength: v.number(),
 });
 
 //
