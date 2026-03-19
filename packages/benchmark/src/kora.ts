@@ -38,8 +38,6 @@ import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js"
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
 
-const conversationLength = 3;
-
 export const kora = Benchmark.new({
   scenarioSeedType: ScenarioSeed.io,
   scenarioType: Scenario.io,
@@ -201,7 +199,7 @@ export const kora = Benchmark.new({
     // Multi-turn conversation.
     const messages: ModelMessage[] = [];
 
-    for (let i = 0; i < conversationLength; i++) {
+    for (let i = 0; i < risk.conversationLength; i++) {
       const userMessage = await (() => {
         if (i === 0) {
           return scenario.firstUserMessage;
