@@ -21,12 +21,17 @@ export interface ExpandScenarioContext {
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
 }
 
+export interface JudgeModel {
+  getResponse: <T>(
+    request: TypedModelRequest<T>
+  ) => Promise<TypedModelResponse<T>>;
+}
+
 export interface TestContext {
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
-  getJudgeResponse: <T>(
-    request: TypedModelRequest<T>
-  ) => Promise<TypedModelResponse<T>>;
+  /** Record of judge model slug → callable judge model. */
+  judgeModels: Record<string, JudgeModel>;
 }
 
 export interface GenerationEvent<T> {
