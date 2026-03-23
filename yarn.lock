@@ -601,8 +601,10 @@ __metadata:
   resolution: "@korabench/benchmark@workspace:packages/benchmark"
   dependencies:
     "@korabench/core": "npm:^1.0.6"
+    "@types/lodash": "npm:^4.17.24"
     "@types/node": "npm:25.2.3"
     "@types/uuid": "npm:^11.0.0"
+    lodash: "npm:^4.17.23"
     remeda: "npm:^2.33.6"
     streaming-iterables: "npm:^8.0.1"
     tslib: "npm:^2.8.1"
@@ -619,11 +621,13 @@ __metadata:
     "@korabench/benchmark": "workspace:*"
     "@korabench/core": "npm:^1.0.6"
     "@types/archiver": "npm:7.0.0"
+    "@types/lodash": "npm:^4.17.24"
     "@types/node": "npm:25.2.3"
     "@valibot/to-json-schema": "npm:^1.5.0"
     ai: "npm:^6.0.81"
     archiver: "npm:^7.0.1"
     commander: "npm:^14.0.3"
+    lodash: "npm:^4.17.23"
     streaming-iterables: "npm:^8.0.1"
     tslib: "npm:^2.8.1"
     valibot: "npm:^1.2.0"
@@ -943,6 +947,13 @@ __metadata:
   version: 7.0.15
   resolution: "@types/json-schema@npm:7.0.15"
   checksum: 10c0/a996a745e6c5d60292f36731dd41341339d4eeed8180bb09226e5c8d23759067692b1d88e5d91d72ee83dfc00d3aca8e7bd43ea120516c17922cbcb7c3e252db
+  languageName: node
+  linkType: hard
+
+"@types/lodash@npm:^4.17.24":
+  version: 4.17.24
+  resolution: "@types/lodash@npm:4.17.24"
+  checksum: 10c0/b72f60d4daacdad1fa643edb3faba204c02a01eb1ac00a83ff73496a6d236fc55e459c06106e8ced42277dba932d087d8fc090f8de4ef590d3f91e6d6f7ce85a
   languageName: node
   linkType: hard
 
@@ -3165,7 +3176,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lodash@npm:^4.17.15":
+"lodash@npm:^4.17.15, lodash@npm:^4.17.23":
   version: 4.17.23
   resolution: "lodash@npm:4.17.23"
   checksum: 10c0/1264a90469f5bb95d4739c43eb6277d15b6d9e186df4ac68c3620443160fc669e2f14c11e7d8b2ccf078b81d06147c01a8ccced9aab9f9f63d50dcf8cace6bf6

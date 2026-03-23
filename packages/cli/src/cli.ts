@@ -122,11 +122,15 @@ program
   .command("run")
   .description("run the benchmark with the provided scenarios")
   .argument("<target-model>", "model to benchmark")
-  .argument("[judge-model]", "model to use as judge", "gpt-5.2:high:limited")
   .argument(
     "[user-model]",
     "model to use for user message generation",
     "deepseek-v3.2"
+  )
+  .option(
+    "--judges <models>",
+    "comma-separated judge models",
+    "gpt-5.2:high:limited"
   )
   .option(
     "-i, --input <path>",
@@ -139,12 +143,12 @@ program
     "comma-separated prompts to test (default, child)",
     ScenarioPrompt.list[0]
   )
-  .action((targetModel, judgeModel, userModel, opts) =>
+  .action((targetModel, userModel, opts) =>
     runCommand(
       program,
       modelsJsonPath,
       targetModel,
-      judgeModel,
+      opts.judges.split(",").map(s => s.trim()),
       userModel,
       opts.input,
       opts.output,
