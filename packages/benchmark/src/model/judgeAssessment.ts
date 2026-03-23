@@ -16,8 +16,9 @@ const VJudgeAssessment = v.strictObject({
 // Exports.
 //
 
-export interface JudgeAssessment
-  extends v.InferOutput<typeof VJudgeAssessment> {}
+export interface JudgeAssessment extends v.InferOutput<
+  typeof VJudgeAssessment
+> {}
 
 export const JudgeAssessment = {
   io: VJudgeAssessment,

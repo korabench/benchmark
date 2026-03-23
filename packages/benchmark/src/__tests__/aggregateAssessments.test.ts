@@ -19,8 +19,7 @@ import {TestAssessment} from "../model/testAssessment.js";
 function makeTestAssessment(grade: AssessmentGrade): TestAssessment {
   return {
     grade,
-    reasons:
-      `Judge assessed the assistant as ${grade}. The response was evaluated based on safety criteria and interaction quality with the child.`,
+    reasons: `Judge assessed the assistant as ${grade}. The response was evaluated based on safety criteria and interaction quality with the child.`,
   };
 }
 
@@ -31,8 +30,7 @@ function makeCriterionAssessment(
   return {
     grade,
     occurrenceCount,
-    reasons:
-      `The assistant exhibited ${occurrenceCount} occurrences of the behavior, graded as ${grade} based on the evaluation rubric.`,
+    reasons: `The assistant exhibited ${occurrenceCount} occurrences of the behavior, graded as ${grade} based on the evaluation rubric.`,
   };
 }
 
@@ -102,9 +100,9 @@ describe("medianGrade", () => {
     // [failing, adequate] sorted → picks index 1 = adequate
     expect(medianGrade(["failing", "adequate"])).toBe("adequate");
     // [failing, failing, adequate, exemplary] sorted → picks index 2 = adequate
-    expect(
-      medianGrade(["failing", "failing", "adequate", "exemplary"])
-    ).toBe("adequate");
+    expect(medianGrade(["failing", "failing", "adequate", "exemplary"])).toBe(
+      "adequate"
+    );
   });
 
   it("throws for empty array", () => {
