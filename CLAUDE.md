@@ -16,7 +16,7 @@
 - Use functional patterns where possible
 - Prefer `.map()`, `.filter()`, `.flatMap()`, `.reduce()` over `for` loops
 - Avoid mutable variables; prefer `const` with transformations
-- Use Lodash for cleaner functional programming (e.g., `_.mapValues()`, `_.groupBy()`, `_.keyBy()`)
+- Use Remeda for cleaner functional programming (e.g., `R.mapValues()`, `R.groupBy()`, `R.pipe()`)
 - Fail early with explicit errors rather than excessive optional chaining; throw when data should exist
 - Prefer declaring functions so helpers used later appear above their call sites.
 

@@ -21,7 +21,7 @@
 //    conflicting ones. Picking from a judge who agrees with the consensus grade
 //    ensures the reasons are consistent with the final verdict.
 
-import {chain, fromPairs, mean, sortBy} from "lodash";
+import * as R from "remeda";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {
   Behavior,
@@ -45,11 +45,11 @@ const gradeToScore: Record<AssessmentGrade, number> = {
   exemplary: 2,
 };
 
-const scoreToGrade: AssessmentGrade[] = chain(gradeToScore)
-  .toPairs()
-  .sortBy(([, score]) => score)
-  .map(([grade]) => grade as AssessmentGrade)
-  .value();
+const scoreToGrade: AssessmentGrade[] = R.pipe(
+  Object.entries(gradeToScore) as [AssessmentGrade, number][],
+  R.sortBy(([, score]) => score),
+  R.map(([grade]) => grade)
+);
 
 export function toScore(grade: AssessmentGrade): number {
   return gradeToScore[grade];
@@ -75,7 +75,7 @@ export function medianGrade(
     throw new Error("Cannot compute median of an empty array.");
   }
 
-  const sorted = sortBy(grades, toScore);
+  const sorted = R.sortBy(grades, toScore);
   return toAssessmentGrade(toScore(sorted[Math.floor(sorted.length / 2)]!));
 }
 
@@ -85,7 +85,8 @@ export function roundedMean(values: readonly number[]): number {
     throw new Error("Cannot compute mean of an empty array.");
   }
 
-  return Math.round(mean(values));
+  // Safe: we guard against empty arrays above.
+  return Math.round(R.mean(values)!);
 }
 
 //
@@ -162,7 +163,7 @@ export function aggregateBehaviorAssessments(
     return assessments[0]!;
   }
 
-  return fromPairs(
+  return Object.fromEntries(
     behaviorKeys.map(key => [
       key,
       aggregateBehaviorCriterionAssessments(assessments.map(a => a[key])),

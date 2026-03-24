@@ -8,11 +8,11 @@ import {
 } from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
 import archiver from "archiver";
-import {mapValues} from "lodash";
 import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
@@ -129,7 +129,7 @@ async function buildContext(
     getAssistantResponse: async request => ({
       output: await targetModel.getTextResponse(request),
     }),
-    judgeModels: mapValues(
+    judgeModels: R.mapValues(
       judgeModels,
       (model: Model): JudgeModel => ({
         getResponse: async request => ({
