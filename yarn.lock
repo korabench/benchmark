@@ -624,6 +624,7 @@ __metadata:
     ai: "npm:^6.0.81"
     archiver: "npm:^7.0.1"
     commander: "npm:^14.0.3"
+    remeda: "npm:^2.33.6"
     streaming-iterables: "npm:^8.0.1"
     tslib: "npm:^2.8.1"
     valibot: "npm:^1.2.0"

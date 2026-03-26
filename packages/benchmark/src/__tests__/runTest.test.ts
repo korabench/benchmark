@@ -1,6 +1,6 @@
 import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
-import {TestContext} from "../benchmark.js";
+import {JudgeModel, TestContext} from "../benchmark.js";
 import {kora} from "../kora.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {createScenario} from "./fixtures.js";
@@ -9,19 +9,13 @@ import {createScenario} from "./fixtures.js";
 // Helpers.
 //
 
-function createTestContext(): TestContext {
+interface MockJudgeModel extends JudgeModel {
+  getResponse: JudgeModel["getResponse"] & ReturnType<typeof vi.fn>;
+}
+
+function createMockJudgeModel(): MockJudgeModel {
   return {
-    getUserResponse: vi.fn(
-      async (_request: ModelRequest): Promise<ModelResponse> => ({
-        output: "Follow-up question from user.",
-      })
-    ),
-    getAssistantResponse: vi.fn(
-      async (_request: ModelRequest): Promise<ModelResponse> => ({
-        output: "Assistant response to the user.",
-      })
-    ),
-    getJudgeResponse: vi.fn(async (_request: unknown) => ({
+    getResponse: vi.fn(async () => ({
       output: {
         grade: "adequate",
         reasons:
@@ -46,7 +40,25 @@ function createTestContext(): TestContext {
             "The conversation was low-stakes and did not require redirection to trusted adults or other human professionals or guardians.",
         },
       },
-    })) as TestContext["getJudgeResponse"],
+    })),
+  } as MockJudgeModel;
+}
+
+function createTestContext(): TestContext & {judgeModel: MockJudgeModel} {
+  const judgeModel = createMockJudgeModel();
+  return {
+    getUserResponse: vi.fn(
+      async (_request: ModelRequest): Promise<ModelResponse> => ({
+        output: "Follow-up question from user.",
+      })
+    ),
+    getAssistantResponse: vi.fn(
+      async (_request: ModelRequest): Promise<ModelResponse> => ({
+        output: "Assistant response to the user.",
+      })
+    ),
+    judgeModels: {"test-judge": judgeModel},
+    judgeModel,
   };
 }
 
@@ -95,7 +107,7 @@ describe("kora.runTest", () => {
     expect(context.getAssistantResponse).toHaveBeenCalledTimes(3);
   });
 
-  it("returns correct shape with scenario, prompt, messages, assessment, behaviorAssessment", async () => {
+  it("returns correct shape with scenario, prompt, messages, assessment, behaviorAssessment, judgeAssessments", async () => {
     const context = createTestContext();
 
     const result = await kora.runTest(context, scenario, defaultKey);
@@ -105,6 +117,7 @@ describe("kora.runTest", () => {
     expect(result).toHaveProperty("messages");
     expect(result).toHaveProperty("assessment");
     expect(result).toHaveProperty("behaviorAssessment");
+    expect(result).toHaveProperty("judgeAssessments");
     expect(result.scenario).toBe(scenario);
   });
 
@@ -124,11 +137,37 @@ describe("kora.runTest", () => {
     expect(result.prompt).toBe("child");
   });
 
-  it("calls getJudgeResponse twice (safety + behavior assessment)", async () => {
+  it("calls each judge model twice (safety + behavior assessment)", async () => {
     const context = createTestContext();
 
     await kora.runTest(context, scenario, defaultKey);
 
-    expect(context.getJudgeResponse).toHaveBeenCalledTimes(2);
+    expect(context.judgeModel.getResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it("judgeAssessments length matches number of judge models", async () => {
+    const judge1 = createMockJudgeModel();
+    const judge2 = createMockJudgeModel();
+    const context: TestContext = {
+      getUserResponse: vi.fn(
+        async (_request: ModelRequest): Promise<ModelResponse> => ({
+          output: "Follow-up question from user.",
+        })
+      ),
+      getAssistantResponse: vi.fn(
+        async (_request: ModelRequest): Promise<ModelResponse> => ({
+          output: "Assistant response to the user.",
+        })
+      ),
+      judgeModels: {"judge-a": judge1, "judge-b": judge2},
+    };
+
+    const result = await kora.runTest(context, scenario, defaultKey);
+
+    expect(result.judgeAssessments).toHaveLength(2);
+    expect(result.judgeAssessments[0]!.judgeModelSlug).toBe("judge-a");
+    expect(result.judgeAssessments[1]!.judgeModelSlug).toBe("judge-b");
+    expect(judge1.getResponse).toHaveBeenCalledTimes(2);
+    expect(judge2.getResponse).toHaveBeenCalledTimes(2);
   });
 });

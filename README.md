@@ -73,17 +73,19 @@ yarn kora expand-scenarios [model] [user-model]
 Runs the benchmark against the target model.
 
 ```bash
-yarn kora run <target-model> [judge-model] [user-model]
+yarn kora run <target-model> [user-model]
 ```
 
 | Argument / Option | Description |
 |---|---|
 | `<target-model>` | Model to benchmark |
-| `[judge-model]` | Model to use as judge (default: `gpt-5.2:high:limited`) |
 | `[user-model]` | Model to use for simulating the child user (default: `deepseek-v3.2`) |
+| `--judges <models>` | Comma-separated judge models (default: `gpt-5.2:high:limited`) |
 | `-i, --input <path>` | Input scenarios JSONL file (default: `data/scenarios.jsonl`) |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`) |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`) |
+
+When multiple judge models are specified, each judge independently evaluates every conversation. The final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
@@ -193,7 +195,7 @@ The `run` command produces a result object with this structure:
 ```json
 {
   "target": "gpt-4o",
-  "judge": "gpt-5.2:high:limited",
+  "judges": ["gpt-5.2:high:limited"],
   "user": "deepseek-v3.2",
   "prompts": ["default"],
   "scores": [
@@ -217,7 +219,7 @@ The `run` command produces a result object with this structure:
 | Field | Description |
 |---|---|
 | `target` | Target model slug |
-| `judge` | Judge model slug |
+| `judges` | Judge model slugs |
 | `user` | User model slug |
 | `prompts` | Prompt variants that were tested |
 | `sums.al` | Total test count |
@@ -239,7 +241,7 @@ Each pipeline stage makes the following API calls:
 
 - **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
-- **Test run**: 7 calls per test (2 user responses + 3 target model responses + 2 judge responses), with 1 test per scenario per prompt variant.
+- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
 
 All commands run with a concurrency of 10 parallel tasks.
 

@@ -1,4 +1,5 @@
 import {
+  JudgeModel,
   kora,
   Scenario,
   ScenarioPrompt,
@@ -11,6 +12,7 @@ import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
@@ -106,7 +108,7 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
 }
 
 async function buildContext(
-  judgeModel: Model,
+  judgeModels: Record<string, Model>,
   userModel: Model,
   targetModelSlug: string,
   targetGatewayModel: Model | undefined,
@@ -127,9 +129,14 @@ async function buildContext(
     getAssistantResponse: async request => ({
       output: await targetModel.getTextResponse(request),
     }),
-    getJudgeResponse: async request => ({
-      output: await judgeModel.getStructuredResponse(request),
-    }),
+    judgeModels: R.mapValues(
+      judgeModels,
+      (model: Model): JudgeModel => ({
+        getResponse: async request => ({
+          output: await model.getStructuredResponse(request),
+        }),
+      })
+    ),
   };
 }
 
@@ -137,17 +144,27 @@ export async function runCommand(
   _program: Program,
   modelsJsonPath: string,
   targetModelSlug: string,
-  judgeModelSlug: string,
+  judgeModelSlugs: readonly string[],
   userModelSlug: string,
   scenariosFilePath: string,
   outputFilePath: string,
   prompts: readonly ScenarioPrompt[]
 ) {
   console.log(
-    `Running benchmark: target=${targetModelSlug}, judge=${judgeModelSlug}, user=${userModelSlug}`
+    `Running benchmark: target=${targetModelSlug}, judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
   );
 
-  const judgeModel = createGatewayModel(modelsJsonPath, judgeModelSlug);
+  if (judgeModelSlugs.length % 2 === 0)
+    throw new Error(
+      "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
+    );
+
+  const judgeModels: Record<string, Model> = Object.fromEntries(
+    judgeModelSlugs.map(slug => [
+      slug,
+      createGatewayModel(modelsJsonPath, slug),
+    ])
+  );
   const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
   const targetGatewayModel = targetModelSlug.startsWith("custom-")
     ? undefined
@@ -185,7 +202,7 @@ export async function runCommand(
       }
 
       const context = await buildContext(
-        judgeModel,
+        judgeModels,
         userModel,
         targetModelSlug,
         targetGatewayModel,
@@ -235,7 +252,7 @@ export async function runCommand(
   // Write reduced result.
   const result = {
     target: targetModelSlug,
-    judge: judgeModelSlug,
+    judges: judgeModelSlugs,
     user: userModelSlug,
     prompts,
     ...(runResult ?? {}),

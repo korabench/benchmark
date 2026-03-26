@@ -3,6 +3,10 @@ import * as R from "remeda";
 import {flatTransform} from "streaming-iterables";
 import {v4 as uuid} from "uuid";
 import * as v from "valibot";
+import {
+  aggregateBehaviorAssessments,
+  aggregateTestAssessments,
+} from "./aggregateAssessments.js";
 import {Benchmark} from "./benchmark.js";
 import {
   generateFirstUserMessage,
@@ -11,6 +15,7 @@ import {
 import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {BehaviorAssessment} from "./model/behaviorAssessment.js";
+import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Motivation} from "./model/motivation.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
@@ -238,54 +243,55 @@ export const kora = Benchmark.new({
       });
     }
 
-    // Safety assessment.
-    const assessment = await (async () => {
-      const assessmentPrompt = conversationToAssessmentPrompt(
-        risk,
-        scenario,
-        messages
-      );
+    // Build prompts once.
+    const assessmentPrompt = conversationToAssessmentPrompt(
+      risk,
+      scenario,
+      messages
+    );
+    const behaviorPrompt = conversationToBehaviorAssessmentPrompt(
+      scenario,
+      messages
+    );
 
-      const {output} = await c.getJudgeResponse({
-        messages: [
-          {
-            role: "system",
-            content: assessmentPrompt.system,
-          },
-          {
-            role: "user",
-            content: assessmentPrompt.user,
-          },
-        ],
-        outputType: TestAssessment.io,
-      });
+    // Call all judges in parallel (safety + behavior per judge).
+    const judgeSlugs = Object.keys(c.judgeModels);
+    const judgeAssessments = await Promise.all(
+      judgeSlugs.map(async (slug): Promise<JudgeAssessment> => {
+        const judge = c.judgeModels[slug]!;
 
-      return output;
-    })();
+        const [safetyResult, behaviorResult] = await Promise.all([
+          judge.getResponse({
+            messages: [
+              {role: "system", content: assessmentPrompt.system},
+              {role: "user", content: assessmentPrompt.user},
+            ],
+            outputType: TestAssessment.io,
+          }),
+          judge.getResponse({
+            messages: [
+              {role: "system", content: behaviorPrompt.system},
+              {role: "user", content: behaviorPrompt.user},
+            ],
+            outputType: BehaviorAssessment.io,
+          }),
+        ]);
 
-    // Behavior assessment.
-    const behaviorAssessment = await (async () => {
-      const behaviorPrompt = conversationToBehaviorAssessmentPrompt(
-        scenario,
-        messages
-      );
+        return {
+          judgeModelSlug: slug,
+          assessment: safetyResult.output,
+          behaviorAssessment: behaviorResult.output,
+        };
+      })
+    );
 
-      const {output} = await c.getJudgeResponse({
-        messages: [
-          {
-            role: "system",
-            content: behaviorPrompt.system,
-          },
-          {
-            role: "user",
-            content: behaviorPrompt.user,
-          },
-        ],
-        outputType: BehaviorAssessment.io,
-      });
-
-      return output;
-    })();
+    // Aggregate across judges.
+    const assessment = aggregateTestAssessments(
+      judgeAssessments.map(j => j.assessment)
+    );
+    const behaviorAssessment = aggregateBehaviorAssessments(
+      judgeAssessments.map(j => j.behaviorAssessment)
+    );
 
     return {
       scenario,
@@ -293,6 +299,7 @@ export const kora = Benchmark.new({
       messages,
       assessment,
       behaviorAssessment,
+      judgeAssessments,
     };
   },
   mapTestResultToRunResult(result) {
