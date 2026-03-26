@@ -154,6 +154,11 @@ export async function runCommand(
     `Running benchmark: target=${targetModelSlug}, judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
   );
 
+  if (judgeModelSlugs.length % 2 === 0)
+    throw new Error(
+      "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
+    );
+
   const judgeModels: Record<string, Model> = Object.fromEntries(
     judgeModelSlugs.map(slug => [
       slug,
