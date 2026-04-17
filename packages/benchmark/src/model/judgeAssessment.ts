@@ -1,5 +1,6 @@
 import * as v from "valibot";
-import {BehaviorAssessment} from "./behaviorAssessment.js";
+
+import {MechanismAssessment} from "./mechanismAssessment.js";
 import {TestAssessment} from "./testAssessment.js";
 
 //
@@ -9,7 +10,7 @@ import {TestAssessment} from "./testAssessment.js";
 const VJudgeAssessment = v.strictObject({
   judgeModelSlug: v.string(),
   assessment: TestAssessment.io,
-  behaviorAssessment: BehaviorAssessment.io,
+  mechanismAssessment: MechanismAssessment.io,
 });
 
 //

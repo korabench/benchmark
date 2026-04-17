@@ -4,7 +4,7 @@ import {flatTransform} from "streaming-iterables";
 import {v4 as uuid} from "uuid";
 import * as v from "valibot";
 import {
-  aggregateBehaviorAssessments,
+  aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
 import {Benchmark} from "./benchmark.js";
@@ -14,13 +14,14 @@ import {
 } from "./generateUserMessage.js";
 import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
-import {BehaviorAssessment} from "./model/behaviorAssessment.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
+import {Mechanism} from "./model/mechanism.js";
+import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
   RunAssessmentSums,
-  RunBehaviorSums,
+  RunMechanismSums,
   RunResult,
   RunResultScore,
 } from "./model/runResult.js";
@@ -37,7 +38,7 @@ import {ScenarioValidationError} from "./model/scenarioValidationError.js";
 import {TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
 import {conversationToAssessmentPrompt} from "./prompts/conversationToAssessmentPrompt.js";
-import {conversationToBehaviorAssessmentPrompt} from "./prompts/conversationToBehaviorAssessmentPrompt.js";
+import {conversationToMechanismAssessmentPrompt} from "./prompts/conversationToMechanismAssessmentPrompt.js";
 import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessagePrompt.js";
 import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
@@ -275,18 +276,18 @@ export const kora = Benchmark.new({
       scenario,
       messages
     );
-    const behaviorPrompt = conversationToBehaviorAssessmentPrompt(
+    const mechanismPrompt = conversationToMechanismAssessmentPrompt(
       scenario,
       messages
     );
 
-    // Call all judges in parallel (safety + behavior per judge).
+    // Call all judges in parallel (safety + mechanisms per judge).
     const judgeSlugs = Object.keys(c.judgeModels);
     const judgeAssessments = await Promise.all(
       judgeSlugs.map(async (slug): Promise<JudgeAssessment> => {
         const judge = c.judgeModels[slug]!;
 
-        const [safetyResult, behaviorResult] = await Promise.all([
+        const [safetyResult, mechanismResult] = await Promise.all([
           judge.getResponse({
             messages: [
               {role: "system", content: assessmentPrompt.system},
@@ -296,17 +297,17 @@ export const kora = Benchmark.new({
           }),
           judge.getResponse({
             messages: [
-              {role: "system", content: behaviorPrompt.system},
-              {role: "user", content: behaviorPrompt.user},
+              {role: "system", content: mechanismPrompt.system},
+              {role: "user", content: mechanismPrompt.user},
             ],
-            outputType: BehaviorAssessment.io,
+            outputType: MechanismAssessment.io,
           }),
         ]);
 
         return {
           judgeModelSlug: slug,
           assessment: safetyResult.output,
-          behaviorAssessment: behaviorResult.output,
+          mechanismAssessment: mechanismResult.output,
         };
       })
     );
@@ -315,8 +316,8 @@ export const kora = Benchmark.new({
     const assessment = aggregateTestAssessments(
       judgeAssessments.map(j => j.assessment)
     );
-    const behaviorAssessment = aggregateBehaviorAssessments(
-      judgeAssessments.map(j => j.behaviorAssessment)
+    const mechanismAssessment = aggregateMechanismAssessments(
+      judgeAssessments.map(j => j.mechanismAssessment)
     );
 
     return {
@@ -324,12 +325,12 @@ export const kora = Benchmark.new({
       prompt,
       messages,
       assessment,
-      behaviorAssessment,
+      mechanismAssessment,
       judgeAssessments,
     };
   },
   mapTestResultToRunResult(result) {
-    const {assessment, behaviorAssessment} = result;
+    const {assessment, mechanismAssessment} = result;
 
     // [failing, adequate, exemplary]
     function gradeSums(grade: AssessmentGrade): RunAssessmentSums {
@@ -341,13 +342,23 @@ export const kora = Benchmark.new({
     }
 
     // [failing, adequate, exemplary, occurrenceCount]
-    function behaviorGradeSums(
+    function mechanismSums(
       grade: AssessmentGrade,
       occurrenceCount: number
-    ): RunBehaviorSums {
+    ): RunMechanismSums {
       const [f, a, e] = gradeSums(grade);
       return [f, a, e, occurrenceCount];
     }
+
+    const mechanisms: Record<string, RunMechanismSums> = Object.fromEntries(
+      Mechanism.listAll().map(m => {
+        const criterion = mechanismAssessment[m.id]!;
+        return [
+          m.id,
+          mechanismSums(criterion.grade, criterion.occurrenceCount),
+        ];
+      })
+    );
 
     return {
       scores: [
@@ -359,18 +370,7 @@ export const kora = Benchmark.new({
           sums: {
             al: 1,
             as: gradeSums(assessment.grade),
-            an: behaviorGradeSums(
-              behaviorAssessment.anthropomorphism.grade,
-              behaviorAssessment.anthropomorphism.occurrenceCount
-            ),
-            eh: behaviorGradeSums(
-              behaviorAssessment.epistemicHumility.grade,
-              behaviorAssessment.epistemicHumility.occurrenceCount
-            ),
-            hr: behaviorGradeSums(
-              behaviorAssessment.humanRedirection.grade,
-              behaviorAssessment.humanRedirection.occurrenceCount
-            ),
+            mechanisms,
           },
         },
       ],
@@ -386,11 +386,25 @@ export const kora = Benchmark.new({
     }
 
     // [failing, adequate, exemplary, occurrenceCount]
-    function reduceBehaviorGradeSums(
-      a: RunBehaviorSums,
-      b: RunBehaviorSums
-    ): RunBehaviorSums {
+    function reduceMechanismSums(
+      a: RunMechanismSums,
+      b: RunMechanismSums
+    ): RunMechanismSums {
       return [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
+    }
+
+    function reduceMechanismsRecord(
+      a: Record<string, RunMechanismSums>,
+      b: Record<string, RunMechanismSums>
+    ): Record<string, RunMechanismSums> {
+      const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+      const zero: RunMechanismSums = [0, 0, 0, 0];
+      return Object.fromEntries(
+        [...keys].map(key => [
+          key,
+          reduceMechanismSums(a[key] ?? zero, b[key] ?? zero),
+        ])
+      );
     }
 
     const scores = R.pipe(
@@ -414,9 +428,10 @@ export const kora = Benchmark.new({
             sums: {
               al: r1.sums.al + r2.sums.al,
               as: reduceGradeSums(r1.sums.as, r2.sums.as),
-              an: reduceBehaviorGradeSums(r1.sums.an, r2.sums.an),
-              eh: reduceBehaviorGradeSums(r1.sums.eh, r2.sums.eh),
-              hr: reduceBehaviorGradeSums(r1.sums.hr, r2.sums.hr),
+              mechanisms: reduceMechanismsRecord(
+                r1.sums.mechanisms,
+                r2.sums.mechanisms
+              ),
             },
           };
         }, undefined);

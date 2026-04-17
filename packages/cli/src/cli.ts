@@ -167,8 +167,24 @@ program
     "comma-separated prompts to test (default, child)",
     ScenarioPrompt.list[0]
   )
-  .action((targetModel, userModel, opts) =>
-    runCommand(
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all scenarios in the input file)"
+  )
+  .option(
+    "--limit <count>",
+    "maximum number of test tasks to run (useful for smoke tests)"
+  )
+  .action((targetModel, userModel, opts) => {
+    const limit =
+      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw new Error(
+        `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+
+    return runCommand(
       program,
       modelsJsonPath,
       targetModel,
@@ -176,8 +192,15 @@ program
       userModel,
       opts.input,
       opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim()))
-    )
-  );
+      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limit,
+      }
+    );
+  });
 
 program.parseAsync();
