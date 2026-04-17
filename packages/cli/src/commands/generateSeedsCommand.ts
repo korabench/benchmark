@@ -17,6 +17,12 @@ export async function generateSeeds(
   options?: GenerateSeedsOptions
 ) {
   console.log(`Generating seeds using ${modelSlug}...`);
+  if (options?.riskIds?.length) {
+    console.log(`Filtering to risk IDs: ${options.riskIds.join(", ")}`);
+  }
+  if (options?.motivations?.length) {
+    console.log(`Filtering to motivations: ${options.motivations.join(", ")}`);
+  }
 
   const model = createGatewayModel(modelsJsonPath, modelSlug);
 

@@ -15,23 +15,28 @@ import {Program} from "../cli.js";
 import {createGatewayModel} from "../models/gatewayModel.js";
 
 async function* readSeedsFromJsonl(
-  filePath: string
+  filePath: string,
+  riskIdFilter?: ReadonlySet<string>
 ): AsyncGenerator<ScenarioSeed> {
   const fh = await fs.open(filePath);
   const rl = readline.createInterface({input: fh.createReadStream()});
   for await (const line of rl) {
     const trimmed = line.trim();
     if (trimmed.length === 0) continue;
-    yield v.parse(ScenarioSeed.io, JSON.parse(trimmed));
+    const seed = v.parse(ScenarioSeed.io, JSON.parse(trimmed));
+    if (riskIdFilter && !riskIdFilter.has(seed.riskId)) continue;
+    yield seed;
   }
 }
 
-async function countJsonlLines(filePath: string): Promise<number> {
-  const fh = await fs.open(filePath);
-  const rl = readline.createInterface({input: fh.createReadStream()});
+async function countSeeds(
+  filePath: string,
+  riskIdFilter?: ReadonlySet<string>
+): Promise<number> {
   let count = 0;
-  for await (const line of rl) {
-    if (line.trim().length > 0) count++;
+  for await (const seed of readSeedsFromJsonl(filePath, riskIdFilter)) {
+    void seed;
+    count++;
   }
   return count;
 }
@@ -51,11 +56,16 @@ export async function expandScenariosCommand(
   modelSlug: string,
   userModelSlug: string,
   seedsFilePath: string,
-  outputFilePath: string
+  outputFilePath: string,
+  riskIds?: readonly string[]
 ) {
   console.log(
     `Expanding scenarios using ${modelSlug} (user: ${userModelSlug})...`
   );
+  const riskIdFilter = riskIds?.length ? new Set(riskIds) : undefined;
+  if (riskIdFilter) {
+    console.log(`Filtering to risk IDs: ${[...riskIdFilter].join(", ")}`);
+  }
 
   const model = createGatewayModel(modelsJsonPath, modelSlug);
   const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
@@ -80,7 +90,7 @@ export async function expandScenariosCommand(
 
   await fs.mkdir(tempDir, {recursive: true});
 
-  const totalSeeds = await countJsonlLines(seedsFilePath);
+  const totalSeeds = await countSeeds(seedsFilePath, riskIdFilter);
   const progress = Script.progress(totalSeeds, text =>
     process.stdout.write(text)
   );
@@ -118,7 +128,7 @@ export async function expandScenariosCommand(
 
         return [];
       },
-      readSeedsFromJsonl(seedsFilePath)
+      readSeedsFromJsonl(seedsFilePath, riskIdFilter)
     )
   );
 
