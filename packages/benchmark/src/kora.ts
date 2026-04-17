@@ -50,24 +50,50 @@ export const kora = Benchmark.new({
   runResultType: RunResult.io,
   async *generateScenarioSeeds(c, options) {
     const riskCategories = RiskCategory.listAll();
-    const motivations = Motivation.listAll();
+    const allMotivations = Motivation.listAll();
     const seedsPerTask = options?.seedsPerTask ?? 8;
     const ageRanges = options?.ageRanges ?? AgeRange.list;
+    const riskIds = options?.riskIds;
+    const motivationNames = options?.motivations;
     const SeedsOutput = v.strictObject({
       seeds: v.array(ModelScenarioSeed.io),
     });
 
+    if (riskIds) {
+      const knownRiskIds = new Set(
+        riskCategories.flatMap(c => c.risks.map(r => r.id))
+      );
+      const unknown = riskIds.filter(id => !knownRiskIds.has(id));
+      if (unknown.length > 0) {
+        throw new Error(`Unknown risk IDs: ${unknown.join(", ")}`);
+      }
+    }
+    const riskIdSet = riskIds ? new Set(riskIds) : undefined;
+
+    if (motivationNames) {
+      const knownNames = new Set(allMotivations.map(m => m.name));
+      const unknown = motivationNames.filter(n => !knownNames.has(n));
+      if (unknown.length > 0) {
+        throw new Error(`Unknown motivation names: ${unknown.join(", ")}`);
+      }
+    }
+    const motivations = motivationNames
+      ? allMotivations.filter(m => motivationNames.includes(m.name))
+      : allMotivations;
+
     const tasks = riskCategories.flatMap(riskCategory =>
-      riskCategory.risks.flatMap(risk =>
-        ageRanges.flatMap(ageRange =>
-          motivations.map(motivation => ({
-            riskCategory,
-            risk,
-            ageRange,
-            motivation,
-          }))
+      riskCategory.risks
+        .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
+        .flatMap(risk =>
+          ageRanges.flatMap(ageRange =>
+            motivations.map(motivation => ({
+              riskCategory,
+              risk,
+              ageRange,
+              motivation,
+            }))
+          )
         )
-      )
     );
 
     const total = tasks.length * seedsPerTask;
