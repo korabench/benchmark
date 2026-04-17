@@ -52,6 +52,9 @@ yarn kora generate-seeds [model]
 | `[model]` | Model to use for seed generation (default: `gpt-5.2:high`) |
 | `-o, --output <path>` | Output JSONL file (default: `data/scenarioSeeds.jsonl`) |
 | `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`) |
+| `--age-ranges <ranges>` | Comma-separated age ranges to generate seeds for (default: all) |
+| `--risk-ids <ids>` | Comma-separated risk IDs to restrict generation to (default: all risks) |
+| `--motivations <names>` | Comma-separated motivation names to restrict generation to (default: all motivations) |
 
 ### `expand-scenarios`
 
@@ -67,6 +70,7 @@ yarn kora expand-scenarios [model] [user-model]
 | `[user-model]` | Model to use for generating the first user message (default: `deepseek-v3.2`) |
 | `-i, --input <path>` | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`) |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`) |
+| `--risk-ids <ids>` | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
 
 ### `run`
 
