@@ -1,6 +1,6 @@
+import {ScenarioPrompt} from "@korabench/benchmark";
 import * as path from "node:path";
 import {describe, expect, it} from "vitest";
-import {ScenarioPrompt} from "@korabench/benchmark";
 import {
   countTestTasks,
   readScenariosFromJsonl,

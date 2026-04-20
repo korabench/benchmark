@@ -82,5 +82,8 @@ jobs:
         run: |
           yarn install --immutable
 
+      - name: Build
+        run: yarn tsbuild
+
       - name: Test
         run: yarn test
