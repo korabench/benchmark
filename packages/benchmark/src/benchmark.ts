@@ -42,6 +42,8 @@ export interface GenerationEvent<T> {
 export interface GenerateSeedsOptions {
   seedsPerTask?: number;
   ageRanges?: AgeRange[];
+  riskIds?: readonly string[];
+  motivations?: readonly string[];
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {

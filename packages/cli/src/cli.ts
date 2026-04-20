@@ -83,12 +83,28 @@ program
     "comma-separated age ranges to generate seeds for (7to9, 10to12, 13to17)",
     AgeRange.list.join(",")
   )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict generation to (defaults to all risks)"
+  )
+  .option(
+    "--motivations <names>",
+    "comma-separated motivation names to restrict generation to (defaults to all motivations)"
+  )
   .action((model, opts) =>
     generateSeeds(program, modelsJsonPath, model, opts.output, {
       seedsPerTask: parseInt(opts.seedsPerTask, 10),
       ageRanges: opts.ageRanges
         .split(",")
         .map(r => v.parse(AgeRange.io, r.trim())),
+      riskIds: opts.riskIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0),
+      motivations: opts.motivations
+        ?.split(",")
+        .map(name => name.trim())
+        .filter(name => name.length > 0),
     })
   );
 
@@ -107,6 +123,10 @@ program
     "output scenarios JSONL file",
     defaultScenariosPath
   )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict expansion to (defaults to all seeds in the input file)"
+  )
   .action((model, userModel, opts) =>
     expandScenariosCommand(
       program,
@@ -114,7 +134,11 @@ program
       model,
       userModel,
       opts.input,
-      opts.output
+      opts.output,
+      opts.riskIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0)
     )
   );
 
@@ -143,8 +167,24 @@ program
     "comma-separated prompts to test (default, child)",
     ScenarioPrompt.list[0]
   )
-  .action((targetModel, userModel, opts) =>
-    runCommand(
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all scenarios in the input file)"
+  )
+  .option(
+    "--limit <count>",
+    "maximum number of test tasks to run (useful for smoke tests)"
+  )
+  .action((targetModel, userModel, opts) => {
+    const limit =
+      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw new Error(
+        `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+
+    return runCommand(
       program,
       modelsJsonPath,
       targetModel,
@@ -152,8 +192,15 @@ program
       userModel,
       opts.input,
       opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim()))
-    )
-  );
+      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limit,
+      }
+    );
+  });
 
 program.parseAsync();

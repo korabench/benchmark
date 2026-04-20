@@ -1,7 +1,7 @@
 import {ModelMessage} from "@korabench/core";
 import * as v from "valibot";
-import {BehaviorAssessment} from "./behaviorAssessment.js";
 import {JudgeAssessment} from "./judgeAssessment.js";
+import {MechanismAssessment} from "./mechanismAssessment.js";
 import {Scenario} from "./scenario.js";
 import {ScenarioPrompt} from "./scenarioPrompt.js";
 import {TestAssessment} from "./testAssessment.js";
@@ -15,7 +15,7 @@ const VTestResult = v.strictObject({
   prompt: ScenarioPrompt.io,
   messages: v.array(ModelMessage.io),
   assessment: TestAssessment.io,
-  behaviorAssessment: BehaviorAssessment.io,
+  mechanismAssessment: MechanismAssessment.io,
   judgeAssessments: v.array(JudgeAssessment.io),
 });
 
