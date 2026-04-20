@@ -19,6 +19,22 @@
       }
     }
   },
+  "claude-opus-4.7:limited": {
+    "model": "anthropic/claude-opus-4.7",
+    "maxTokens": 26000
+  },
+  "gemini-2.5-pro:high:limited": {
+    "model": "google/gemini-2.5-pro",
+    "maxTokens": 50000,
+    "providerOptions": {
+      "google": {
+        "thinkingConfig": {
+          "thinkingBudget": 24000,
+          "includeThoughts": false
+        }
+      }
+    }
+  },
   "deepseek-v3.2": {
     "model": "deepseek/deepseek-v3.2",
     "maxTokens": 4000,

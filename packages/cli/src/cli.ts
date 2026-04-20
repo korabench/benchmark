@@ -154,7 +154,7 @@ program
   .option(
     "--judges <models>",
     "comma-separated judge models",
-    "gpt-5.2:high:limited"
+    "gpt-5.2:high:limited,claude-opus-4.7:limited,gemini-2.5-pro:high:limited"
   )
   .option(
     "-i, --input <path>",

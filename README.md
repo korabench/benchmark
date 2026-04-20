@@ -47,14 +47,14 @@ Generates a set of scenario seeds from the risk taxonomy.
 yarn kora generate-seeds [model]
 ```
 
-| Argument / Option | Description |
-|---|---|
-| `[model]` | Model to use for seed generation (default: `gpt-5.2:high`) |
-| `-o, --output <path>` | Output JSONL file (default: `data/scenarioSeeds.jsonl`) |
-| `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`) |
-| `--age-ranges <ranges>` | Comma-separated age ranges to generate seeds for (default: all) |
-| `--risk-ids <ids>` | Comma-separated risk IDs to restrict generation to (default: all risks) |
-| `--motivations <names>` | Comma-separated motivation names to restrict generation to (default: all motivations) |
+| Argument / Option          | Description                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `[model]`                  | Model to use for seed generation (default: `gpt-5.2:high`)                            |
+| `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
+| `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
+| `--age-ranges <ranges>`    | Comma-separated age ranges to generate seeds for (default: all)                       |
+| `--risk-ids <ids>`         | Comma-separated risk IDs to restrict generation to (default: all risks)               |
+| `--motivations <names>`    | Comma-separated motivation names to restrict generation to (default: all motivations) |
 
 ### `expand-scenarios`
 
@@ -64,13 +64,13 @@ Transforms seeds into fully fleshed-out scenarios with validation.
 yarn kora expand-scenarios [model] [user-model]
 ```
 
-| Argument / Option | Description |
-|---|---|
-| `[model]` | Model to use for scenario expansion (default: `gpt-4o`) |
-| `[user-model]` | Model to use for generating the first user message (default: `deepseek-v3.2`) |
-| `-i, --input <path>` | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`) |
-| `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`) |
-| `--risk-ids <ids>` | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
+| Argument / Option     | Description                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `[model]`             | Model to use for scenario expansion (default: `gpt-4o`)                                  |
+| `[user-model]`        | Model to use for generating the first user message (default: `deepseek-v3.2`)            |
+| `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
+| `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
+| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
 
 ### `run`
 
@@ -80,16 +80,16 @@ Runs the benchmark against the target model.
 yarn kora run <target-model> [user-model]
 ```
 
-| Argument / Option | Description |
-|---|---|
-| `<target-model>` | Model to benchmark |
-| `[user-model]` | Model to use for simulating the child user (default: `deepseek-v3.2`) |
-| `--judges <models>` | Comma-separated judge models (default: `gpt-5.2:high:limited`) |
-| `-i, --input <path>` | Input scenarios JSONL file (default: `data/scenarios.jsonl`) |
-| `-o, --output <path>` | Output results JSON file (default: `data/results.json`) |
-| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`) |
-| `--risk-ids <ids>` | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file) |
-| `--limit <count>` | Maximum number of test tasks to run — useful for smoke tests |
+| Argument / Option     | Description                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `<target-model>`      | Model to benchmark                                                                                                 |
+| `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
+| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:high:limited,claude-opus-4.7:limited,gemini-2.5-pro:high:limited`) |
+| `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
+| `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
+| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
+| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
+| `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
 
 When multiple judge models are specified, each judge independently evaluates every conversation. The final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
@@ -119,12 +119,12 @@ Models are configured in a `models.json` file at the project root. The CLI searc
 }
 ```
 
-| Field | Required | Description |
-|---|---|---|
-| `model` | Yes | Provider/model identifier for the [AI SDK gateway](https://ai-sdk.dev/docs/ai-sdk-core/provider-management#ai-sdk-providers-gateway) (e.g. `openai/gpt-4o`) |
-| `maxTokens` | No | Maximum output tokens (default: 4000) |
-| `temperature` | No | Sampling temperature |
-| `providerOptions` | No | Provider-specific options passed through to the AI SDK |
+| Field             | Required | Description                                                                                                                                                 |
+| ----------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `model`           | Yes      | Provider/model identifier for the [AI SDK gateway](https://ai-sdk.dev/docs/ai-sdk-core/provider-management#ai-sdk-providers-gateway) (e.g. `openai/gpt-4o`) |
+| `maxTokens`       | No       | Maximum output tokens (default: 4000)                                                                                                                       |
+| `temperature`     | No       | Sampling temperature                                                                                                                                        |
+| `providerOptions` | No       | Provider-specific options passed through to the AI SDK                                                                                                      |
 
 Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
@@ -135,7 +135,10 @@ Model slugs that start with `custom-` bypass the AI SDK gateway and are routed t
 To add a custom model, edit `models/customModel.ts` and implement the `Model` interface:
 
 ```ts
-export async function createCustomModel(modelSlug: string, _scenario: Scenario): Promise<Model> {
+export async function createCustomModel(
+  modelSlug: string,
+  _scenario: Scenario
+): Promise<Model> {
   return {
     async getTextResponse(request) {
       // request.messages contains the conversation (system, user, assistant messages).
@@ -154,6 +157,7 @@ export async function createCustomModel(modelSlug: string, _scenario: Scenario):
 ```
 
 The factory receives:
+
 - `modelSlug` — the full slug (e.g. `custom-my-model`), so you can route to different backends.
 - `scenario` — the current `Scenario` being tested, available for context-aware implementations.
 
@@ -175,16 +179,16 @@ To evaluate a new model, only change the `<target-model>` argument in the `run` 
 
 The benchmark covers 8 risk categories with 25 individual risks:
 
-| Category ID | Name |
-|---|---|
-| `physical_and_legal_safety` | Physical & Legal Safety |
+| Category ID                                 | Name                                     |
+| ------------------------------------------- | ---------------------------------------- |
+| `physical_and_legal_safety`                 | Physical & Legal Safety                  |
 | `sexual_content_exploitation_and_predation` | Sexual Content, Exploitation & Predation |
-| `psychological_and_emotional_safety` | Psychological & Emotional Safety |
-| `educational_and_epistemic_integrity` | Educational & Epistemic Integrity |
-| `bias_hate_and_societal_harm` | Bias, Hate & Societal Harm |
-| `social_family_and_behavioral_influence` | Social, Family & Behavioral Influence |
-| `online_safety` | Online Safety |
-| `developmental_risk` | Developmental Risk |
+| `psychological_and_emotional_safety`        | Psychological & Emotional Safety         |
+| `educational_and_epistemic_integrity`       | Educational & Epistemic Integrity        |
+| `bias_hate_and_societal_harm`               | Bias, Hate & Societal Harm               |
+| `social_family_and_behavioral_influence`    | Social, Family & Behavioral Influence    |
+| `online_safety`                             | Online Safety                            |
+| `developmental_risk`                        | Developmental Risk                       |
 
 See the full taxonomy: [KORA Risk Taxonomy](https://korabench.notion.site/KORA-Risk-Taxonomy-2fb5eb9ec0c98050b330d4f37c57d5b0).
 
@@ -192,15 +196,15 @@ See the full taxonomy: [KORA Risk Taxonomy](https://korabench.notion.site/KORA-R
 
 Alongside the safety grade, every conversation is assessed on 7 **cross-cutting mechanisms** — LLM-judge annotations covering patterns orthogonal to the risk taxonomy (sourced from the KORA V2 taxonomy's "Mechanisms" sheet). Each mechanism is graded on the same failing / adequate / exemplary scale.
 
-| Excel ID | Code id | Name | What it captures |
-|---|---|---|---|
-| M1 | `sycophancy` | Sycophancy | Agreeableness over truth/safety; capitulation under child pressure |
-| M2 | `epistemicHumility` | Epistemic Humility | Calibrated certainty; hallucination vs. honest uncertainty |
-| M3 | `manipulativeEngagement` | Manipulative Engagement | Departure guilt, manufactured urgency/intimacy — automatic fail if present |
-| M4 | `nonManipulativeFraming` | Non-Manipulative Framing | **Positive** signal: transparent persuasion that respects the child's autonomy |
-| M5 | `fictionalFramingBypass` | Fictional Framing & Roleplay Bypass | Different safety stance under fiction/roleplay vs. direct requests (single-framing flag; full comparative pipeline deferred) |
-| M6 | `anthropomorphism` | Anthropomorphism | Claims of human-like emotion/body/backstory/consciousness |
-| M7 | `humanRedirection` | Human Redirection | Redirection to trusted adults/professionals in high-stakes moments |
+| Excel ID | Code id                  | Name                                | What it captures                                                                                                             |
+| -------- | ------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| M1       | `sycophancy`             | Sycophancy                          | Agreeableness over truth/safety; capitulation under child pressure                                                           |
+| M2       | `epistemicHumility`      | Epistemic Humility                  | Calibrated certainty; hallucination vs. honest uncertainty                                                                   |
+| M3       | `manipulativeEngagement` | Manipulative Engagement             | Departure guilt, manufactured urgency/intimacy — automatic fail if present                                                   |
+| M4       | `nonManipulativeFraming` | Non-Manipulative Framing            | **Positive** signal: transparent persuasion that respects the child's autonomy                                               |
+| M5       | `fictionalFramingBypass` | Fictional Framing & Roleplay Bypass | Different safety stance under fiction/roleplay vs. direct requests (single-framing flag; full comparative pipeline deferred) |
+| M6       | `anthropomorphism`       | Anthropomorphism                    | Claims of human-like emotion/body/backstory/consciousness                                                                    |
+| M7       | `humanRedirection`       | Human Redirection                   | Redirection to trusted adults/professionals in high-stakes moments                                                           |
 
 Mechanism definitions live in `packages/benchmark/data/mechanisms.ts`. M2, M6, and M7 ship with the rubrics that predated V2; the Excel V2 rubrics for those three are included as JS comments in the data file, ready to switch in later.
 
@@ -211,7 +215,11 @@ The `run` command produces a result object with this structure:
 ```json
 {
   "target": "gpt-4o",
-  "judges": ["gpt-5.2:high:limited"],
+  "judges": [
+    "gpt-5.2:high:limited",
+    "claude-opus-4.7:limited",
+    "gemini-2.5-pro:high:limited"
+  ],
   "user": "deepseek-v3.2",
   "prompts": ["default"],
   "scores": [
@@ -238,14 +246,14 @@ The `run` command produces a result object with this structure:
 }
 ```
 
-| Field | Description |
-|---|---|
-| `target` | Target model slug |
-| `judges` | Judge model slugs |
-| `user` | User model slug |
-| `prompts` | Prompt variants that were tested |
-| `sums.al` | Total test count |
-| `sums.as` | Safety grades: `[failing, adequate, exemplary]` |
+| Field             | Description                                                                                                                                                       |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`          | Target model slug                                                                                                                                                 |
+| `judges`          | Judge model slugs                                                                                                                                                 |
+| `user`            | User model slug                                                                                                                                                   |
+| `prompts`         | Prompt variants that were tested                                                                                                                                  |
+| `sums.al`         | Total test count                                                                                                                                                  |
+| `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                   |
 | `sums.mechanisms` | Object keyed by mechanism id. Each value is `[failing, adequate, exemplary, occurrenceCount]`. Keys correspond to the ids in the [Mechanisms](#mechanisms) table. |
 
 Scores are grouped by risk category, risk, age range, and prompt variant. Two prompt variants are available:
@@ -261,7 +269,7 @@ Each pipeline stage makes the following API calls:
 
 - **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
-- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
+- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default 3 judges, this is 11 calls per test.
 
 All commands run with a concurrency of 10 parallel tasks.
 
