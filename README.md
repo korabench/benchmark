@@ -84,7 +84,7 @@ yarn kora run <target-model> [user-model]
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `<target-model>`      | Model to benchmark                                                                                                 |
 | `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
-| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:high:limited,claude-opus-4.7:limited,gemini-2.5-pro:high:limited`) |
+| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.1-thinking:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited`) |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
@@ -216,9 +216,9 @@ The `run` command produces a result object with this structure:
 {
   "target": "gpt-4o",
   "judges": [
-    "gpt-5.2:high:limited",
-    "claude-opus-4.7:limited",
-    "gemini-2.5-pro:high:limited"
+    "gpt-5.1-thinking:limited",
+    "claude-sonnet-4.6:limited",
+    "gemini-2.5-pro:limited"
   ],
   "user": "deepseek-v3.2",
   "prompts": ["default"],

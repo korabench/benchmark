@@ -10,26 +10,21 @@
       }
     }
   },
-  "gpt-5.2:high:limited": {
-    "model": "openai/gpt-5.2",
-    "maxTokens": 26000,
-    "providerOptions": {
-      "openai": {
-        "reasoningEffort": "high"
-      }
-    }
+  "gpt-5.1-thinking:limited": {
+    "model": "openai/gpt-5.1-thinking",
+    "maxTokens": 16000
   },
-  "claude-opus-4.7:limited": {
-    "model": "anthropic/claude-opus-4.7",
-    "maxTokens": 26000
+  "claude-sonnet-4.6:limited": {
+    "model": "anthropic/claude-sonnet-4.6",
+    "maxTokens": 16000
   },
-  "gemini-2.5-pro:high:limited": {
+  "gemini-2.5-pro:limited": {
     "model": "google/gemini-2.5-pro",
-    "maxTokens": 50000,
+    "maxTokens": 16000,
     "providerOptions": {
       "google": {
         "thinkingConfig": {
-          "thinkingBudget": 24000,
+          "thinkingBudget": 8000,
           "includeThoughts": false
         }
       }
