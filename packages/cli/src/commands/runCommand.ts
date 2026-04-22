@@ -37,7 +37,7 @@ interface RunState {
   runResult: RunResult | undefined;
 }
 
-interface ScenarioFilters {
+export interface ScenarioFilters {
   riskIds?: ReadonlySet<string>;
   limit?: number;
 }
@@ -46,8 +46,9 @@ function taskTempFileName(key: string): string {
   return Hash.shortHash(key) + ".json";
 }
 
-async function* readScenariosFromJsonl(
-  filePath: string
+export async function* readScenariosFromJsonl(
+  filePath: string,
+  filters?: ScenarioFilters
 ): AsyncGenerator<Scenario> {
   const fh = await fs.open(filePath);
   const rl = readline.createInterface({input: fh.createReadStream()});
@@ -56,20 +57,21 @@ async function* readScenariosFromJsonl(
     if (trimmed.length === 0) {
       continue;
     }
-    yield v.parse(Scenario.io, JSON.parse(trimmed));
+    const scenario = v.parse(Scenario.io, JSON.parse(trimmed));
+    if (filters?.riskIds && !filters.riskIds.has(scenario.seed.riskId)) {
+      continue;
+    }
+    yield scenario;
   }
 }
 
-async function* scenariosToTestTasks(
+export async function* scenariosToTestTasks(
   filePath: string,
   prompts: readonly ScenarioPrompt[],
   filters: ScenarioFilters
 ): AsyncGenerator<TestTask> {
   let yielded = 0;
-  for await (const scenario of readScenariosFromJsonl(filePath)) {
-    if (filters.riskIds && !filters.riskIds.has(scenario.seed.riskId)) {
-      continue;
-    }
+  for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
       if (filters.limit !== undefined && yielded >= filters.limit) {
         return;
@@ -80,16 +82,13 @@ async function* scenariosToTestTasks(
   }
 }
 
-async function countTestTasks(
+export async function countTestTasks(
   filePath: string,
   prompts: readonly ScenarioPrompt[],
   filters: ScenarioFilters
 ): Promise<number> {
   let count = 0;
-  for await (const scenario of readScenariosFromJsonl(filePath)) {
-    if (filters.riskIds && !filters.riskIds.has(scenario.seed.riskId)) {
-      continue;
-    }
+  for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     count += kora.mapScenarioToKeys(scenario, prompts).length;
     if (filters.limit !== undefined && count >= filters.limit) {
       return filters.limit;
