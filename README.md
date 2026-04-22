@@ -322,7 +322,43 @@ Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
 Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/models/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
 
-To add a custom model, edit `models/customModel.ts` and implement the `Model` interface:
+#### Built-in: `custom-http:<url>`
+
+Benchmark any model served behind the OpenAI chat-completions schema without writing code: a local vLLM, llama.cpp or Ollama server, an inference provider outside the AI Gateway, or a guard/wrapper service in front of a model. The slug carries the endpoint URL:
+
+```bash
+# Open-weight model on a local vLLM server
+CUSTOM_HTTP_MODEL=Qwen/Qwen3-8B \
+  yarn kora run custom-http:http://localhost:8000/v1/chat/completions
+
+# Hosted provider that needs an API key
+CUSTOM_HTTP_MODEL=openai/gpt-oss-20b CUSTOM_HTTP_API_KEY=$GROQ_API_KEY \
+  yarn kora run custom-http:https://api.groq.com/openai/v1/chat/completions
+```
+
+Each target turn is sent as a standard request, and the answer is read from `choices[0].message.content`:
+
+```json
+{
+  "model": "<CUSTOM_HTTP_MODEL, or the full slug when unset>",
+  "messages": [ ... ],
+  "temperature": 0.7,
+  "max_tokens": 1024
+}
+```
+
+| Environment variable  | Description                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| `CUSTOM_HTTP_MODEL`   | Value of the request's `model` field. Required by servers that host several models; optional otherwise. |
+| `CUSTOM_HTTP_API_KEY` | Sent as `Authorization: Bearer <key>`. Leave unset for unauthenticated endpoints.                       |
+
+Rate-limit (429) and server errors are retried with the same backoff as gateway models. A leading `<think>…</think>` block (reasoning models served without a reasoning parser) is stripped so the judges grade only the answer, as with gateway targets.
+
+`custom-http` is target-only: judges and the user model stay gateway models, since they need structured output.
+
+#### Custom JS implementation
+
+For anything beyond a plain HTTP passthrough, edit `models/customModel.ts` and implement the `Model` interface:
 
 ```ts
 export async function createCustomModel(
@@ -858,6 +894,7 @@ packages/
       gatewayModel.ts                AI SDK gateway model implementation
       modelConfig.ts                 Model registry loader
       customModel.ts                 Custom model hook (edit to add your own)
+      customHttpModel.ts             custom-http:<url> OpenAI-compatible target
     retry.ts                         Retry with exponential backoff
     cli.ts                           CLI entry point
 ```
