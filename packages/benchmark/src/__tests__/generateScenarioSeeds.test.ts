@@ -1,7 +1,9 @@
+import * as R from "remeda";
 import {describe, expect, it} from "vitest";
 import {GenerateSeedsContext} from "../benchmark.js";
 import {kora} from "../kora.js";
-import {ModelScenarioSeed} from "../model/scenarioSeed.js";
+import {populationDistributionPresets} from "../model/populationDistributionPresets.js";
+import {ModelScenarioSeed, ScenarioSeed} from "../model/scenarioSeed.js";
 
 //
 // Fixtures.
@@ -49,6 +51,17 @@ async function runSeeds(
   for await (const event of generator) {
     void event;
   }
+}
+
+async function collectSeeds(
+  context: GenerateSeedsContext,
+  options?: Parameters<typeof kora.generateScenarioSeeds>[1]
+): Promise<ScenarioSeed[]> {
+  const seeds: ScenarioSeed[] = [];
+  for await (const event of kora.generateScenarioSeeds(context, options)) {
+    seeds.push(...event.items);
+  }
+  return seeds;
 }
 
 //
@@ -201,5 +214,192 @@ describe("generateScenarioSeeds totalSeeds sampling", () => {
         riskIds: ["privacy_and_personal_data_protection"],
       })
     ).rejects.toThrow(/mutually exclusive/);
+  });
+});
+
+//
+// Distribution-mode tests.
+//
+
+const census = populationDistributionPresets["us-census-2020"]!;
+
+function makeReturn(
+  seed: ModelScenarioSeed,
+  calls: Call[]
+): GenerateSeedsContext {
+  return {
+    getResponse: async request => {
+      const userMessage = request.messages.find(m => m.role === "user");
+      calls.push({
+        userPrompt:
+          typeof userMessage?.content === "string" ? userMessage.content : "",
+      });
+      return {output: {seeds: [seed]} as never};
+    },
+  };
+}
+
+describe("generateScenarioSeeds distribution mode", () => {
+  it("fires exactly `totalSeeds` LLM calls per risk with pinned demographics", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    expect(calls).toHaveLength(60);
+    expect(seeds).toHaveLength(60);
+    expect(calls.every(c => c.userPrompt.includes("PINNED DEMOGRAPHICS"))).toBe(
+      true
+    );
+  });
+
+  it("overwrites LLM demographic drift with the pinned values", async () => {
+    // Fake LLM always returns gender="male" & race="white", which the allocator
+    // should overwrite.
+    const calls: Call[] = [];
+    const context = makeReturn(
+      {...makeFakeSeed(), childGender: "male", childRaceEthnicity: "white"},
+      calls
+    );
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 42,
+    });
+
+    expect(R.countBy(seeds, s => s.ageRange)).toEqual({
+      "7to9": 16,
+      "10to12": 16,
+      "13to17": 28,
+    });
+    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 30, boy: 30});
+    expect(R.countBy(seeds, s => s.childSES!)).toEqual({
+      low: 17,
+      middle: 28,
+      high: 15,
+    });
+    expect(R.countBy(seeds, s => s.childRaceEthnicity)).toEqual({
+      white: 31,
+      hispanic: 15,
+      black: 8,
+      asian: 3,
+      other: 3,
+    });
+  });
+
+  it("clamps childAge to the pinned band even if the LLM drifts", async () => {
+    const calls: Call[] = [];
+    // LLM returns age=17 regardless — must be clamped to the pinned band.
+    const context = makeReturn({...makeFakeSeed(), childAge: 17}, calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 3,
+    });
+
+    for (const s of seeds) {
+      if (s.ageRange === "7to9") expect(s.childAge).toBeLessThanOrEqual(9);
+      if (s.ageRange === "10to12") expect([10, 11, 12]).toContain(s.childAge);
+    }
+  });
+
+  it("cycles motivations evenly (60 seeds / 10 motivations = 6 each)", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    const counts = R.countBy(seeds, s => s.motivation.name);
+    const values = Object.values(counts);
+    expect(values.every(v => v === 6)).toBe(true);
+    expect(values).toHaveLength(10);
+  });
+
+  it("throws when distribution is set without totalSeeds", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    await expect(
+      runSeeds(context, {
+        distribution: census,
+        riskIds: ["privacy_and_personal_data_protection"],
+      })
+    ).rejects.toThrow(/--distribution requires --total-seeds/);
+  });
+
+  it("throws when distribution is combined with seedsPerTask", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    await expect(
+      runSeeds(context, {
+        distribution: census,
+        totalSeeds: 10,
+        seedsPerTask: 3,
+        riskIds: ["privacy_and_personal_data_protection"],
+      })
+    ).rejects.toThrow(/mutually exclusive/);
+  });
+
+  it("honors --age-ranges by restricting to that band (100% of personas)", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 30,
+      ageRanges: ["10to12"],
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 9,
+    });
+
+    expect(seeds).toHaveLength(30);
+    expect(seeds.every(s => s.ageRange === "10to12")).toBe(true);
+    // Other dimensions still match the preset marginals.
+    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 15, boy: 15});
+  });
+
+  it("is reproducible across runs with the same randomSeed", async () => {
+    const callsA: Call[] = [];
+    const callsB: Call[] = [];
+    const ctxA = makeReturn(makeFakeSeed(), callsA);
+    const ctxB = makeReturn(makeFakeSeed(), callsB);
+
+    const a = await collectSeeds(ctxA, {
+      distribution: census,
+      totalSeeds: 30,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 77,
+    });
+    const b = await collectSeeds(ctxB, {
+      distribution: census,
+      totalSeeds: 30,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 77,
+    });
+
+    const tuples = (ss: ScenarioSeed[]) =>
+      ss.map(s => [
+        s.ageRange,
+        s.childGender,
+        s.childSES,
+        s.childRaceEthnicity,
+        s.motivation.name,
+      ]);
+    expect(tuples(a)).toEqual(tuples(b));
   });
 });

@@ -2,12 +2,19 @@ import {
   GenerateSeedsContext,
   GenerateSeedsOptions,
   kora,
+  largestRemainderCounts,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
 import {createGatewayModel} from "../models/gatewayModel.js";
+
+function formatCounts(counts: Record<string, number>): string {
+  return Object.entries(counts)
+    .map(([k, v]) => `${k}:${v}`)
+    .join("/");
+}
 
 export async function generateSeeds(
   _program: Program,
@@ -22,6 +29,21 @@ export async function generateSeeds(
   }
   if (options?.motivations?.length) {
     console.log(`Filtering to motivations: ${options.motivations.join(", ")}`);
+  }
+  if (options?.distribution && options.totalSeeds !== undefined) {
+    const d = options.distribution;
+    const n = options.totalSeeds;
+    console.log(`Population distribution: ${d.name}`);
+    console.log(
+      `  Per-risk allocation at totalSeeds=${n}: ` +
+        `age=${formatCounts(largestRemainderCounts(d.ageRange, n))} | ` +
+        `gender=${formatCounts(largestRemainderCounts(d.gender, n))} | ` +
+        `ses=${formatCounts(largestRemainderCounts(d.ses, n))} | ` +
+        `race=${formatCounts(largestRemainderCounts(d.raceEthnicity, n))}`
+    );
+    if (options.randomSeed !== undefined) {
+      console.log(`  Random seed: ${options.randomSeed}`);
+    }
   }
 
   const model = createGatewayModel(modelsJsonPath, modelSlug);
