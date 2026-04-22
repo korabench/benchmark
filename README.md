@@ -52,9 +52,12 @@ yarn kora generate-seeds [model]
 | `[model]`                  | Model to use for seed generation (default: `gpt-5.2:high`)                            |
 | `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
 | `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
+| `--total-seeds <count>`    | Total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with `--seeds-per-task`) |
 | `--age-ranges <ranges>`    | Comma-separated age ranges to generate seeds for (default: all)                       |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict generation to (default: all risks)               |
 | `--motivations <names>`    | Comma-separated motivation names to restrict generation to (default: all motivations) |
+
+Use `--total-seeds` for small, focused runs where you want an exact scenario count per risk (e.g. `--total-seeds 24 --risk-ids privacy_and_personal_data_protection`). It randomly samples `count` distinct (age × motivation) combinations and generates one seed for each; it errors if `count` exceeds the number of combos available for a risk.
 
 ### `expand-scenarios`
 

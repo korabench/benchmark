@@ -75,8 +75,11 @@ program
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
     "--seeds-per-task <count>",
-    "number of seeds to generate per risk/age/motivation combination",
-    "8"
+    "number of seeds to generate per risk/age/motivation combination (default: 8, ignored when --total-seeds is set)"
+  )
+  .option(
+    "--total-seeds <count>",
+    "total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with --seeds-per-task)"
   )
   .option(
     "--age-ranges <ranges>",
@@ -93,7 +96,14 @@ program
   )
   .action((model, opts) =>
     generateSeeds(program, modelsJsonPath, model, opts.output, {
-      seedsPerTask: parseInt(opts.seedsPerTask, 10),
+      seedsPerTask:
+        opts.seedsPerTask !== undefined
+          ? parseInt(opts.seedsPerTask, 10)
+          : undefined,
+      totalSeeds:
+        opts.totalSeeds !== undefined
+          ? parseInt(opts.totalSeeds, 10)
+          : undefined,
       ageRanges: opts.ageRanges
         .split(",")
         .map(r => v.parse(AgeRange.io, r.trim())),

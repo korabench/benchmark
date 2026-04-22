@@ -147,3 +147,59 @@ describe("generateScenarioSeeds riskIds filter", () => {
     ).rejects.toThrow(/Unknown motivation names: Not A Real Motivation/);
   });
 });
+
+describe("generateScenarioSeeds totalSeeds sampling", () => {
+  it("samples totalSeeds distinct (age, motivation) combos per risk", async () => {
+    const calls: Call[] = [];
+    const context = makeContext(calls);
+
+    await runSeeds(context, {
+      totalSeeds: 5,
+      riskIds: ["privacy_and_personal_data_protection"],
+    });
+
+    // totalSeeds=5 → 5 tasks, one seed each.
+    expect(calls).toHaveLength(5);
+  });
+
+  it("applies totalSeeds per risk when multiple risks are given", async () => {
+    const calls: Call[] = [];
+    const context = makeContext(calls);
+
+    await runSeeds(context, {
+      totalSeeds: 3,
+      riskIds: [
+        "privacy_and_personal_data_protection",
+        "sensorimotor_displacement",
+      ],
+    });
+
+    // 3 per risk × 2 risks = 6 tasks.
+    expect(calls).toHaveLength(6);
+  });
+
+  it("throws when totalSeeds exceeds the number of combos", async () => {
+    const calls: Call[] = [];
+    const context = makeContext(calls);
+
+    await expect(
+      runSeeds(context, {
+        totalSeeds: 31,
+        riskIds: ["privacy_and_personal_data_protection"],
+      })
+    ).rejects.toThrow(/--total-seeds \(31\) exceeds/);
+  });
+
+  it("rejects setting both seedsPerTask and totalSeeds", async () => {
+    const calls: Call[] = [];
+    const context = makeContext(calls);
+
+    await expect(
+      runSeeds(context, {
+        seedsPerTask: 2,
+        totalSeeds: 5,
+        riskIds: ["privacy_and_personal_data_protection"],
+      })
+    ).rejects.toThrow(/mutually exclusive/);
+  });
+});
