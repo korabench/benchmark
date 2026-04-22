@@ -7,7 +7,7 @@ import {
   aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
-import {Benchmark} from "./benchmark.js";
+import {Benchmark, JudgeModel} from "./benchmark.js";
 import {
   generateFirstUserMessage,
   generateNextUserMessage,
@@ -32,6 +32,7 @@ import {
   Scenario,
 } from "./model/scenario.js";
 import {ScenarioKey} from "./model/scenarioKey.js";
+import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
@@ -43,6 +44,79 @@ import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessa
 import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+
+/**
+ * Run the judge-assessment step on a pre-existing transcript.
+ *
+ * Mirrors the tail of `runTest` (prompt building → parallel judge calls →
+ * aggregation) without regenerating the conversation. Used by the `reassess`
+ * command to re-score exported prod transcripts.
+ */
+export async function runJudges(
+  judgeModels: Record<string, JudgeModel>,
+  scenario: Scenario,
+  prompt: ScenarioPrompt,
+  messages: readonly ModelMessage[]
+): Promise<TestResult> {
+  const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
+  const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
+
+  const assessmentPrompt = conversationToAssessmentPrompt(
+    risk,
+    scenario,
+    messages
+  );
+  const mechanismPrompt = conversationToMechanismAssessmentPrompt(
+    scenario,
+    messages
+  );
+
+  const judgeSlugs = Object.keys(judgeModels);
+  const judgeAssessments = await Promise.all(
+    judgeSlugs.map(async (slug): Promise<JudgeAssessment> => {
+      const judge = judgeModels[slug]!;
+
+      const [safetyResult, mechanismResult] = await Promise.all([
+        judge.getResponse({
+          messages: [
+            {role: "system", content: assessmentPrompt.system},
+            {role: "user", content: assessmentPrompt.user},
+          ],
+          outputType: TestAssessment.io,
+        }),
+        judge.getResponse({
+          messages: [
+            {role: "system", content: mechanismPrompt.system},
+            {role: "user", content: mechanismPrompt.user},
+          ],
+          outputType: MechanismAssessment.io,
+        }),
+      ]);
+
+      return {
+        judgeModelSlug: slug,
+        assessment: safetyResult.output,
+        mechanismAssessment: mechanismResult.output,
+      };
+    })
+  );
+
+  const assessment = aggregateTestAssessments(
+    judgeAssessments.map(j => j.assessment)
+  );
+  const mechanismAssessment = aggregateMechanismAssessments(
+    judgeAssessments.map(j => j.mechanismAssessment)
+  );
+
+  return {
+    scenario,
+    prompt,
+    messages: [...messages],
+    assessment,
+    mechanismAssessment,
+    judgeAssessments,
+  };
+}
 
 export const kora = Benchmark.new({
   scenarioSeedType: ScenarioSeed.io,
@@ -308,64 +382,7 @@ export const kora = Benchmark.new({
       });
     }
 
-    // Build prompts once.
-    const assessmentPrompt = conversationToAssessmentPrompt(
-      risk,
-      scenario,
-      messages
-    );
-    const mechanismPrompt = conversationToMechanismAssessmentPrompt(
-      scenario,
-      messages
-    );
-
-    // Call all judges in parallel (safety + mechanisms per judge).
-    const judgeSlugs = Object.keys(c.judgeModels);
-    const judgeAssessments = await Promise.all(
-      judgeSlugs.map(async (slug): Promise<JudgeAssessment> => {
-        const judge = c.judgeModels[slug]!;
-
-        const [safetyResult, mechanismResult] = await Promise.all([
-          judge.getResponse({
-            messages: [
-              {role: "system", content: assessmentPrompt.system},
-              {role: "user", content: assessmentPrompt.user},
-            ],
-            outputType: TestAssessment.io,
-          }),
-          judge.getResponse({
-            messages: [
-              {role: "system", content: mechanismPrompt.system},
-              {role: "user", content: mechanismPrompt.user},
-            ],
-            outputType: MechanismAssessment.io,
-          }),
-        ]);
-
-        return {
-          judgeModelSlug: slug,
-          assessment: safetyResult.output,
-          mechanismAssessment: mechanismResult.output,
-        };
-      })
-    );
-
-    // Aggregate across judges.
-    const assessment = aggregateTestAssessments(
-      judgeAssessments.map(j => j.assessment)
-    );
-    const mechanismAssessment = aggregateMechanismAssessments(
-      judgeAssessments.map(j => j.mechanismAssessment)
-    );
-
-    return {
-      scenario,
-      prompt,
-      messages,
-      assessment,
-      mechanismAssessment,
-      judgeAssessments,
-    };
+    return runJudges(c.judgeModels, scenario, prompt, messages);
   },
   mapTestResultToRunResult(result) {
     const {assessment, mechanismAssessment} = result;

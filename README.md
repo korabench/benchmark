@@ -87,7 +87,7 @@ yarn kora run <target-model> [user-model]
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `<target-model>`      | Model to benchmark                                                                                                 |
 | `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
-| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.1-thinking:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited`) |
+| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited`) |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
@@ -97,6 +97,56 @@ yarn kora run <target-model> [user-model]
 When multiple judge models are specified, each judge independently evaluates every conversation. The final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
+
+### `reassess`
+
+Re-runs only the judge/assessment step on pre-recorded conversations. Useful for scoring exported prod transcripts under a new judge configuration without re-invoking the target or user models.
+
+```bash
+yarn kora reassess [user-model]
+```
+
+| Argument / Option        | Description                                                                                                                                                          |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[user-model]`           | Label recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no model is invoked (default: `deepseek-v3.2`)        |
+| `--judges <models>`      | Comma-separated judge models (default: same as `run`)                                                                                                                |
+| `-i, --input <path>`     | Input JSONL of recorded conversations (default: `data/reassessment-input.jsonl`)                                                                                     |
+| `-o, --output <dir>`     | Output directory — one `{modelId}.json` is written per target model (default: `data/reassessment-results`)                                                           |
+| `--risk-ids <ids>`       | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                             |
+| `--target-models <ids>`  | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                 |
+| `--limit <count>`        | Maximum number of records to reassess — useful for smoke tests                                                                                                       |
+
+Input record shape (one JSON object per line):
+
+```json
+{
+  "id": "e0233e48a2243460",
+  "modelId": "gpt-4o",
+  "scenario": { "seed": { "riskCategoryId": "...", "riskId": "...", "ageRange": "13to17", "id": "..." }, "...": "..." },
+  "prompt": "default",
+  "messages": [ { "role": "user", "content": "..." }, { "role": "assistant", "content": "..." } ]
+}
+```
+
+Records are grouped by `modelId`; each target produces a results JSON in the output directory with the same shape as `run`'s output (`{target, judges, user, prompts, scores}`). The `reassess` command reuses the same temp-file + zip-archive pattern as `run`, so interrupted runs resume cleanly.
+
+In addition to the per-target JSONs, `reassess` writes `assessments.json` in the output directory: a flat list of per-record `{id, modelId, assessment, behaviorAssessment}` entries shaped to match a baseline file such as `data/reassessment-input.assessments.json`. `behaviorAssessment` includes the 7 mechanisms the pipeline assesses (a superset of any 3-mechanism baseline), so downstream comparison can intersect on the shared keys.
+
+### `compare-assessments`
+
+Joins two assessments-list JSONs by `id` and prints per-metric agreement + flip matrices. Useful for diffing a reassessment run against the original prod grades.
+
+```bash
+yarn kora compare-assessments [options]
+```
+
+| Option              | Description                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `--original <path>` | Baseline assessments JSON (default: `data/reassessment-input.assessments.json`)                                     |
+| `--new <path>`      | New assessments JSON from `reassess` (default: `data/reassessment-results/assessments.json`)                        |
+| `--csv <path>`      | Write per-record detail CSV to this path (one row per common `id`, with grade/count diffs per shared mechanism)     |
+
+The command reports: total records on each side, count of ids only in one file, overall `assessment.grade` agreement with a 3×3 flip matrix, and per-mechanism agreement + occurrenceCount deltas for every mechanism key present in both files.
 
 ## Model configuration
 
@@ -219,7 +269,7 @@ The `run` command produces a result object with this structure:
 {
   "target": "gpt-4o",
   "judges": [
-    "gpt-5.1-thinking:limited",
+    "gpt-5.2:high:limited",
     "claude-sonnet-4.6:limited",
     "gemini-2.5-pro:limited"
   ],

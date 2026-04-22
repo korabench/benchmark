@@ -6,8 +6,10 @@ import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
+import {compareAssessmentsCommand} from "./commands/compareAssessmentsCommand.js";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
+import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
 
 function findConfigFile(filename: string): string {
@@ -50,6 +52,22 @@ const defaultScenariosPath = path.relative(
 const defaultResultsPath = path.relative(
   process.cwd(),
   path.join(dataPath, "results.json")
+);
+const defaultReassessInputPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-input.jsonl")
+);
+const defaultReassessOutputDir = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-results")
+);
+const defaultCompareOriginalPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-input.assessments.json")
+);
+const defaultCompareNewPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-results", "assessments.json")
 );
 
 const program = new Command()
@@ -164,7 +182,7 @@ program
   .option(
     "--judges <models>",
     "comma-separated judge models",
-    "gpt-5.1-thinking:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited"
+    "gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited"
   )
   .option(
     "-i, --input <path>",
@@ -212,5 +230,94 @@ program
       }
     );
   });
+
+program
+  .command("reassess")
+  .description(
+    "re-run the judge/assessment step on pre-recorded conversations (skips target + user models)"
+  )
+  .argument(
+    "[user-model]",
+    "label recorded into each output JSON's `user` field (the user model that originally produced the transcripts; no model is invoked)",
+    "deepseek-v3.2"
+  )
+  .option(
+    "--judges <models>",
+    "comma-separated judge models",
+    "gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited"
+  )
+  .option(
+    "-i, --input <path>",
+    "input JSONL of recorded conversations ({id, modelId, scenario, prompt, messages})",
+    defaultReassessInputPath
+  )
+  .option(
+    "-o, --output <dir>",
+    "output directory (one {modelId}.json per target)",
+    defaultReassessOutputDir
+  )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all records in the input file)"
+  )
+  .option(
+    "--target-models <ids>",
+    "comma-separated target modelIds to restrict the run to (defaults to all modelIds in the input file)"
+  )
+  .option(
+    "--limit <count>",
+    "maximum number of records to reassess (useful for smoke tests)"
+  )
+  .action((userModel, opts) => {
+    const limit =
+      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw new Error(
+        `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+
+    return reassessCommand(
+      program,
+      modelsJsonPath,
+      opts.judges.split(",").map(s => s.trim()),
+      userModel,
+      opts.input,
+      opts.output,
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        targetModels: opts.targetModels
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limit,
+      }
+    );
+  });
+
+program
+  .command("compare-assessments")
+  .description(
+    "compare two assessments-list JSONs (original vs new) and print agreement + flip matrices"
+  )
+  .option(
+    "--original <path>",
+    "original/baseline assessments JSON",
+    defaultCompareOriginalPath
+  )
+  .option(
+    "--new <path>",
+    "new assessments JSON (reassess output)",
+    defaultCompareNewPath
+  )
+  .option("--csv <path>", "write per-record detail CSV to this path")
+  .action(opts =>
+    compareAssessmentsCommand(program, opts.original, opts.new, {
+      csvPath: opts.csv,
+    })
+  );
 
 program.parseAsync();
