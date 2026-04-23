@@ -11,6 +11,7 @@ import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
+import {statsCommand} from "./commands/statsCommand.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -317,6 +318,31 @@ program
   .action(opts =>
     compareAssessmentsCommand(program, opts.original, opts.new, {
       csvPath: opts.csv,
+    })
+  );
+
+program
+  .command("stats")
+  .description(
+    "report per-mechanism grade distributions across an assessments JSON; flags mechanisms with no discriminative signal"
+  )
+  .option(
+    "-i, --input <path>",
+    "input assessments JSON (array of {id, modelId, assessment, behaviorAssessment})",
+    defaultCompareNewPath
+  )
+  .option(
+    "--mechanism-ids <ids>",
+    "comma-separated mechanism IDs to report (defaults to all mechanisms)"
+  )
+  .option("--by-model", "also print a per-model breakdown")
+  .action(opts =>
+    statsCommand(program, opts.input, {
+      mechanismIds: opts.mechanismIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0),
+      byModel: opts.byModel === true,
     })
   );
 

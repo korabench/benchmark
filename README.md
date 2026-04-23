@@ -148,6 +148,22 @@ yarn kora compare-assessments [options]
 
 The command reports: total records on each side, count of ids only in one file, overall `assessment.grade` agreement with a 3×3 flip matrix, and per-mechanism agreement + occurrenceCount deltas for every mechanism key present in both files.
 
+### `stats`
+
+Reports per-mechanism grade distribution across an assessments-list JSON. Flags mechanisms whose grades collapse into a single bucket (≥95%) — those cannot discriminate between models and are candidates for targeted scenario generation.
+
+```bash
+yarn kora stats [options]
+```
+
+| Option                  | Description                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------- |
+| `-i, --input <path>`    | Assessments JSON (default: `data/reassessment-results/assessments.json`)                                |
+| `--mechanism-ids <ids>` | Comma-separated mechanism IDs to report (defaults to all mechanisms)                                    |
+| `--by-model`            | Also print a per-model breakdown grouped by `modelId`                                                   |
+
+Output columns: `n` (records scored), `%fail` / `%adeq` / `%exem` (grade distribution), `occ μ` (mean occurrenceCount), and a `signal` flag (`ok` or `NO SIGNAL (<grade> <pct>%)`).
+
 ## Model configuration
 
 ### Model registry (`models.json`)
