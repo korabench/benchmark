@@ -20,11 +20,7 @@ interface AssessmentEntry {
   behaviorAssessment: Record<string, MechanismEntry>;
 }
 
-const GRADES: readonly AssessmentGrade[] = [
-  "failing",
-  "adequate",
-  "exemplary",
-];
+const GRADES: readonly AssessmentGrade[] = ["failing", "adequate", "exemplary"];
 
 //
 // Loading.
@@ -34,9 +30,7 @@ async function loadAssessments(filePath: string): Promise<AssessmentEntry[]> {
   const raw = await fs.readFile(filePath, "utf-8");
   const parsed = JSON.parse(raw);
   if (!Array.isArray(parsed)) {
-    throw new Error(
-      `Expected an array at ${filePath}, got ${typeof parsed}`
-    );
+    throw new Error(`Expected an array at ${filePath}, got ${typeof parsed}`);
   }
   return parsed as AssessmentEntry[];
 }
@@ -64,10 +58,7 @@ interface FlipMatrix {
 
 function newFlipMatrix(): FlipMatrix {
   const counts = Object.fromEntries(
-    GRADES.map(g => [
-      g,
-      Object.fromEntries(GRADES.map(g2 => [g2, 0])),
-    ])
+    GRADES.map(g => [g, Object.fromEntries(GRADES.map(g2 => [g2, 0]))])
   ) as FlipMatrix["counts"];
   return {counts, matched: 0};
 }
@@ -222,9 +213,7 @@ export async function compareAssessmentsCommand(
   );
 
   // Per-mechanism occurrenceCount deltas.
-  const mechDeltas = new Map<string, number[]>(
-    sharedKeys.map(k => [k, []])
-  );
+  const mechDeltas = new Map<string, number[]>(sharedKeys.map(k => [k, []]));
 
   // CSV rows.
   const csvRows: Record<string, string | number | undefined | null>[] = [];

@@ -80,10 +80,7 @@ export async function* readReassessInputsFromJsonl(
 
     const record = v.parse(ReassessInput, JSON.parse(trimmed));
 
-    if (
-      filters?.riskIds &&
-      !filters.riskIds.has(record.scenario.seed.riskId)
-    ) {
+    if (filters?.riskIds && !filters.riskIds.has(record.scenario.seed.riskId)) {
       continue;
     }
     if (filters?.targetModels && !filters.targetModels.has(record.modelId)) {
@@ -216,7 +213,11 @@ export async function reassessCommand(
   const totalTests = await countReassessTasks(inputFilePath, filters);
 
   if (totalTests === 0) {
-    if (filters.riskIds || filters.targetModels || filters.limit !== undefined) {
+    if (
+      filters.riskIds ||
+      filters.targetModels ||
+      filters.limit !== undefined
+    ) {
       throw new Error(
         "No records matched the provided filters. Check --risk-ids / --target-models / --limit against the input file."
       );
@@ -294,8 +295,7 @@ export async function reassessCommand(
         const next = prev ? kora.reduceRunResult(prev, mapped) : mapped;
         state.runResultsByTarget.set(outcome.modelId, next);
 
-        const prompts =
-          state.promptsByTarget.get(outcome.modelId) ?? new Set();
+        const prompts = state.promptsByTarget.get(outcome.modelId) ?? new Set();
         prompts.add(outcome.prompt);
         state.promptsByTarget.set(outcome.modelId, prompts);
 

@@ -20,11 +20,7 @@ interface AssessmentEntry {
   behaviorAssessment: Record<string, MechanismEntry>;
 }
 
-const GRADES: readonly AssessmentGrade[] = [
-  "failing",
-  "adequate",
-  "exemplary",
-];
+const GRADES: readonly AssessmentGrade[] = ["failing", "adequate", "exemplary"];
 
 // A mechanism is considered "no signal" when ≥ this fraction of grades fall
 // into a single bucket — the metric is effectively constant across runs and
