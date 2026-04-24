@@ -51,7 +51,9 @@ describe("allocatePersonas", () => {
     const b = allocatePersonas(census, 60, makeRng(2));
     expect(a).not.toEqual(b);
     expect(histogram(a, "ses")).toEqual(histogram(b, "ses"));
-    expect(histogram(a, "raceEthnicity")).toEqual(histogram(b, "raceEthnicity"));
+    expect(histogram(a, "raceEthnicity")).toEqual(
+      histogram(b, "raceEthnicity")
+    );
   });
 
   it("handles total=1", () => {

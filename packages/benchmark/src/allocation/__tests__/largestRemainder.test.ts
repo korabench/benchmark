@@ -37,10 +37,7 @@ describe("largestRemainderCounts", () => {
 
   it("matches the age example: 27/27/46 over 60 → 16/16/28", () => {
     expect(
-      largestRemainderCounts(
-        {"7to9": 0.27, "10to12": 0.27, "13to17": 0.46},
-        60
-      )
+      largestRemainderCounts({"7to9": 0.27, "10to12": 0.27, "13to17": 0.46}, 60)
     ).toEqual({"7to9": 16, "10to12": 16, "13to17": 28});
   });
 

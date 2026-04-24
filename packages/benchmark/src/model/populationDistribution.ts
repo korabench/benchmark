@@ -89,8 +89,9 @@ async function resolve(specifier: string): Promise<PopulationDistribution> {
 // Exports.
 //
 
-export interface PopulationDistribution
-  extends v.InferOutput<typeof VPopulationDistribution> {}
+export interface PopulationDistribution extends v.InferOutput<
+  typeof VPopulationDistribution
+> {}
 
 export const PopulationDistribution = {
   io: VPopulationDistribution,

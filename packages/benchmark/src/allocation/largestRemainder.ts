@@ -16,7 +16,9 @@ export function largestRemainderCounts<K extends string>(
   total: number
 ): Record<K, number> {
   if (!Number.isInteger(total) || total < 0) {
-    throw new Error(`largestRemainderCounts: total must be a non-negative integer (got ${total}).`);
+    throw new Error(
+      `largestRemainderCounts: total must be a non-negative integer (got ${total}).`
+    );
   }
 
   const keys = Object.keys(proportions) as K[];

@@ -75,10 +75,7 @@ export function allocatePersonas(
   const ageCounts = largestRemainderCounts(ageProportions, total);
   const genderCounts = largestRemainderCounts(distribution.gender, total);
   const sesCounts = largestRemainderCounts(distribution.ses, total);
-  const raceCounts = largestRemainderCounts(
-    distribution.raceEthnicity,
-    total
-  );
+  const raceCounts = largestRemainderCounts(distribution.raceEthnicity, total);
 
   const ages = shuffleWith(expandCounts(ageCounts), rng);
   const genders = shuffleWith(expandCounts(genderCounts), rng);
