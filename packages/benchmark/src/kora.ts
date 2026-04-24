@@ -333,17 +333,24 @@ export const kora = Benchmark.new({
       R.map(ScenarioKey.toString)
     );
   },
-  async runTest(c, scenario, keyString) {
+  async runTest(c, scenario, keyString, startMessages) {
     const key = ScenarioKey.ofString(keyString);
     const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
     const prompt = key.prompt;
     const promptAgeRange = ScenarioKey.toAgeRange(key);
 
-    // Multi-turn conversation.
-    const messages: ModelMessage[] = [];
+    if (startMessages && startMessages.length % 2 !== 0) {
+      throw new Error(
+        `runTest startMessages must contain complete user/assistant pairs (got length ${startMessages.length}).`
+      );
+    }
 
-    for (let i = 0; i < risk.conversationLength; i++) {
+    // Multi-turn conversation.
+    const messages: ModelMessage[] = startMessages ? [...startMessages] : [];
+    const startTurn = messages.length / 2;
+
+    for (let i = startTurn; i < risk.conversationLength; i++) {
       const userMessage = await (() => {
         if (i === 0) {
           return scenario.firstUserMessage;

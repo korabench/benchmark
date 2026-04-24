@@ -132,6 +132,28 @@ Records are grouped by `modelId`; each target produces a results JSON in the out
 
 In addition to the per-target JSONs, `reassess` writes `assessments.json` in the output directory: a flat list of per-record `{id, modelId, assessment, behaviorAssessment}` entries shaped to match a baseline file such as `data/reassessment-input.assessments.json`. `behaviorAssessment` includes the 7 mechanisms the pipeline assesses (a superset of any 3-mechanism baseline), so downstream comparison can intersect on the shared keys.
 
+### `continue`
+
+Extends pre-recorded conversations with additional turns up to each risk's `conversationLength`, then runs the full judge pipeline on the extended transcript. Useful for studying how evaluation signal changes when the same scenarios are run for more turns.
+
+```bash
+yarn kora continue [user-model]
+```
+
+| Argument / Option          | Description                                                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `[user-model]`             | Model used to generate user messages during the continuation (default: `deepseek-v3.2-temp-1.3`, matching production)                                                                      |
+| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:high:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                           |
+| `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
+| `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
+| `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
+| `--target-models <ids>`    | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                                       |
+| `--limit-per-risk <count>` | Maximum records per risk, selected deterministically by `id` (sorted lexicographically). Fails fast if any requested risk has fewer records than requested.                                |
+
+Each record is replayed with its **original** `modelId` as the target model, so 3-turn-vs-longer comparisons stay apples-to-apples per (scenario, model). The turn budget comes from `risk.conversationLength` in `packages/benchmark/data/risks.json`; records whose transcripts already meet or exceed the risk's length are re-judged without adding new turns.
+
+`continue-meta.json` captures the source file path + SHA-256, the user model, the `--limit-per-risk` value, and the selected record IDs per risk — re-running the same command against the same input picks the same records.
+
 ### `compare-assessments`
 
 Joins two assessments-list JSONs by `id` and prints per-metric agreement + flip matrices. Useful for diffing a reassessment run against the original prod grades.

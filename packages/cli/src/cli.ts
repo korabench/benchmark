@@ -7,6 +7,7 @@ import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
 import {compareAssessmentsCommand} from "./commands/compareAssessmentsCommand.js";
+import {continueCommand} from "./commands/continueCommand.js";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
@@ -61,6 +62,10 @@ const defaultReassessInputPath = path.relative(
 const defaultReassessOutputDir = path.relative(
   process.cwd(),
   path.join(dataPath, "reassessment-results")
+);
+const defaultContinueOutputDir = path.relative(
+  process.cwd(),
+  path.join(dataPath, "continue-results")
 );
 const defaultCompareOriginalPath = path.relative(
   process.cwd(),
@@ -295,6 +300,78 @@ program
           .map(id => id.trim())
           .filter(id => id.length > 0),
         limit,
+      }
+    );
+  });
+
+program
+  .command("continue")
+  .description(
+    "extend pre-recorded conversations with additional turns (up to each risk's conversationLength), then judge the full transcript"
+  )
+  .argument(
+    "[user-model]",
+    "model to use for user message generation during the continuation",
+    "deepseek-v3.2-temp-1.3"
+  )
+  .option(
+    "--judges <models>",
+    "comma-separated judge models",
+    "gpt-5.2:high:limited"
+  )
+  .option(
+    "-i, --input <path>",
+    "input JSONL of recorded conversations ({id, modelId, scenario, prompt, messages})",
+    defaultReassessInputPath
+  )
+  .option(
+    "-o, --output <dir>",
+    "output directory (one {modelId}.json per target)",
+    defaultContinueOutputDir
+  )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all records in the input file)"
+  )
+  .option(
+    "--target-models <ids>",
+    "comma-separated target modelIds to restrict the run to (defaults to all modelIds in the input file)"
+  )
+  .option(
+    "--limit-per-risk <count>",
+    "maximum number of records per risk (deterministic by record id; fails fast if any requested risk has fewer records than requested)"
+  )
+  .action((userModel, opts) => {
+    const limitPerRisk =
+      opts.limitPerRisk !== undefined
+        ? parseInt(opts.limitPerRisk, 10)
+        : undefined;
+    if (
+      limitPerRisk !== undefined &&
+      (!Number.isFinite(limitPerRisk) || limitPerRisk <= 0)
+    ) {
+      throw new Error(
+        `--limit-per-risk must be a positive integer (got: ${opts.limitPerRisk})`
+      );
+    }
+
+    return continueCommand(
+      program,
+      modelsJsonPath,
+      opts.judges.split(",").map(s => s.trim()),
+      userModel,
+      opts.input,
+      opts.output,
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        targetModels: opts.targetModels
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limitPerRisk,
       }
     );
   });
