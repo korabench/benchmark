@@ -2,6 +2,7 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
@@ -81,6 +82,9 @@ jobs:
       - name: Install dependencies
         run: |
           yarn install --immutable
+
+      - name: Build
+        run: yarn tsbuild
 
       - name: Test
         run: yarn test

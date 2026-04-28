@@ -6,9 +6,12 @@ import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
+import {compareAssessmentsCommand} from "./commands/compareAssessmentsCommand.js";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
+import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
+import {statsCommand} from "./commands/statsCommand.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -51,6 +54,22 @@ const defaultResultsPath = path.relative(
   process.cwd(),
   path.join(dataPath, "results.json")
 );
+const defaultReassessInputPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-input.jsonl")
+);
+const defaultReassessOutputDir = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-results")
+);
+const defaultCompareOriginalPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-input.assessments.json")
+);
+const defaultCompareNewPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "reassessment-results", "assessments.json")
+);
 
 const program = new Command()
   .addHelpText(
@@ -75,20 +94,46 @@ program
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
     "--seeds-per-task <count>",
-    "number of seeds to generate per risk/age/motivation combination",
-    "8"
+    "number of seeds to generate per risk/age/motivation combination (default: 8, ignored when --total-seeds is set)"
+  )
+  .option(
+    "--total-seeds <count>",
+    "total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with --seeds-per-task)"
   )
   .option(
     "--age-ranges <ranges>",
     "comma-separated age ranges to generate seeds for (7to9, 10to12, 13to17)",
     AgeRange.list.join(",")
   )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict generation to (defaults to all risks)"
+  )
+  .option(
+    "--motivations <names>",
+    "comma-separated motivation names to restrict generation to (defaults to all motivations)"
+  )
   .action((model, opts) =>
     generateSeeds(program, modelsJsonPath, model, opts.output, {
-      seedsPerTask: parseInt(opts.seedsPerTask, 10),
+      seedsPerTask:
+        opts.seedsPerTask !== undefined
+          ? parseInt(opts.seedsPerTask, 10)
+          : undefined,
+      totalSeeds:
+        opts.totalSeeds !== undefined
+          ? parseInt(opts.totalSeeds, 10)
+          : undefined,
       ageRanges: opts.ageRanges
         .split(",")
         .map(r => v.parse(AgeRange.io, r.trim())),
+      riskIds: opts.riskIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0),
+      motivations: opts.motivations
+        ?.split(",")
+        .map(name => name.trim())
+        .filter(name => name.length > 0),
     })
   );
 
@@ -107,6 +152,10 @@ program
     "output scenarios JSONL file",
     defaultScenariosPath
   )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict expansion to (defaults to all seeds in the input file)"
+  )
   .action((model, userModel, opts) =>
     expandScenariosCommand(
       program,
@@ -114,7 +163,11 @@ program
       model,
       userModel,
       opts.input,
-      opts.output
+      opts.output,
+      opts.riskIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0)
     )
   );
 
@@ -130,7 +183,7 @@ program
   .option(
     "--judges <models>",
     "comma-separated judge models",
-    "gpt-5.2:high:limited"
+    "gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited"
   )
   .option(
     "-i, --input <path>",
@@ -143,8 +196,24 @@ program
     "comma-separated prompts to test (default, child)",
     ScenarioPrompt.list[0]
   )
-  .action((targetModel, userModel, opts) =>
-    runCommand(
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all scenarios in the input file)"
+  )
+  .option(
+    "--limit <count>",
+    "maximum number of test tasks to run (useful for smoke tests)"
+  )
+  .action((targetModel, userModel, opts) => {
+    const limit =
+      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw new Error(
+        `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+
+    return runCommand(
       program,
       modelsJsonPath,
       targetModel,
@@ -152,8 +221,129 @@ program
       userModel,
       opts.input,
       opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim()))
-    )
+      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limit,
+      }
+    );
+  });
+
+program
+  .command("reassess")
+  .description(
+    "re-run the judge/assessment step on pre-recorded conversations (skips target + user models)"
+  )
+  .argument(
+    "[user-model]",
+    "label recorded into each output JSON's `user` field (the user model that originally produced the transcripts; no model is invoked)",
+    "deepseek-v3.2"
+  )
+  .option(
+    "--judges <models>",
+    "comma-separated judge models",
+    "gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited"
+  )
+  .option(
+    "-i, --input <path>",
+    "input JSONL of recorded conversations ({id, modelId, scenario, prompt, messages})",
+    defaultReassessInputPath
+  )
+  .option(
+    "-o, --output <dir>",
+    "output directory (one {modelId}.json per target)",
+    defaultReassessOutputDir
+  )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the run to (defaults to all records in the input file)"
+  )
+  .option(
+    "--target-models <ids>",
+    "comma-separated target modelIds to restrict the run to (defaults to all modelIds in the input file)"
+  )
+  .option(
+    "--limit <count>",
+    "maximum number of records to reassess (useful for smoke tests)"
+  )
+  .action((userModel, opts) => {
+    const limit =
+      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+      throw new Error(
+        `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+
+    return reassessCommand(
+      program,
+      modelsJsonPath,
+      opts.judges.split(",").map(s => s.trim()),
+      userModel,
+      opts.input,
+      opts.output,
+      {
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        targetModels: opts.targetModels
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        limit,
+      }
+    );
+  });
+
+program
+  .command("compare-assessments")
+  .description(
+    "compare two assessments-list JSONs (original vs new) and print agreement + flip matrices"
+  )
+  .option(
+    "--original <path>",
+    "original/baseline assessments JSON",
+    defaultCompareOriginalPath
+  )
+  .option(
+    "--new <path>",
+    "new assessments JSON (reassess output)",
+    defaultCompareNewPath
+  )
+  .option("--csv <path>", "write per-record detail CSV to this path")
+  .action(opts =>
+    compareAssessmentsCommand(program, opts.original, opts.new, {
+      csvPath: opts.csv,
+    })
+  );
+
+program
+  .command("stats")
+  .description(
+    "report per-mechanism grade distributions across an assessments JSON; flags mechanisms with no discriminative signal"
+  )
+  .option(
+    "-i, --input <path>",
+    "input assessments JSON (array of {id, modelId, assessment, behaviorAssessment})",
+    defaultCompareNewPath
+  )
+  .option(
+    "--mechanism-ids <ids>",
+    "comma-separated mechanism IDs to report (defaults to all mechanisms)"
+  )
+  .option("--by-model", "also print a per-model breakdown")
+  .action(opts =>
+    statsCommand(program, opts.input, {
+      mechanismIds: opts.mechanismIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(id => id.length > 0),
+      byModel: opts.byModel === true,
+    })
   );
 
 program.parseAsync();

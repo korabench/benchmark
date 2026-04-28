@@ -37,12 +37,18 @@ interface RunState {
   runResult: RunResult | undefined;
 }
 
+export interface ScenarioFilters {
+  riskIds?: ReadonlySet<string>;
+  limit?: number;
+}
+
 function taskTempFileName(key: string): string {
   return Hash.shortHash(key) + ".json";
 }
 
-async function* readScenariosFromJsonl(
-  filePath: string
+export async function* readScenariosFromJsonl(
+  filePath: string,
+  filters?: ScenarioFilters
 ): AsyncGenerator<Scenario> {
   const fh = await fs.open(filePath);
   const rl = readline.createInterface({input: fh.createReadStream()});
@@ -51,28 +57,42 @@ async function* readScenariosFromJsonl(
     if (trimmed.length === 0) {
       continue;
     }
-    yield v.parse(Scenario.io, JSON.parse(trimmed));
+    const scenario = v.parse(Scenario.io, JSON.parse(trimmed));
+    if (filters?.riskIds && !filters.riskIds.has(scenario.seed.riskId)) {
+      continue;
+    }
+    yield scenario;
   }
 }
 
-async function* scenariosToTestTasks(
+export async function* scenariosToTestTasks(
   filePath: string,
-  prompts: readonly ScenarioPrompt[]
+  prompts: readonly ScenarioPrompt[],
+  filters: ScenarioFilters
 ): AsyncGenerator<TestTask> {
-  for await (const scenario of readScenariosFromJsonl(filePath)) {
+  let yielded = 0;
+  for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
+      if (filters.limit !== undefined && yielded >= filters.limit) {
+        return;
+      }
       yield {scenario, key};
+      yielded++;
     }
   }
 }
 
-async function countTestTasks(
+export async function countTestTasks(
   filePath: string,
-  prompts: readonly ScenarioPrompt[]
+  prompts: readonly ScenarioPrompt[],
+  filters: ScenarioFilters
 ): Promise<number> {
   let count = 0;
-  for await (const scenario of readScenariosFromJsonl(filePath)) {
+  for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     count += kora.mapScenarioToKeys(scenario, prompts).length;
+    if (filters.limit !== undefined && count >= filters.limit) {
+      return filters.limit;
+    }
   }
   return count;
 }
@@ -140,6 +160,11 @@ async function buildContext(
   };
 }
 
+export interface RunCommandOptions {
+  riskIds?: readonly string[];
+  limit?: number;
+}
+
 export async function runCommand(
   _program: Program,
   modelsJsonPath: string,
@@ -148,7 +173,8 @@ export async function runCommand(
   userModelSlug: string,
   scenariosFilePath: string,
   outputFilePath: string,
-  prompts: readonly ScenarioPrompt[]
+  prompts: readonly ScenarioPrompt[],
+  options: RunCommandOptions = {}
 ) {
   console.log(
     `Running benchmark: target=${targetModelSlug}, judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
@@ -158,6 +184,17 @@ export async function runCommand(
     throw new Error(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
+
+  const filters: ScenarioFilters = {
+    riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
+    limit: options.limit,
+  };
+  if (filters.riskIds) {
+    console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
+  }
+  if (filters.limit !== undefined) {
+    console.log(`Limiting to first ${filters.limit} test task(s).`);
+  }
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
     judgeModelSlugs.map(slug => [
@@ -181,13 +218,23 @@ export async function runCommand(
 
   await fs.mkdir(tempDir, {recursive: true});
 
-  const totalTests = await countTestTasks(scenariosFilePath, prompts);
+  const totalTests = await countTestTasks(scenariosFilePath, prompts, filters);
+
+  if (totalTests === 0) {
+    if (filters.riskIds || filters.limit !== undefined) {
+      throw new Error(
+        "No scenarios matched the provided filters. Check --risk-ids / --limit against the input file."
+      );
+    }
+    throw new Error(`No scenarios found in ${scenariosFilePath}.`);
+  }
+
   const progress = Script.progress(totalTests, text =>
     process.stdout.write(text)
   );
 
   const {failureCount, testCount, runResult} = await pipeline(
-    () => scenariosToTestTasks(scenariosFilePath, prompts),
+    () => scenariosToTestTasks(scenariosFilePath, prompts, filters),
     flatTransform(10, async (task: TestTask): Promise<TaskOutcome[]> => {
       const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
