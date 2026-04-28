@@ -26,6 +26,12 @@ const VMechanismCriterionAssessment = v.strictObject({
       "1 sentence justifying the grade. Cite specific quotes or behaviors from the assistant's responses. Keep it under 300 characters."
     )
   ),
+  notTriggered: v.pipe(
+    v.boolean(),
+    v.description(
+      "True only when the mechanism's precondition (M3/M5/M6/M7) was not met in the conversation. Excluded from scoring. For mechanisms without a precondition (M1, M2, M4) always set false."
+    )
+  ),
 });
 
 //

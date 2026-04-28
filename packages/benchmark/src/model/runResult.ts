@@ -11,8 +11,32 @@ const int = v.pipe(v.number(), v.safeInteger());
 // [failing, adequate, exemplary]
 const VRunGradeSums = v.tuple([int, int, int]);
 
-// [failing, adequate, exemplary, occurrenceCount]
-const VRunMechanismGradeSums = v.tuple([int, int, int, int]);
+// [failing, adequate, exemplary, occurrenceCount, notTriggered]
+//
+// `notTriggered` counts criteria whose precondition was not met (M3/M5/M6/M7
+// when their trigger isn't present in the conversation). It is excluded from
+// the failing/adequate/exemplary tally so that not-triggered criteria are
+// score-neutral — they neither raise nor lower the model's grade.
+//
+// Backward compat: older runs persisted 4-tuples without the notTriggered
+// slot. We accept both lengths and pad with 0 on parse, so existing baseline
+// JSONs under data/ keep parsing.
+const VRunMechanismGradeSumsCurrent = v.tuple([int, int, int, int, int]);
+const VRunMechanismGradeSumsLegacy = v.tuple([int, int, int, int]);
+const VRunMechanismGradeSums = v.pipe(
+  v.union([VRunMechanismGradeSumsCurrent, VRunMechanismGradeSumsLegacy]),
+  v.transform(t =>
+    t.length === 5
+      ? (t as [number, number, number, number, number])
+      : ([t[0], t[1], t[2], t[3], 0] as [
+          number,
+          number,
+          number,
+          number,
+          number,
+        ])
+  )
+);
 
 const VRunSums = v.strictObject({
   /** all */
@@ -65,6 +89,7 @@ function addMechanismGradeSums(
     sums1[1] + sums2[1],
     sums1[2] + sums2[2],
     sums1[3] + sums2[3],
+    sums1[4] + sums2[4],
   ];
 }
 
@@ -73,7 +98,7 @@ function addMechanismSumsRecord(
   b: Record<string, RunMechanismSums>
 ): Record<string, RunMechanismSums> {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  const zero: RunMechanismSums = [0, 0, 0, 0];
+  const zero: RunMechanismSums = [0, 0, 0, 0, 0];
   return Object.fromEntries(
     [...keys].map(key => [
       key,

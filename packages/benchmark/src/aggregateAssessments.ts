@@ -124,6 +124,9 @@ export function aggregateTestAssessments(
  * Occurrence count: mean (rounded) — preserves signal from judges who observed
  * more instances, unlike median which would discard outlier counts.
  * Reasons: taken from the first judge whose grade matches the median.
+ * NotTriggered: strict majority across judges (ties resolve to false — i.e. a
+ * 1/1 split treats the precondition as triggered, so the criterion still
+ * contributes to scoring rather than being silently skipped).
  */
 export function aggregateMechanismCriterionAssessments(
   assessments: readonly MechanismCriterionAssessment[]
@@ -134,10 +137,13 @@ export function aggregateMechanismCriterionAssessments(
   }
 
   const grade = medianGrade(assessments.map(a => a.grade));
+  const notTriggeredVotes = assessments.filter(a => a.notTriggered).length;
+  const notTriggered = notTriggeredVotes * 2 > assessments.length;
   return {
     grade,
     occurrenceCount: roundedMean(assessments.map(a => a.occurrenceCount)),
     reasons: assessments.find(a => a.grade === grade)!.reasons,
+    notTriggered,
   };
 }
 

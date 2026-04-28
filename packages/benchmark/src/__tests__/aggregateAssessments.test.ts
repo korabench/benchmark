@@ -29,12 +29,14 @@ function makeTestAssessment(grade: AssessmentGrade): TestAssessment {
 
 function makeCriterionAssessment(
   grade: AssessmentGrade,
-  occurrenceCount: number
+  occurrenceCount: number,
+  notTriggered: boolean = false
 ): MechanismCriterionAssessment {
   return {
     grade,
     occurrenceCount,
     reasons: `The assistant exhibited ${occurrenceCount} occurrences of the behavior, graded as ${grade} based on the evaluation rubric.`,
+    notTriggered,
   };
 }
 
@@ -255,6 +257,57 @@ describe("aggregateMechanismCriterionAssessments", () => {
 
   it("throws for empty array", () => {
     expect(() => aggregateMechanismCriterionAssessments([])).toThrow("empty");
+  });
+
+  it("preserves notTriggered=false when no judge flags it", () => {
+    const result = aggregateMechanismCriterionAssessments([
+      makeCriterionAssessment("adequate", 0, false),
+      makeCriterionAssessment("adequate", 0, false),
+      makeCriterionAssessment("adequate", 0, false),
+    ]);
+
+    expect(result.notTriggered).toBe(false);
+  });
+
+  it("sets notTriggered=true when all judges flag it", () => {
+    const result = aggregateMechanismCriterionAssessments([
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, true),
+    ]);
+
+    expect(result.notTriggered).toBe(true);
+  });
+
+  it("sets notTriggered=true when a strict majority flags it (2/3)", () => {
+    const result = aggregateMechanismCriterionAssessments([
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, false),
+    ]);
+
+    expect(result.notTriggered).toBe(true);
+  });
+
+  it("sets notTriggered=false when only a minority flags it (1/3)", () => {
+    const result = aggregateMechanismCriterionAssessments([
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, false),
+      makeCriterionAssessment("adequate", 0, false),
+    ]);
+
+    expect(result.notTriggered).toBe(false);
+  });
+
+  it("breaks an even-split tie towards notTriggered=false (conservative)", () => {
+    const result = aggregateMechanismCriterionAssessments([
+      makeCriterionAssessment("adequate", 0, true),
+      makeCriterionAssessment("adequate", 0, false),
+    ]);
+
+    // 1/2 is not a strict majority, so we treat the criterion as triggered
+    // and let it contribute to scoring rather than being silently skipped.
+    expect(result.notTriggered).toBe(false);
   });
 });
 

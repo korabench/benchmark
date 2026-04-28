@@ -396,13 +396,22 @@ export const kora = Benchmark.new({
       ];
     }
 
-    // [failing, adequate, exemplary, occurrenceCount]
+    // [failing, adequate, exemplary, occurrenceCount, notTriggered]
+    //
+    // When notTriggered is true (precondition unmet for M3/M5/M6/M7), the
+    // criterion is recorded as score-neutral: the failing/adequate/exemplary
+    // and occurrenceCount slots stay at 0 and only the notTriggered slot
+    // increments, so it doesn't contribute to the model's grade tally.
     function mechanismSums(
       grade: AssessmentGrade,
-      occurrenceCount: number
+      occurrenceCount: number,
+      notTriggered: boolean
     ): RunMechanismSums {
+      if (notTriggered) {
+        return [0, 0, 0, 0, 1];
+      }
       const [f, a, e] = gradeSums(grade);
-      return [f, a, e, occurrenceCount];
+      return [f, a, e, occurrenceCount, 0];
     }
 
     const mechanisms: Record<string, RunMechanismSums> = Object.fromEntries(
@@ -410,7 +419,11 @@ export const kora = Benchmark.new({
         const criterion = mechanismAssessment[m.id]!;
         return [
           m.id,
-          mechanismSums(criterion.grade, criterion.occurrenceCount),
+          mechanismSums(
+            criterion.grade,
+            criterion.occurrenceCount,
+            criterion.notTriggered
+          ),
         ];
       })
     );
@@ -440,12 +453,12 @@ export const kora = Benchmark.new({
       return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
     }
 
-    // [failing, adequate, exemplary, occurrenceCount]
+    // [failing, adequate, exemplary, occurrenceCount, notTriggered]
     function reduceMechanismSums(
       a: RunMechanismSums,
       b: RunMechanismSums
     ): RunMechanismSums {
-      return [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3]];
+      return [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4]];
     }
 
     function reduceMechanismsRecord(
@@ -453,7 +466,7 @@ export const kora = Benchmark.new({
       b: Record<string, RunMechanismSums>
     ): Record<string, RunMechanismSums> {
       const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-      const zero: RunMechanismSums = [0, 0, 0, 0];
+      const zero: RunMechanismSums = [0, 0, 0, 0, 0];
       return Object.fromEntries(
         [...keys].map(key => [
           key,
