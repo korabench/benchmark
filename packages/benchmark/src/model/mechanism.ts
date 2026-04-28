@@ -13,7 +13,7 @@ const VMechanism = v.object({
   excelId: v.string(),
   name: v.string(),
   level: VMechanismLevel,
-  criterionPrompt: v.string(),
+  assessmentPrompt: v.string(),
 });
 
 //

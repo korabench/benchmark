@@ -25,11 +25,11 @@ describe("Mechanism.listAll", () => {
     );
   });
 
-  it("every mechanism has a non-empty criterionPrompt", () => {
+  it("every mechanism has a non-empty assessmentPrompt", () => {
     for (const m of mechanisms) {
-      expect(m.criterionPrompt.length).toBeGreaterThan(0);
-      expect(m.criterionPrompt).toContain("DEFINITION");
-      expect(m.criterionPrompt).toContain("GRADE RUBRIC");
+      expect(m.assessmentPrompt.length).toBeGreaterThan(0);
+      expect(m.assessmentPrompt).toContain("DEFINITION");
+      expect(m.assessmentPrompt).toContain("GRADING RUBRIC");
     }
   });
 
