@@ -211,7 +211,7 @@ export async function runCommand(
         // Not yet processed.
       }
 
-      const context = await buildContext(
+      const built = await buildContext(
         judgeModels,
         userModel,
         targetModelSlug,
@@ -219,8 +219,14 @@ export async function runCommand(
         task.scenario
       );
 
+      let outcome: "completed" | "errored" = "errored";
       try {
-        const testResult = await kora.runTest(context, task.scenario, task.key);
+        const testResult = await kora.runTest(
+          built.context,
+          task.scenario,
+          task.key
+        );
+        outcome = "completed";
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);
         return [{kind: "success", testResult}];
@@ -228,6 +234,12 @@ export async function runCommand(
         console.error(`\nTest failed for key ${task.key}: ${error}`);
         progress.increment(false);
         return [{kind: "failure"}];
+      } finally {
+        await built.dispose(outcome).catch(err => {
+          console.error(
+            `\nDispose failed for key ${task.key}: ${err instanceof Error ? err.message : err}`
+          );
+        });
       }
     }),
     reduce(
