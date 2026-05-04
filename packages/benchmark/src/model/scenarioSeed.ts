@@ -236,6 +236,17 @@ const VScenarioSeed = v.strictObject({
       })
     )
   ),
+  scenarioFlavorId: v.optional(
+    v.pipe(
+      v.string(),
+      v.metadata({
+        description:
+          "Identifier of the risk-specific scenario flavor pinned for this seed (e.g. a_direct, b_gradual).",
+        usage:
+          "Pinned by flavor-distribution mode; threads risk-rubric variants through expansion and conversation length.",
+      })
+    )
+  ),
   id: v.string(),
   riskCategoryId: v.string(),
   riskId: v.string(),
