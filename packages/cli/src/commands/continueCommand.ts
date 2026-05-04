@@ -1,28 +1,30 @@
 import {
-  JudgeModel,
   kora,
-  runJudges,
   ScenarioKey,
   ScenarioPrompt,
   TestResult,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import archiver from "archiver";
+import {createHash} from "node:crypto";
 import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
 import {createGatewayModel} from "../models/gatewayModel.js";
 import {Model} from "../models/model.js";
 import {
+  buildContext,
+  resolveTargetGatewayModel,
+} from "./shared/buildContext.js";
+import {
   readReassessInputsFromJsonl,
   ReassessInput,
 } from "./shared/reassessInput.js";
 
-interface ReassessTask {
+interface ContinueTask {
   input: ReassessInput;
   key: string;
 }
@@ -54,39 +56,20 @@ interface RunState {
   recordAssessments: RecordAssessment[];
 }
 
-export interface ReassessFilters {
-  riskIds?: ReadonlySet<string>;
-  targetModels?: ReadonlySet<string>;
-  limit?: number;
+interface SelectionMeta {
+  sourceInputPath: string;
+  sourceInputSha256: string;
+  userModelSlug: string;
+  judgeModelSlugs: readonly string[];
+  limitPerRisk: number | undefined;
+  selectedIdsByRisk: Record<string, readonly string[]>;
+  startedAt: string;
+  completedAt?: string;
 }
 
-async function* reassessInputsToTasks(
-  filePath: string,
-  filters: ReassessFilters
-): AsyncGenerator<ReassessTask> {
-  let yielded = 0;
-  for await (const input of readReassessInputsFromJsonl(filePath, filters)) {
-    if (filters.limit !== undefined && yielded >= filters.limit) return;
-    const key = ScenarioKey.toString(
-      ScenarioKey.ofScenario(input.scenario, input.prompt)
-    );
-    yield {input, key};
-    yielded++;
-  }
-}
-
-async function countReassessTasks(
-  filePath: string,
-  filters: ReassessFilters
-): Promise<number> {
-  let count = 0;
-  for await (const _ of readReassessInputsFromJsonl(filePath, filters)) {
-    count++;
-    if (filters.limit !== undefined && count >= filters.limit) {
-      return filters.limit;
-    }
-  }
-  return count;
+async function sha256File(filePath: string): Promise<string> {
+  const buf = await fs.readFile(filePath);
+  return createHash("sha256").update(buf).digest("hex");
 }
 
 async function archiveResults(
@@ -110,36 +93,23 @@ async function archiveResults(
   await done;
 }
 
-function buildJudgeContext(
-  judgeModels: Record<string, Model>
-): Record<string, JudgeModel> {
-  return R.mapValues(
-    judgeModels,
-    (model: Model): JudgeModel => ({
-      getResponse: async request => ({
-        output: await model.getStructuredResponse(request),
-      }),
-    })
-  );
-}
-
-export interface ReassessCommandOptions {
+export interface ContinueCommandOptions {
   riskIds?: readonly string[];
   targetModels?: readonly string[];
-  limit?: number;
+  limitPerRisk?: number;
 }
 
-export async function reassessCommand(
+export async function continueCommand(
   _program: Program,
   modelsJsonPath: string,
   judgeModelSlugs: readonly string[],
   userModelSlug: string,
   inputFilePath: string,
   outputDirPath: string,
-  options: ReassessCommandOptions = {}
+  options: ContinueCommandOptions = {}
 ) {
   console.log(
-    `Reassessing transcripts: judges=${judgeModelSlugs.join(",")}, user-label=${userModelSlug}`
+    `Continuing transcripts: judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
   );
 
   if (judgeModelSlugs.length % 2 === 0)
@@ -147,23 +117,72 @@ export async function reassessCommand(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
 
-  const filters: ReassessFilters = {
-    riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
-    targetModels: options.targetModels?.length
-      ? new Set(options.targetModels)
-      : undefined,
-    limit: options.limit,
-  };
-  if (filters.riskIds) {
-    console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
+  const riskIdsFilter = options.riskIds?.length
+    ? new Set(options.riskIds)
+    : undefined;
+  const targetModelsFilter = options.targetModels?.length
+    ? new Set(options.targetModels)
+    : undefined;
+  const limitPerRisk = options.limitPerRisk;
+
+  if (riskIdsFilter) {
+    console.log(`Filtering to risk IDs: ${[...riskIdsFilter].join(", ")}`);
   }
-  if (filters.targetModels) {
+  if (targetModelsFilter) {
     console.log(
-      `Filtering to target models: ${[...filters.targetModels].join(", ")}`
+      `Filtering to target models: ${[...targetModelsFilter].join(", ")}`
     );
   }
-  if (filters.limit !== undefined) {
-    console.log(`Limiting to first ${filters.limit} record(s).`);
+  if (limitPerRisk !== undefined) {
+    console.log(`Limiting to ${limitPerRisk} record(s) per risk.`);
+  }
+
+  // Read and sample eagerly so we can group by risk before processing.
+  const allRecords: ReassessInput[] = [];
+  for await (const record of readReassessInputsFromJsonl(inputFilePath, {
+    riskIds: riskIdsFilter,
+    targetModels: targetModelsFilter,
+  })) {
+    allRecords.push(record);
+  }
+
+  if (allRecords.length === 0) {
+    if (riskIdsFilter || targetModelsFilter) {
+      throw new Error(
+        "No records matched the provided filters. Check --risk-ids / --target-models against the input file."
+      );
+    }
+    throw new Error(`No records found in ${inputFilePath}.`);
+  }
+
+  const byRisk = new Map<string, ReassessInput[]>();
+  for (const record of allRecords) {
+    const riskId = record.scenario.seed.riskId;
+    const bucket = byRisk.get(riskId) ?? [];
+    bucket.push(record);
+    byRisk.set(riskId, bucket);
+  }
+
+  const selectedIdsByRisk: Record<string, string[]> = {};
+  const selectedRecords: ReassessInput[] = [];
+  for (const [riskId, bucket] of [...byRisk.entries()].sort(([a], [b]) =>
+    a.localeCompare(b)
+  )) {
+    const sorted = [...bucket].sort((a, b) => a.id.localeCompare(b.id));
+    const picked =
+      limitPerRisk !== undefined ? sorted.slice(0, limitPerRisk) : sorted;
+
+    if (limitPerRisk !== undefined && picked.length < limitPerRisk) {
+      throw new Error(
+        `Risk "${riskId}" has only ${picked.length} record(s) in the input, but --limit-per-risk=${limitPerRisk} was requested.`
+      );
+    }
+
+    selectedIdsByRisk[riskId] = picked.map(r => r.id);
+    console.log(
+      `[${riskId}] selected ${picked.length} of ${bucket.length} record(s)`
+    );
+    selectedRecords.push(...picked);
   }
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
@@ -172,31 +191,46 @@ export async function reassessCommand(
       createGatewayModel(modelsJsonPath, slug),
     ])
   );
-  const judgeContext = buildJudgeContext(judgeModels);
+  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
 
-  const tempDir = path.join(outputDirPath, ".kora-reassess-tmp");
+  // Per-record target model resolution: cache by modelId across records.
+  const targetGatewayCache = new Map<string, Model | undefined>();
+  const getTargetGateway = (modelId: string): Model | undefined => {
+    if (!targetGatewayCache.has(modelId)) {
+      targetGatewayCache.set(
+        modelId,
+        resolveTargetGatewayModel(modelsJsonPath, modelId)
+      );
+    }
+    return targetGatewayCache.get(modelId);
+  };
 
+  const tempDir = path.join(outputDirPath, ".kora-continue-tmp");
   await fs.mkdir(outputDirPath, {recursive: true});
   await fs.mkdir(tempDir, {recursive: true});
 
-  const totalTests = await countReassessTasks(inputFilePath, filters);
+  const meta: SelectionMeta = {
+    sourceInputPath: inputFilePath,
+    sourceInputSha256: await sha256File(inputFilePath),
+    userModelSlug,
+    judgeModelSlugs,
+    limitPerRisk,
+    selectedIdsByRisk,
+    startedAt: new Date().toISOString(),
+  };
+  const metaPath = path.join(outputDirPath, "continue-meta.json");
+  await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
 
-  if (totalTests === 0) {
-    if (
-      filters.riskIds ||
-      filters.targetModels ||
-      filters.limit !== undefined
-    ) {
-      throw new Error(
-        "No records matched the provided filters. Check --risk-ids / --target-models / --limit against the input file."
-      );
-    }
-    throw new Error(`No records found in ${inputFilePath}.`);
-  }
-
-  const progress = Script.progress(totalTests, text =>
+  const progress = Script.progress(selectedRecords.length, text =>
     process.stdout.write(text)
   );
+
+  const tasks: ContinueTask[] = selectedRecords.map(input => ({
+    input,
+    key: ScenarioKey.toString(
+      ScenarioKey.ofScenario(input.scenario, input.prompt)
+    ),
+  }));
 
   const {
     failureCount,
@@ -205,8 +239,11 @@ export async function reassessCommand(
     promptsByTarget,
     recordAssessments,
   } = await pipeline(
-    () => reassessInputsToTasks(inputFilePath, filters),
-    flatTransform(10, async (task: ReassessTask): Promise<TaskOutcome[]> => {
+    () =>
+      (async function* () {
+        for (const task of tasks) yield task;
+      })(),
+    flatTransform(10, async (task: ContinueTask): Promise<TaskOutcome[]> => {
       const tempFile = path.join(tempDir, `${task.input.id}.json`);
 
       // Graceful restart.
@@ -228,10 +265,17 @@ export async function reassessCommand(
       }
 
       try {
-        const testResult = await runJudges(
-          judgeContext,
+        const context = await buildContext(
+          judgeModels,
+          userModel,
+          task.input.modelId,
+          getTargetGateway(task.input.modelId),
+          task.input.scenario
+        );
+        const testResult = await kora.runTest(
+          context,
           task.input.scenario,
-          task.input.prompt,
+          task.key,
           task.input.messages
         );
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
@@ -247,7 +291,7 @@ export async function reassessCommand(
         ];
       } catch (error) {
         console.error(
-          `\nJudge run failed for id=${task.input.id} (model=${task.input.modelId}, key=${task.key}): ${error}`
+          `\nContinue run failed for id=${task.input.id} (model=${task.input.modelId}, key=${task.key}): ${error}`
         );
         progress.increment(false);
         return [{kind: "failure"}];
@@ -297,7 +341,7 @@ export async function reassessCommand(
 
   if (failureCount > 0) {
     console.log(
-      `\n${failureCount} reassessments failed. Temp files kept at ${tempDir} for restart.`
+      `\n${failureCount} continuations failed. Temp files kept at ${tempDir} for restart.`
     );
     console.log(`Re-run the command to retry failed records.`);
     return;
@@ -328,13 +372,20 @@ export async function reassessCommand(
   );
   writtenFiles.push(assessmentsPath);
 
+  const finalMeta: SelectionMeta = {
+    ...meta,
+    completedAt: new Date().toISOString(),
+  };
+  await fs.writeFile(metaPath, JSON.stringify(finalMeta, null, 2));
+  writtenFiles.push(metaPath);
+
   const zipFilePath = path.join(outputDirPath, "results.zip");
   await archiveResults(tempDir, writtenFiles, zipFilePath);
 
   await fs.rm(tempDir, {recursive: true, force: true});
 
   console.log(
-    `\nCompleted ${testCount} reassessments across ${runResultsByTarget.size} target model(s) → ${outputDirPath}`
+    `\nCompleted ${testCount} continuations across ${runResultsByTarget.size} target model(s) → ${outputDirPath}`
   );
   console.log(
     `Per-record assessments → ${assessmentsPath} (${sortedAssessments.length} entries)`

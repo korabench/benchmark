@@ -1,24 +1,19 @@
-import {
-  JudgeModel,
-  kora,
-  Scenario,
-  ScenarioPrompt,
-  TestContext,
-  TestResult,
-} from "@korabench/benchmark";
+import {kora, Scenario, ScenarioPrompt, TestResult} from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
 import archiver from "archiver";
 import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
-import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createCustomModel} from "../models/customModel.js";
 import {createGatewayModel} from "../models/gatewayModel.js";
 import {Model} from "../models/model.js";
+import {
+  buildContext,
+  resolveTargetGatewayModel,
+} from "./shared/buildContext.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -127,39 +122,6 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
   }
 }
 
-async function buildContext(
-  judgeModels: Record<string, Model>,
-  userModel: Model,
-  targetModelSlug: string,
-  targetGatewayModel: Model | undefined,
-  scenario: Scenario
-): Promise<TestContext> {
-  const targetModel = await (async () => {
-    if (targetGatewayModel) {
-      return targetGatewayModel;
-    }
-
-    return createCustomModel(targetModelSlug, scenario);
-  })();
-
-  return {
-    getUserResponse: async request => ({
-      output: await userModel.getTextResponse(request),
-    }),
-    getAssistantResponse: async request => ({
-      output: await targetModel.getTextResponse(request),
-    }),
-    judgeModels: R.mapValues(
-      judgeModels,
-      (model: Model): JudgeModel => ({
-        getResponse: async request => ({
-          output: await model.getStructuredResponse(request),
-        }),
-      })
-    ),
-  };
-}
-
 export interface RunCommandOptions {
   riskIds?: readonly string[];
   limit?: number;
@@ -203,9 +165,10 @@ export async function runCommand(
     ])
   );
   const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
-  const targetGatewayModel = targetModelSlug.startsWith("custom-")
-    ? undefined
-    : createGatewayModel(modelsJsonPath, targetModelSlug);
+  const targetGatewayModel = resolveTargetGatewayModel(
+    modelsJsonPath,
+    targetModelSlug
+  );
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-run-tmp");

@@ -1,4 +1,5 @@
 import {
+  ModelMessage,
   ModelRequest,
   ModelResponse,
   SchemaWithOutput,
@@ -67,7 +68,8 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
   runTest(
     c: TestContext,
     scenario: TScenario,
-    key: string
+    key: string,
+    startMessages?: readonly ModelMessage[]
   ): Promise<TTestResult>;
   mapTestResultToRunResult(result: TTestResult): TRunResult;
   reduceRunResult(result1: TRunResult, result2: TRunResult): TRunResult;
