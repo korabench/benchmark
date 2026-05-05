@@ -17,6 +17,7 @@ import {createGatewayModel} from "../models/gatewayModel.js";
 import {Model} from "../models/model.js";
 import {
   buildContext,
+  BuiltContext,
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
 import {
@@ -264,16 +265,16 @@ export async function continueCommand(
         // Not yet processed.
       }
 
-      const built = await buildContext(
-        judgeModels,
-        userModel,
-        task.input.modelId,
-        getTargetGateway(task.input.modelId),
-        task.input.scenario
-      );
-
+      let built: BuiltContext | undefined;
       let outcome: "completed" | "errored" = "errored";
       try {
+        built = await buildContext(
+          judgeModels,
+          userModel,
+          task.input.modelId,
+          getTargetGateway(task.input.modelId),
+          task.input.scenario
+        );
         const testResult = await kora.runTest(
           built.context,
           task.input.scenario,
@@ -299,11 +300,13 @@ export async function continueCommand(
         progress.increment(false);
         return [{kind: "failure"}];
       } finally {
-        await built.dispose(outcome).catch(err => {
-          console.error(
-            `\nDispose failed for id=${task.input.id}: ${err instanceof Error ? err.message : err}`
-          );
-        });
+        if (built) {
+          await built.dispose(outcome).catch(err => {
+            console.error(
+              `\nDispose failed for id=${task.input.id}: ${err instanceof Error ? err.message : err}`
+            );
+          });
+        }
       }
     }),
     reduce(
