@@ -22,6 +22,9 @@ export class BlockedAppError extends Error {
 interface WebRunnerModelConfig {
   modelSlug: string;
   webRunnerUrl: string;
+  /** Optional bearer token sent as `Authorization: Bearer <key>`. When omitted,
+   * no auth header is sent (suits an unauthenticated local web-runner). */
+  apiKey?: string;
   /** Optional identifiers passed to web-runner for evidence keying. If absent,
    * fresh UUIDs are minted per Model instance (one Model per test). */
   runId?: string;
@@ -64,11 +67,14 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
   const testKey = config.testKey ?? randomUUID();
   let sessionId: string | null = null;
 
+  const headers: Record<string, string> = {"content-type": "application/json"};
+  if (config.apiKey) headers["authorization"] = `Bearer ${config.apiKey}`;
+
   async function ensureSession(): Promise<string> {
     if (sessionId) return sessionId;
     const r = await fetch(`${config.webRunnerUrl}/sessions`, {
       method: "POST",
-      headers: {"content-type": "application/json"},
+      headers,
       body: JSON.stringify({runId, testKey, app}),
     });
     if (!r.ok) {
@@ -92,7 +98,7 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
       `${config.webRunnerUrl}/sessions/${sessionId}/turn`,
       {
         method: "POST",
-        headers: {"content-type": "application/json"},
+        headers,
         body: JSON.stringify({userMessage: text}),
       }
     );
@@ -131,7 +137,7 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
       try {
         await fetch(`${config.webRunnerUrl}/sessions/${id}`, {
           method: "DELETE",
-          headers: {"content-type": "application/json"},
+          headers,
           body: JSON.stringify({outcome}),
         });
       } catch (err) {

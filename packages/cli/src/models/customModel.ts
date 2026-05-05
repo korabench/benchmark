@@ -10,7 +10,8 @@ export async function createCustomModel(
 ): Promise<Model> {
   if (isWebRunnerSlug(modelSlug)) {
     const webRunnerUrl = process.env.WEB_RUNNER_URL ?? DEFAULT_WEB_RUNNER_URL;
-    return createWebRunnerModel({modelSlug, webRunnerUrl});
+    const apiKey = process.env.WEB_RUNNER_API_KEY;
+    return createWebRunnerModel({modelSlug, webRunnerUrl, apiKey});
   }
 
   return {
