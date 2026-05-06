@@ -107,14 +107,14 @@ yarn kora run <target-model> [user-model]
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `<target-model>`      | Model to benchmark                                                                                                 |
 | `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
-| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited`) |
+| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:medium:limited`)                                                  |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
 | `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
 
-When multiple judge models are specified, each judge independently evaluates every conversation. The final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
+By default a single judge (`gpt-5.2:medium:limited`) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
@@ -163,7 +163,7 @@ yarn kora continue [user-model]
 | Argument / Option          | Description                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `[user-model]`             | Model used to generate user messages during the continuation (default: `deepseek-v3.2-temp-1.3`, matching production)                                                                      |
-| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:high:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                           |
+| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:medium:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                          |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
@@ -326,11 +326,7 @@ The `run` command produces a result object with this structure:
 ```json
 {
   "target": "gpt-4o",
-  "judges": [
-    "gpt-5.2:high:limited",
-    "claude-sonnet-4.6:limited",
-    "gemini-2.5-pro:limited"
-  ],
+  "judges": ["gpt-5.2:medium:limited"],
   "user": "deepseek-v3.2",
   "prompts": ["default"],
   "scores": [
@@ -380,7 +376,7 @@ Each pipeline stage makes the following API calls:
 
 - **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
-- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default 3 judges, this is 11 calls per test.
+- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
 
 All commands run with a concurrency of 10 parallel tasks.
 
