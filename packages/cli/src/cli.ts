@@ -35,6 +35,19 @@ function findConfigFile(filename: string): string {
   }
 }
 
+function splitCsv(value: string): readonly string[] {
+  const parts = value
+    .split(",")
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+  if (parts.length === 0) {
+    throw new Error(
+      `Expected a non-empty comma-separated list, got: "${value}"`
+    );
+  }
+  return parts;
+}
+
 function readPackageVersion(): string {
   const pkgPath = path.join(
     dirname(fileURLToPath(import.meta.url)),
@@ -99,7 +112,11 @@ export type Program = typeof program;
 program
   .command("generate-seeds")
   .description("generate a new set of scenario seeds")
-  .argument("[model]", "model to use for seed generation", "gpt-4o")
+  .argument(
+    "[model]",
+    "model(s) to use for seed generation; comma-separated for per-task fallback chain (e.g. gpt-4o,gpt-5.5:low)",
+    "gpt-4o"
+  )
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
     "--seeds-per-task <count>",
@@ -142,38 +159,48 @@ program
       );
     }
 
-    return generateSeeds(program, modelsJsonPath, model, opts.output, {
-      seedsPerTask:
-        opts.seedsPerTask !== undefined
-          ? parseInt(opts.seedsPerTask, 10)
-          : undefined,
-      totalSeeds:
-        opts.totalSeeds !== undefined
-          ? parseInt(opts.totalSeeds, 10)
-          : undefined,
-      ageRanges: opts.ageRanges
-        .split(",")
-        .map(r => v.parse(AgeRange.io, r.trim())),
-      riskIds: opts.riskIds
-        ?.split(",")
-        .map(id => id.trim())
-        .filter(id => id.length > 0),
-      motivations: opts.motivations
-        ?.split(",")
-        .map(name => name.trim())
-        .filter(name => name.length > 0),
-      distribution,
-      randomSeed,
-    });
+    return generateSeeds(
+      program,
+      modelsJsonPath,
+      splitCsv(model),
+      opts.output,
+      {
+        seedsPerTask:
+          opts.seedsPerTask !== undefined
+            ? parseInt(opts.seedsPerTask, 10)
+            : undefined,
+        totalSeeds:
+          opts.totalSeeds !== undefined
+            ? parseInt(opts.totalSeeds, 10)
+            : undefined,
+        ageRanges: opts.ageRanges
+          .split(",")
+          .map(r => v.parse(AgeRange.io, r.trim())),
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map(id => id.trim())
+          .filter(id => id.length > 0),
+        motivations: opts.motivations
+          ?.split(",")
+          .map(name => name.trim())
+          .filter(name => name.length > 0),
+        distribution,
+        randomSeed,
+      }
+    );
   });
 
 program
   .command("expand-scenarios")
   .description("transform the seeds into fully fleshed out scenarios")
-  .argument("[model]", "model to use for seed expansion", "gpt-5.2:high")
+  .argument(
+    "[model]",
+    "model(s) for seed expansion; comma-separated for per-task fallback chain",
+    "gpt-5.2:high"
+  )
   .argument(
     "[user-model]",
-    "model to use for user message generation",
+    "model(s) for user message generation; comma-separated for per-task fallback chain",
     "deepseek-v3.2"
   )
   .option("-i, --input <path>", "input seeds JSONL file", defaultSeedsPath)
@@ -190,8 +217,8 @@ program
     expandScenariosCommand(
       program,
       modelsJsonPath,
-      model,
-      userModel,
+      splitCsv(model),
+      splitCsv(userModel),
       opts.input,
       opts.output,
       opts.riskIds

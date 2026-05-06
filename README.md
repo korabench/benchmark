@@ -49,7 +49,7 @@ yarn kora generate-seeds [model]
 
 | Argument / Option          | Description                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------- |
-| `[model]`                  | Model to use for seed generation (default: `gpt-5.2:high`)                            |
+| `[model]`                  | Model(s) to use for seed generation (default: `gpt-4o`). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
 | `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
 | `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
 | `--total-seeds <count>`    | Total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with `--seeds-per-task`) |
@@ -79,6 +79,20 @@ At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals o
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, distribution mode allocates flavors via the same largest-remainder method as demographics, pins one flavor per task in both the seed-generation and seed-expansion prompts, and stores `scenarioFlavorId` on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
+#### Fallback chains
+
+Both `generate-seeds` and `expand-scenarios` accept a comma-separated list of model slugs in the `[model]` (and `[user-model]`) positional arg. Each task tries the chain in order and only advances when the current model fails. Useful when one model is flaky for some tasks (e.g. truncating large outputs, rejecting a schema constraint):
+
+```bash
+yarn kora generate-seeds gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited \
+  --distribution us-census-2020 --total-seeds 30 --random-seed 42
+
+yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limited" \
+  "deepseek-v3.2,gpt-4o:extended,gemini-2.5-flash:limited"
+```
+
+For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors *and* `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator — typically truncation). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
+
 ### `expand-scenarios`
 
 Transforms seeds into fully fleshed-out scenarios with validation.
@@ -89,8 +103,8 @@ yarn kora expand-scenarios [model] [user-model]
 
 | Argument / Option     | Description                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------- |
-| `[model]`             | Model to use for scenario expansion (default: `gpt-4o`)                                  |
-| `[user-model]`        | Model to use for generating the first user message (default: `deepseek-v3.2`)            |
+| `[model]`             | Model(s) for scenario expansion (default: `gpt-5.2:high`). Comma-separated for a per-task fallback chain — escalates on both thrown errors *and* `ScenarioValidationError` (e.g. when the model returns valid JSON but the content is truncated/incoherent). |
+| `[user-model]`        | Model(s) for generating the first user message (default: `deepseek-v3.2`). Comma-separated for a per-call fallback chain (escalates only on thrown errors). |
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |

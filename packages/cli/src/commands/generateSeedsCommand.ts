@@ -9,7 +9,7 @@ import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
+import {createGatewayModelChain} from "../models/gatewayModel.js";
 
 function formatCounts(counts: Record<string, number>): string {
   return Object.entries(counts)
@@ -20,11 +20,15 @@ function formatCounts(counts: Record<string, number>): string {
 export async function generateSeeds(
   _program: Program,
   modelsJsonPath: string,
-  modelSlug: string,
+  modelSlugs: readonly string[],
   outputFilePath: string,
   options?: GenerateSeedsOptions
 ) {
-  console.log(`Generating seeds using ${modelSlug}...`);
+  console.log(
+    modelSlugs.length === 1
+      ? `Generating seeds using ${modelSlugs[0]}...`
+      : `Generating seeds with fallback chain: ${modelSlugs.join(" → ")}`
+  );
   if (options?.riskIds?.length) {
     console.log(`Filtering to risk IDs: ${options.riskIds.join(", ")}`);
   }
@@ -61,7 +65,7 @@ export async function generateSeeds(
     }
   }
 
-  const model = createGatewayModel(modelsJsonPath, modelSlug);
+  const model = createGatewayModelChain(modelsJsonPath, modelSlugs);
 
   const context: GenerateSeedsContext = {
     getResponse: async request => ({
