@@ -27,8 +27,7 @@ export function createFallbackModel(models: readonly LabeledModel[]): Model {
         return await invoke(current.model);
       } catch (error) {
         lastError = error;
-        const message =
-          error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
         const next = models[i + 1];
         if (next) {
           console.error(
