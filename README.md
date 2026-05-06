@@ -56,8 +56,26 @@ yarn kora generate-seeds [model]
 | `--age-ranges <ranges>`    | Comma-separated age ranges to generate seeds for (default: all)                       |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict generation to (default: all risks)               |
 | `--motivations <names>`    | Comma-separated motivation names to restrict generation to (default: all motivations) |
+| `--distribution <preset-or-path>` | Pin persona demographics (age band, gender, SES, race/ethnicity) to a target population. Preset name (e.g. `us-census-2020`) or path to a JSON distribution file. Requires `--total-seeds`. |
+| `--random-seed <int>`      | RNG seed for reproducible demographic allocation (distribution mode only)             |
 
 Use `--total-seeds` for small, focused runs where you want an exact scenario count per risk (e.g. `--total-seeds 24 --risk-ids privacy_and_personal_data_protection`). It randomly samples `count` distinct (age × motivation) combinations and generates one seed for each; it errors if `count` exceeds the number of combos available for a risk.
+
+#### Population-distribution mode
+
+When `--distribution` is set, the CLI pre-allocates each persona's demographics so the generated population's marginals match a target distribution. Each dimension (age band, gender, SES, race/ethnicity) is allocated independently using the largest-remainder (Hamilton) method, then shuffled and zipped into personas. Within a pinned age band the LLM still picks the specific age. `childSES` (`low` / `middle` / `high`) is threaded into the expansion prompt so `childBackground` narratives stay consistent with the bucket.
+
+Example:
+
+```bash
+yarn kora generate-seeds gpt-4o \
+  --distribution us-census-2020 \
+  --total-seeds 60 \
+  --random-seed 42 \
+  --output /tmp/preview.jsonl
+```
+
+At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity). Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
 
 ### `expand-scenarios`
 

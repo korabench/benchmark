@@ -1,4 +1,7 @@
 export * from "./aggregateAssessments.js";
+export * from "./allocation/allocatePersonas.js";
+export * from "./allocation/largestRemainder.js";
+export * from "./allocation/rng.js";
 export * from "./benchmark.js";
 export * from "./generateUserMessage.js";
 export * from "./kora.js";
@@ -8,6 +11,7 @@ export * from "./model/judgeAssessment.js";
 export * from "./model/mechanism.js";
 export * from "./model/mechanismAssessment.js";
 export * from "./model/motivation.js";
+export * from "./model/populationDistribution.js";
 export * from "./model/prompt.js";
 export * from "./model/risk.js";
 export * from "./model/riskCategory.js";

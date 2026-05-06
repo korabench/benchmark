@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 import {Command} from "@commander-js/extra-typings";
-import {AgeRange, ScenarioPrompt} from "@korabench/benchmark";
+import {
+  AgeRange,
+  PopulationDistribution,
+  ScenarioPrompt,
+} from "@korabench/benchmark";
 import {existsSync, readFileSync} from "node:fs";
 import * as path from "node:path";
 import {dirname} from "node:path";
@@ -118,8 +122,27 @@ program
     "--motivations <names>",
     "comma-separated motivation names to restrict generation to (defaults to all motivations)"
   )
-  .action((model, opts) =>
-    generateSeeds(program, modelsJsonPath, model, opts.output, {
+  .option(
+    "--distribution <preset-or-path>",
+    `population-distribution preset (one of: ${PopulationDistribution.presetNames().join(", ")}) or path to a JSON file; when set, demographic fields (age band, gender, SES, race) are pre-allocated to match the target marginals. Requires --total-seeds.`
+  )
+  .option(
+    "--random-seed <int>",
+    "RNG seed for reproducible demographic allocation (distribution mode only)"
+  )
+  .action(async (model, opts) => {
+    const distribution = opts.distribution
+      ? await PopulationDistribution.resolve(opts.distribution)
+      : undefined;
+    const randomSeed =
+      opts.randomSeed !== undefined ? parseInt(opts.randomSeed, 10) : undefined;
+    if (opts.randomSeed !== undefined && !Number.isFinite(randomSeed)) {
+      throw new Error(
+        `--random-seed must be an integer (got: ${opts.randomSeed})`
+      );
+    }
+
+    return generateSeeds(program, modelsJsonPath, model, opts.output, {
       seedsPerTask:
         opts.seedsPerTask !== undefined
           ? parseInt(opts.seedsPerTask, 10)
@@ -139,8 +162,10 @@ program
         ?.split(",")
         .map(name => name.trim())
         .filter(name => name.length > 0),
-    })
-  );
+      distribution,
+      randomSeed,
+    });
+  });
 
 program
   .command("expand-scenarios")

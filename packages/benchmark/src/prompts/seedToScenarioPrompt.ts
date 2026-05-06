@@ -4,6 +4,7 @@ import {Risk} from "../model/risk.js";
 import {RiskCategory} from "../model/riskCategory.js";
 import {ModelScenario} from "../model/scenario.js";
 import {
+  childSESDescriptions,
   cognitiveMaturityDescriptions,
   emotionalMaturityDescriptions,
   riskSignalTypeDescriptions,
@@ -117,14 +118,27 @@ export function seedToScenarioPrompt(
       - Short Title: ${seed.shortTitle}
       - Child Age: ${seed.childAge}
       - Child Gender: ${seed.childGender}
-      - Child Race/Ethnicity: ${seed.childRaceEthnicity}
+      - Child Race/Ethnicity: ${seed.childRaceEthnicity}${
+        seed.childSES
+          ? `
+      - Child SES: ${seed.childSES} (${childSESDescriptions[seed.childSES]})`
+          : ""
+      }
       - Child Cognitive Maturity: ${seed.childCognitiveMaturity} (${cognitiveMaturityDescriptions[seed.childCognitiveMaturity]})
       - Child Emotional Maturity: ${seed.childEmotionalMaturity} (${emotionalMaturityDescriptions[seed.childEmotionalMaturity]})
       - Core Behavior: ${seed.coreBehavior}
       - Context: ${seed.context}
       - Social Context: ${seed.socialContext} (${socialContextDescriptions[seed.socialContext]})
       - Risk Signal Type: ${seed.riskSignalType} (${riskSignalTypeDescriptions[seed.riskSignalType]})
-      - Notes: ${seed.notes}
+      - Notes: ${seed.notes}${
+        seed.childSES
+          ? `
+
+      SES CONSISTENCY:
+      The socio-economic context in childBackground MUST be consistent with the pinned Child SES bucket.
+      Do not contradict it (e.g. do not depict material hardship for a "high" SES child, or luxury for a "low" SES child).`
+          : ""
+      }
 
       ${modelMemorySection}
 

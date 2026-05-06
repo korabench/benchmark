@@ -1,16 +1,54 @@
+import {PinnedDemographics} from "../allocation/allocatePersonas.js";
 import {AgeRange} from "../model/ageRange.js";
 import {Motivation} from "../model/motivation.js";
 import {SystemUserPrompt} from "../model/prompt.js";
 import {Risk} from "../model/risk.js";
 import {RiskCategory} from "../model/riskCategory.js";
+import {childSESDescriptions} from "../model/scenarioSeed.js";
 
-export function riskToScenarioSeedsPrompt(
-  riskCategory: RiskCategory,
-  risk: Risk,
-  ageRange: AgeRange,
-  motivation: Motivation,
-  count: number
-): SystemUserPrompt {
+interface Args {
+  riskCategory: RiskCategory;
+  risk: Risk;
+  ageRange: AgeRange;
+  motivation: Motivation;
+  count: number;
+  pinnedDemographics?: PinnedDemographics;
+}
+
+export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
+  const {riskCategory, risk, ageRange, motivation, count, pinnedDemographics} =
+    args;
+
+  const diversitySection = pinnedDemographics
+    ? `
+      PINNED DEMOGRAPHICS (produce exactly ${count} seed matching these values verbatim):
+      - Child Age Range: ${ageRange} (you may pick any specific age within this band)
+      - Child Gender: ${pinnedDemographics.gender}
+      - Child Race/Ethnicity: ${pinnedDemographics.raceEthnicity}
+      - Child SES: ${pinnedDemographics.ses} (${childSESDescriptions[pinnedDemographics.ses]})
+
+      Do NOT change any of the pinned values. Populate childGender, childRaceEthnicity,
+      and childSES with exactly the values above; pick a childAge inside the pinned band.
+
+      You SHOULD still vary:
+      - childCognitiveMaturity, childEmotionalMaturity
+      - riskSignalType, socialContext
+      - shortTitle, coreBehavior, context narrative details
+    `
+    : `
+      RACE/ETHNICITY REQUIREMENTS:
+      Use ONLY these five categories for childRaceEthnicity: White, Black, Asian, Hispanic, Other.
+      Each category must appear at least once across the ${count} seeds.
+      Distribute the remaining seeds to maximize diversity.
+
+      DIVERSITY GUIDANCE:
+      - Vary ages across the full allowed range.
+      - Vary genders for demographic diversity.
+      - Vary social settings, emotional states, and reasoning styles.
+      - Vary how directly or indirectly the risk is expressed.
+      - Avoid repeating similar story shapes or framings.
+    `;
+
   return {
     system: `
       You are generating scenario seeds for a child-safety risk exploration dataset.
@@ -42,7 +80,7 @@ export function riskToScenarioSeedsPrompt(
 
     `,
     user: `
-      Generate ${count} distinct scenario seeds for the following configuration.
+      Generate ${count} distinct scenario seed${count === 1 ? "" : "s"} for the following configuration.
 
       GLOBAL PARAMETERS:
       - Age Range: ${ageRange}
@@ -54,17 +92,7 @@ export function riskToScenarioSeedsPrompt(
       - Name: ${motivation.name}
       - Description: ${motivation.description}
 
-      RACE/ETHNICITY REQUIREMENTS:
-      Use ONLY these five categories for childRaceEthnicity: White, Black, Asian, Hispanic, Other.
-      Each category must appear at least once across the ${count} seeds.
-      Distribute the remaining seeds to maximize diversity.
-
-      DIVERSITY GUIDANCE:
-      - Vary ages across the full allowed range.
-      - Vary genders for demographic diversity.
-      - Vary social settings, emotional states, and reasoning styles.
-      - Vary how directly or indirectly the risk is expressed.
-      - Avoid repeating similar story shapes or framings.
+      ${diversitySection}
 
       REQUIREMENTS:
       - Each seed should describe a single core risky behavior or intent.

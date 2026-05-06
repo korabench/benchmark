@@ -7,6 +7,11 @@ import {
   aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
+import {
+  allocatePersonas,
+  PinnedDemographics,
+} from "./allocation/allocatePersonas.js";
+import {makeRng, shuffleWith} from "./allocation/rng.js";
 import {Benchmark, JudgeModel} from "./benchmark.js";
 import {
   generateFirstUserMessage,
@@ -18,6 +23,7 @@ import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
+import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
   RunAssessmentSums,
@@ -44,6 +50,20 @@ import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessa
 import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+
+const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
+  "7to9": [7, 9],
+  "10to12": [10, 12],
+  "13to17": [13, 17],
+};
+
+function clampAgeToBand(age: number, band: AgeRange): number {
+  const [lo, hi] = AGE_BANDS[band];
+  const rounded = Math.round(age);
+  if (rounded < lo) return lo;
+  if (rounded > hi) return hi;
+  return rounded;
+}
 
 /**
  * Run the judge-assessment step on a pre-existing transcript.
@@ -131,6 +151,7 @@ export const kora = Benchmark.new({
     const ageRanges = options?.ageRanges ?? AgeRange.list;
     const riskIds = options?.riskIds;
     const motivationNames = options?.motivations;
+    const distribution = options?.distribution;
     const SeedsOutput = v.strictObject({
       seeds: v.array(ModelScenarioSeed.io),
     });
@@ -139,6 +160,14 @@ export const kora = Benchmark.new({
       throw new Error(
         "--seeds-per-task and --total-seeds are mutually exclusive."
       );
+    }
+    if (distribution !== undefined && seedsPerTaskOption !== undefined) {
+      throw new Error(
+        "--distribution and --seeds-per-task are mutually exclusive."
+      );
+    }
+    if (distribution !== undefined && totalSeeds === undefined) {
+      throw new Error("--distribution requires --total-seeds.");
     }
     const seedsPerTask = seedsPerTaskOption ?? 8;
 
@@ -164,54 +193,96 @@ export const kora = Benchmark.new({
       ? allMotivations.filter(m => motivationNames.includes(m.name))
       : allMotivations;
 
-    const tasks = riskCategories.flatMap(riskCategory =>
-      riskCategory.risks
-        .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-        .flatMap(risk => {
-          const combos = ageRanges.flatMap(ageRange =>
-            motivations.map(motivation => ({ageRange, motivation}))
-          );
+    const rng = makeRng(options?.randomSeed);
 
-          if (totalSeeds !== undefined) {
-            if (totalSeeds > combos.length) {
-              throw new Error(
-                `--total-seeds (${totalSeeds}) exceeds the number of (age × motivation) combos (${combos.length}) for risk ${risk.id}. Use --seeds-per-task for larger runs.`
+    interface Task {
+      riskCategory: RiskCategory;
+      risk: Risk;
+      ageRange: AgeRange;
+      motivation: Motivation;
+      seedsToGenerate: number;
+      pinnedDemographics?: PinnedDemographics;
+    }
+
+    const tasks: Task[] = distribution
+      ? riskCategories.flatMap<Task>(riskCategory =>
+          riskCategory.risks
+            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
+            .flatMap<Task>(risk => {
+              const personas = allocatePersonas(
+                distribution,
+                totalSeeds!,
+                rng,
+                ageRanges
               );
-            }
-            return R.sample(combos, totalSeeds).map(
-              ({ageRange, motivation}) => ({
+              const motivationCycle = shuffleWith(motivations, rng);
+              return personas.map((pinned, i) => ({
+                riskCategory,
+                risk,
+                ageRange: pinned.ageRange,
+                motivation: motivationCycle[i % motivationCycle.length]!,
+                seedsToGenerate: 1,
+                pinnedDemographics: pinned,
+              }));
+            })
+        )
+      : riskCategories.flatMap<Task>(riskCategory =>
+          riskCategory.risks
+            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
+            .flatMap<Task>(risk => {
+              const combos = ageRanges.flatMap(ageRange =>
+                motivations.map(motivation => ({ageRange, motivation}))
+              );
+
+              if (totalSeeds !== undefined) {
+                if (totalSeeds > combos.length) {
+                  throw new Error(
+                    `--total-seeds (${totalSeeds}) exceeds the number of (age × motivation) combos (${combos.length}) for risk ${risk.id}. Use --seeds-per-task for larger runs.`
+                  );
+                }
+                return R.sample(combos, totalSeeds).map(
+                  ({ageRange, motivation}) => ({
+                    riskCategory,
+                    risk,
+                    ageRange,
+                    motivation,
+                    seedsToGenerate: 1,
+                  })
+                );
+              }
+
+              return combos.map(({ageRange, motivation}) => ({
                 riskCategory,
                 risk,
                 ageRange,
                 motivation,
-                seedsToGenerate: 1,
-              })
-            );
-          }
-
-          return combos.map(({ageRange, motivation}) => ({
-            riskCategory,
-            risk,
-            ageRange,
-            motivation,
-            seedsToGenerate: seedsPerTask,
-          }));
-        })
-    );
+                seedsToGenerate: seedsPerTask,
+              }));
+            })
+        );
 
     const total = tasks.reduce((sum, t) => sum + t.seedsToGenerate, 0);
     yield {total, items: []};
 
     const seedStream = flatTransform(
       10,
-      async ({riskCategory, risk, ageRange, motivation, seedsToGenerate}) => {
-        const prompt = riskToScenarioSeedsPrompt(
+      async (task: Task) => {
+        const {
           riskCategory,
           risk,
           ageRange,
           motivation,
-          seedsToGenerate
-        );
+          seedsToGenerate,
+          pinnedDemographics,
+        } = task;
+        const prompt = riskToScenarioSeedsPrompt({
+          riskCategory,
+          risk,
+          ageRange,
+          motivation,
+          count: seedsToGenerate,
+          pinnedDemographics,
+        });
 
         const {output} = await c.getResponse({
           messages: [
@@ -221,21 +292,29 @@ export const kora = Benchmark.new({
           outputType: SeedsOutput,
         });
 
-        return output.seeds.map(
-          (s: ModelScenarioSeed): ScenarioSeed => ({
+        return output.seeds.map((s: ModelScenarioSeed): ScenarioSeed => {
+          const base: ScenarioSeed = {
             ...s,
             id: uuid(),
             riskCategoryId: riskCategory.id,
             riskId: risk.id,
             ageRange,
             motivation,
-          })
-        );
+          };
+          if (!pinnedDemographics) return base;
+          return {
+            ...base,
+            childGender: pinnedDemographics.gender,
+            childRaceEthnicity: pinnedDemographics.raceEthnicity,
+            childSES: pinnedDemographics.ses,
+            childAge: clampAgeToBand(s.childAge, pinnedDemographics.ageRange),
+          };
+        });
       },
       tasks
     );
 
-    if (totalSeeds !== undefined) {
+    if (totalSeeds !== undefined && !distribution) {
       const perRiskCount: Record<string, number> = {};
       for await (const seed of seedStream) {
         const count = perRiskCount[seed.riskId] ?? 0;

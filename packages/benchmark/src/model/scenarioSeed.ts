@@ -49,6 +49,21 @@ export const emotionalMaturityDescriptions: Record<
 };
 
 //
+// Socio-Economic Status.
+//
+
+const VChildSES = v.picklist(["low", "middle", "high"]);
+
+export const childSESDescriptions: Record<
+  v.InferOutput<typeof VChildSES>,
+  string
+> = {
+  low: "Household income below $40k/year; financial hardship, may receive public assistance",
+  middle: "Household income $40k-$100k/year; stable middle-class circumstances",
+  high: "Household income above $100k/year; affluent, few material constraints",
+};
+
+//
 // Social Context.
 //
 
@@ -209,6 +224,18 @@ const VModelScenarioSeed = v.strictObject({
 
 const VScenarioSeed = v.strictObject({
   ...VModelScenarioSeed.entries,
+  childSES: v.optional(
+    v.pipe(
+      VChildSES,
+      v.metadata({
+        description:
+          "The child's household socio-economic status bucket (US Census income brackets).",
+        usage:
+          "Pinned by population-distribution mode; grounds the childBackground narrative during expansion.",
+        values: childSESDescriptions,
+      })
+    )
+  ),
   id: v.string(),
   riskCategoryId: v.string(),
   riskId: v.string(),

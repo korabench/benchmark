@@ -7,6 +7,7 @@ import {
   TypedModelResponse,
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
+import {PopulationDistribution} from "./model/populationDistribution.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 
 export interface GenerateSeedsContext {
@@ -46,6 +47,8 @@ export interface GenerateSeedsOptions {
   ageRanges?: AgeRange[];
   riskIds?: readonly string[];
   motivations?: readonly string[];
+  distribution?: PopulationDistribution;
+  randomSeed?: number;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
