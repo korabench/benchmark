@@ -3,6 +3,7 @@ import {toJsonSchema} from "@valibot/to-json-schema";
 import {gateway, generateObject, generateText, jsonSchema} from "ai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
+import {createFallbackModel} from "./fallbackModel.js";
 import {Model} from "./model.js";
 import {resolveModelConfig} from "./modelConfig.js";
 
@@ -41,6 +42,22 @@ function extractJson(text: string): string {
   const end = withoutThink.lastIndexOf("}");
   if (start === -1 || end === -1 || end < start) return withoutThink;
   return withoutThink.slice(start, end + 1);
+}
+
+export function createGatewayModelChain(
+  modelsJsonPath: string,
+  modelSlugs: readonly string[],
+  options?: ModelOptions
+): Model {
+  if (modelSlugs.length === 0) {
+    throw new Error("createGatewayModelChain: at least one slug required.");
+  }
+  return createFallbackModel(
+    modelSlugs.map(slug => ({
+      label: slug,
+      model: createGatewayModel(modelsJsonPath, slug, options),
+    }))
+  );
 }
 
 export function createGatewayModel(

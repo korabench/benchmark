@@ -49,7 +49,7 @@ yarn kora generate-seeds [model]
 
 | Argument / Option          | Description                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------- |
-| `[model]`                  | Model to use for seed generation (default: `gpt-5.2:high`)                            |
+| `[model]`                  | Model(s) to use for seed generation (default: `gpt-4o`). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
 | `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
 | `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
 | `--total-seeds <count>`    | Total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with `--seeds-per-task`) |
@@ -79,6 +79,20 @@ At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals o
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, distribution mode allocates flavors via the same largest-remainder method as demographics, pins one flavor per task in both the seed-generation and seed-expansion prompts, and stores `scenarioFlavorId` on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
+#### Fallback chains
+
+Both `generate-seeds` and `expand-scenarios` accept a comma-separated list of model slugs in the `[model]` (and `[user-model]`) positional arg. Each task tries the chain in order and only advances when the current model fails. Useful when one model is flaky for some tasks (e.g. truncating large outputs, rejecting a schema constraint):
+
+```bash
+yarn kora generate-seeds gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited \
+  --distribution us-census-2020 --total-seeds 30 --random-seed 42
+
+yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limited" \
+  "deepseek-v3.2,gpt-4o:extended,gemini-2.5-flash:limited"
+```
+
+For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors *and* `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator — typically truncation). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
+
 ### `expand-scenarios`
 
 Transforms seeds into fully fleshed-out scenarios with validation.
@@ -89,8 +103,8 @@ yarn kora expand-scenarios [model] [user-model]
 
 | Argument / Option     | Description                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------- |
-| `[model]`             | Model to use for scenario expansion (default: `gpt-4o`)                                  |
-| `[user-model]`        | Model to use for generating the first user message (default: `deepseek-v3.2`)            |
+| `[model]`             | Model(s) for scenario expansion (default: `gpt-5.2:high`). Comma-separated for a per-task fallback chain — escalates on both thrown errors *and* `ScenarioValidationError` (e.g. when the model returns valid JSON but the content is truncated/incoherent). |
+| `[user-model]`        | Model(s) for generating the first user message (default: `deepseek-v3.2`). Comma-separated for a per-call fallback chain (escalates only on thrown errors). |
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
@@ -107,14 +121,14 @@ yarn kora run <target-model> [user-model]
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `<target-model>`      | Model to benchmark                                                                                                 |
 | `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
-| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:high:limited,claude-sonnet-4.6:limited,gemini-2.5-pro:limited`) |
+| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:medium:limited`)                                                  |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
 | `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
 
-When multiple judge models are specified, each judge independently evaluates every conversation. The final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
+By default a single judge (`gpt-5.2:medium:limited`) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
 
@@ -163,7 +177,7 @@ yarn kora continue [user-model]
 | Argument / Option          | Description                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `[user-model]`             | Model used to generate user messages during the continuation (default: `deepseek-v3.2-temp-1.3`, matching production)                                                                      |
-| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:high:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                           |
+| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:medium:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                          |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
@@ -326,11 +340,7 @@ The `run` command produces a result object with this structure:
 ```json
 {
   "target": "gpt-4o",
-  "judges": [
-    "gpt-5.2:high:limited",
-    "claude-sonnet-4.6:limited",
-    "gemini-2.5-pro:limited"
-  ],
+  "judges": ["gpt-5.2:medium:limited"],
   "user": "deepseek-v3.2",
   "prompts": ["default"],
   "scores": [
@@ -380,7 +390,7 @@ Each pipeline stage makes the following API calls:
 
 - **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
-- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default 3 judges, this is 11 calls per test.
+- **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
 
 All commands run with a concurrency of 10 parallel tasks.
 

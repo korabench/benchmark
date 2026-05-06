@@ -27,6 +27,15 @@
       }
     }
   },
+  "gpt-5.2:medium:limited": {
+    "model": "openai/gpt-5.2",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "medium"
+      }
+    }
+  },
   "gpt-5.5:high": {
     "model": "openai/gpt-5.5",
     "maxTokens": 26000,
