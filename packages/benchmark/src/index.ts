@@ -1,4 +1,5 @@
 export * from "./aggregateAssessments.js";
+export * from "./allocation/allocateFlavors.js";
 export * from "./allocation/allocatePersonas.js";
 export * from "./allocation/largestRemainder.js";
 export * from "./allocation/rng.js";
@@ -17,6 +18,7 @@ export * from "./model/risk.js";
 export * from "./model/riskCategory.js";
 export * from "./model/runResult.js";
 export * from "./model/scenario.js";
+export * from "./model/scenarioFlavor.js";
 export * from "./model/scenarioKey.js";
 export * from "./model/scenarioPrompt.js";
 export * from "./model/scenarioSeed.js";

@@ -3,6 +3,7 @@ import * as R from "remeda";
 import * as v from "valibot";
 import risks from "../../data/risks.json" with {type: "json"};
 import {Risk} from "./risk.js";
+import {assertFlavorsSumToOne} from "./scenarioFlavor.js";
 
 //
 // Runtime model.
@@ -20,7 +21,15 @@ const VRiskCategory = v.object({
 
 const listAll = memoize(() => {
   const type = v.pipe(v.array(VRiskCategory), v.readonly());
-  return v.parse(type, risks);
+  const parsed = v.parse(type, risks);
+  for (const category of parsed) {
+    for (const risk of category.risks) {
+      if (risk.scenarioFlavors) {
+        assertFlavorsSumToOne(risk.id, risk.scenarioFlavors);
+      }
+    }
+  }
+  return parsed;
 });
 
 function find(riskCategoryId: string) {

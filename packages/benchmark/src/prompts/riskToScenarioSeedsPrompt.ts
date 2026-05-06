@@ -4,6 +4,7 @@ import {Motivation} from "../model/motivation.js";
 import {SystemUserPrompt} from "../model/prompt.js";
 import {Risk} from "../model/risk.js";
 import {RiskCategory} from "../model/riskCategory.js";
+import {ScenarioFlavor} from "../model/scenarioFlavor.js";
 import {childSESDescriptions} from "../model/scenarioSeed.js";
 
 interface Args {
@@ -13,11 +14,19 @@ interface Args {
   motivation: Motivation;
   count: number;
   pinnedDemographics?: PinnedDemographics;
+  pinnedFlavor?: ScenarioFlavor;
 }
 
 export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
-  const {riskCategory, risk, ageRange, motivation, count, pinnedDemographics} =
-    args;
+  const {
+    riskCategory,
+    risk,
+    ageRange,
+    motivation,
+    count,
+    pinnedDemographics,
+    pinnedFlavor,
+  } = args;
 
   const diversitySection = pinnedDemographics
     ? `
@@ -48,6 +57,17 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
       - Vary how directly or indirectly the risk is expressed.
       - Avoid repeating similar story shapes or framings.
     `;
+
+  const flavorSection = pinnedFlavor
+    ? `
+      PINNED SCENARIO FLAVOR (the seed MUST embody this risk-specific variant):
+      - Flavor id: ${pinnedFlavor.id}
+      - Definition: ${pinnedFlavor.description}
+
+      The coreBehavior, context, and notes fields must reflect this flavor faithfully.
+      Do not silently switch to a different variant of the risk.
+    `
+    : "";
 
   return {
     system: `
@@ -93,6 +113,8 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
       - Description: ${motivation.description}
 
       ${diversitySection}
+
+      ${flavorSection}
 
       REQUIREMENTS:
       - Each seed should describe a single core risky behavior or intent.

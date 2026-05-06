@@ -3,6 +3,7 @@ import {
   GenerateSeedsOptions,
   kora,
   largestRemainderCounts,
+  RiskCategory,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
@@ -43,6 +44,20 @@ export async function generateSeeds(
     );
     if (options.randomSeed !== undefined) {
       console.log(`  Random seed: ${options.randomSeed}`);
+    }
+
+    const riskIdSet = options.riskIds ? new Set(options.riskIds) : undefined;
+    const flavoredRisks = RiskCategory.listAll()
+      .flatMap(c => c.risks)
+      .filter(r => r.scenarioFlavors?.length)
+      .filter(r => !riskIdSet || riskIdSet.has(r.id));
+    for (const risk of flavoredRisks) {
+      const proportions = Object.fromEntries(
+        risk.scenarioFlavors!.map(f => [f.id, f.proportion])
+      );
+      console.log(
+        `  Flavor allocation for ${risk.id}: ${formatCounts(largestRemainderCounts(proportions, n))}`
+      );
     }
   }
 

@@ -7,6 +7,7 @@ import {
   aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
+import {allocateFlavors} from "./allocation/allocateFlavors.js";
 import {
   allocatePersonas,
   PinnedDemographics,
@@ -37,6 +38,7 @@ import {
   ModelScenarioWithMemory,
   Scenario,
 } from "./model/scenario.js";
+import {ScenarioFlavor} from "./model/scenarioFlavor.js";
 import {ScenarioKey} from "./model/scenarioKey.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
@@ -202,6 +204,7 @@ export const kora = Benchmark.new({
       motivation: Motivation;
       seedsToGenerate: number;
       pinnedDemographics?: PinnedDemographics;
+      pinnedFlavor?: ScenarioFlavor;
     }
 
     const tasks: Task[] = distribution
@@ -216,6 +219,9 @@ export const kora = Benchmark.new({
                 ageRanges
               );
               const motivationCycle = shuffleWith(motivations, rng);
+              const flavorIds = risk.scenarioFlavors
+                ? allocateFlavors(risk.scenarioFlavors, totalSeeds!, rng)
+                : undefined;
               return personas.map((pinned, i) => ({
                 riskCategory,
                 risk,
@@ -223,6 +229,9 @@ export const kora = Benchmark.new({
                 motivation: motivationCycle[i % motivationCycle.length]!,
                 seedsToGenerate: 1,
                 pinnedDemographics: pinned,
+                pinnedFlavor: flavorIds
+                  ? risk.scenarioFlavors!.find(f => f.id === flavorIds[i])
+                  : undefined,
               }));
             })
         )
@@ -274,6 +283,7 @@ export const kora = Benchmark.new({
           motivation,
           seedsToGenerate,
           pinnedDemographics,
+          pinnedFlavor,
         } = task;
         const prompt = riskToScenarioSeedsPrompt({
           riskCategory,
@@ -282,6 +292,7 @@ export const kora = Benchmark.new({
           motivation,
           count: seedsToGenerate,
           pinnedDemographics,
+          pinnedFlavor,
         });
 
         const {output} = await c.getResponse({
@@ -300,6 +311,7 @@ export const kora = Benchmark.new({
             riskId: risk.id,
             ageRange,
             motivation,
+            ...(pinnedFlavor ? {scenarioFlavorId: pinnedFlavor.id} : {}),
           };
           if (!pinnedDemographics) return base;
           return {
@@ -425,11 +437,17 @@ export const kora = Benchmark.new({
       );
     }
 
+    const flavor = scenario.seed.scenarioFlavorId
+      ? risk.scenarioFlavors?.find(f => f.id === scenario.seed.scenarioFlavorId)
+      : undefined;
+    const conversationLength =
+      flavor?.conversationLength ?? risk.conversationLength;
+
     // Multi-turn conversation.
     const messages: ModelMessage[] = startMessages ? [...startMessages] : [];
     const startTurn = messages.length / 2;
 
-    for (let i = startTurn; i < risk.conversationLength; i++) {
+    for (let i = startTurn; i < conversationLength; i++) {
       const userMessage = await (() => {
         if (i === 0) {
           return scenario.firstUserMessage;

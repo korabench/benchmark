@@ -399,7 +399,71 @@ describe("generateScenarioSeeds distribution mode", () => {
         s.childSES,
         s.childRaceEthnicity,
         s.motivation.name,
+        s.scenarioFlavorId,
       ]);
     expect(tuples(a)).toEqual(tuples(b));
+  });
+});
+
+//
+// Flavor-distribution tests.
+//
+
+describe("generateScenarioSeeds scenario-flavor allocation", () => {
+  it("matches the per-risk flavor marginals when the risk defines flavors (7.3)", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 20,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    expect(seeds).toHaveLength(20);
+    expect(R.countBy(seeds, s => s.scenarioFlavorId!)).toEqual({
+      a_direct: 5,
+      b_gradual: 8,
+      d_authority: 4,
+      e_fictional: 3,
+    });
+  });
+
+  it("threads each pinned flavor into its own LLM prompt", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 20,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    expect(
+      calls.every(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))
+    ).toBe(true);
+    expect(
+      calls.filter(c => c.userPrompt.includes("Flavor id: b_gradual"))
+    ).toHaveLength(8);
+  });
+
+  it("leaves scenarioFlavorId undefined for risks without flavors", async () => {
+    const calls: Call[] = [];
+    const context = makeReturn(makeFakeSeed(), calls);
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 10,
+      riskIds: ["sensorimotor_displacement"],
+      randomSeed: 1,
+    });
+
+    expect(seeds).toHaveLength(10);
+    expect(seeds.every(s => s.scenarioFlavorId === undefined)).toBe(true);
+    expect(
+      calls.some(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))
+    ).toBe(false);
   });
 });
