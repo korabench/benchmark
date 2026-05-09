@@ -12,7 +12,7 @@ Each test is a 3-turn conversation between a simulated child user and the target
 
 ## Prerequisites
 
-- **Node.js 25+**
+- **Node.js 24+** (LTS; pinned via `.nvmrc`)
 - **Yarn**
 - **AI Gateway API key** — set the `AI_GATEWAY_API_KEY` environment variable for the AI SDK gateway. Copy `.env.example` to `.env` and fill in your key.
 
