@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, describe, expect, it} from "vitest";
 import {
+  getOpenAICompatibleProvider,
   parseProviderSlug,
   resolveProviderConnection,
-  getOpenAICompatibleProvider,
 } from "../models/openAICompatibleProviders.js";
 
 describe("parseProviderSlug", () => {
@@ -55,9 +55,7 @@ describe("resolveProviderConnection", () => {
   });
 
   it("throws if VLLM_BASE_URL is not set (no default URL)", () => {
-    expect(() => resolveProviderConnection(provider)).toThrow(
-      /VLLM_BASE_URL/
-    );
+    expect(() => resolveProviderConnection(provider)).toThrow(/VLLM_BASE_URL/);
   });
 
   it("returns the env baseURL with trailing slashes trimmed", () => {

@@ -4,7 +4,7 @@ import {toJsonSchema} from "@valibot/to-json-schema";
 import {generateObject, generateText, jsonSchema, LanguageModel} from "ai";
 import * as v from "valibot";
 import {withRetry} from "../retry.js";
-import {ModelOptions, buildRetryOptions, extractJson} from "./_shared.js";
+import {buildRetryOptions, extractJson, ModelOptions} from "./_shared.js";
 import {Model} from "./model.js";
 import {OpenAICompatibleModelConfig} from "./modelConfig.js";
 import {
@@ -23,7 +23,10 @@ interface ResolvedTarget {
   providerOptions: OpenAICompatibleModelConfig["providerOptions"];
 }
 
-function fromParsedSlug(parsed: ParsedProviderSlug, slug: string): ResolvedTarget {
+function fromParsedSlug(
+  parsed: ParsedProviderSlug,
+  slug: string
+): ResolvedTarget {
   const conn = resolveProviderConnection(parsed.provider);
   return {
     label: slug,
@@ -40,7 +43,8 @@ function fromConfig(
   slug: string,
   config: OpenAICompatibleModelConfig
 ): ResolvedTarget {
-  const baseURL = config.baseURL ?? readEnv(config.baseURLEnv!, slug, "baseURLEnv");
+  const baseURL =
+    config.baseURL ?? readEnv(config.baseURLEnv!, slug, "baseURLEnv");
   const apiKey = config.apiKey ?? readEnv(config.apiKeyEnv!, slug, "apiKeyEnv");
   return {
     label: slug,

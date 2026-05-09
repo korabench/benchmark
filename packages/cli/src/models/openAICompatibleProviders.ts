@@ -65,7 +65,9 @@ export interface ParsedProviderSlug {
  * `model-id` may contain additional `/` characters (e.g., HuggingFace-style
  * `Qwen/Qwen3-30B-A3B-Thinking-2507`).
  */
-export function parseProviderSlug(slug: string): ParsedProviderSlug | undefined {
+export function parseProviderSlug(
+  slug: string
+): ParsedProviderSlug | undefined {
   const slash = slug.indexOf("/");
   if (slash <= 0 || slash === slug.length - 1) return undefined;
   const prefix = slug.slice(0, slash);

@@ -6,7 +6,10 @@ import {
   isOpenAICompatibleConfig,
   tryResolveModelConfig,
 } from "./modelConfig.js";
-import {createOpenAICompatibleModelFromConfig, createOpenAICompatibleModelFromSlug} from "./openAICompatibleModel.js";
+import {
+  createOpenAICompatibleModelFromConfig,
+  createOpenAICompatibleModelFromSlug,
+} from "./openAICompatibleModel.js";
 import {
   listOpenAICompatibleProviders,
   parseProviderSlug,

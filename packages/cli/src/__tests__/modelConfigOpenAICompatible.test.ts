@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import {afterEach, beforeEach, describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it} from "vitest";
 import {
   isOpenAICompatibleConfig,
   loadModelRegistry,
@@ -55,9 +55,7 @@ describe("openai-compatible model config", () => {
         apiKeyEnv: "K",
       },
     });
-    expect(() => loadModelRegistry(tmpFile!)).toThrow(
-      /baseURL.*baseURLEnv/
-    );
+    expect(() => loadModelRegistry(tmpFile!)).toThrow(/baseURL.*baseURLEnv/);
   });
 
   it("rejects when both baseURL and baseURLEnv are set", () => {
@@ -70,9 +68,7 @@ describe("openai-compatible model config", () => {
         apiKeyEnv: "K",
       },
     });
-    expect(() => loadModelRegistry(tmpFile!)).toThrow(
-      /baseURL.*baseURLEnv/
-    );
+    expect(() => loadModelRegistry(tmpFile!)).toThrow(/baseURL.*baseURLEnv/);
   });
 
   it("rejects when neither apiKey nor apiKeyEnv is set", () => {

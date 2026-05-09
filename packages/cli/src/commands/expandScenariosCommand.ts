@@ -73,9 +73,9 @@ export async function expandScenariosCommand(
   // primary model first, then advances to the next on either a thrown error
   // OR a ScenarioValidationError (the model returned valid JSON but the
   // content was rejected by the validator — e.g. truncated mid-sentence).
-  // The per-call retry/fallback inside createGatewayModelChain only catches
-  // thrown errors, so validation failures slip past it; rotating at the task
-  // level fixes that.
+  // The per-call retry/fallback inside the model chain only catches thrown
+  // errors, so validation failures slip past it; rotating at the task level
+  // fixes that.
   const expansionModels = modelSlugs.map(slug => ({
     label: slug,
     model: createModel(modelsJsonPath, slug),
