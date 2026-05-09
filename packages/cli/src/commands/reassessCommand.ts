@@ -15,7 +15,7 @@ import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
+import {createModel} from "../models/createModel.js";
 import {Model} from "../models/model.js";
 import {
   readReassessInputsFromJsonl,
@@ -167,10 +167,7 @@ export async function reassessCommand(
   }
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
-    judgeModelSlugs.map(slug => [
-      slug,
-      createGatewayModel(modelsJsonPath, slug),
-    ])
+    judgeModelSlugs.map(slug => [slug, createModel(modelsJsonPath, slug)])
   );
   const judgeContext = buildJudgeContext(judgeModels);
 

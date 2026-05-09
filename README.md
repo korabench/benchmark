@@ -253,6 +253,52 @@ Models are configured in a `models.json` file at the project root. The CLI searc
 
 Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
+### OpenAI-compatible providers (vLLM, …)
+
+Any model server that exposes the OpenAI Chat Completions API can be used as the target, judge, or user model. The current built-in provider is **vLLM**; the registry in `packages/cli/src/models/openAICompatibleProviders.ts` is one-line-per-provider, with a TODO list covering SGLang, Ollama, LM Studio, llama.cpp, Together, Fireworks, Groq, DeepInfra, OpenRouter, Perplexity, Cerebras, Mistral, and Anyscale.
+
+There are two ways to address an OpenAI-compatible model:
+
+**1. Slug form `<prefix>/<model-id>` (no `models.json` entry needed).**
+
+```bash
+# Start vLLM locally first:
+#   vllm serve Qwen/Qwen3-30B-A3B-Thinking-2507 --port 8000
+export VLLM_BASE_URL=http://localhost:8000/v1
+export VLLM_API_KEY=EMPTY  # vLLM ignores the value but the header must be present
+
+yarn kora run gpt-5.2:medium:limited \
+  --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507
+```
+
+The model id may contain `/` (HuggingFace-style namespaces) — the slug is split on the first `/` only.
+
+**2. Named entry in `models.json` (use when you want non-default `maxTokens` / `temperature` / `providerOptions`).**
+
+```json
+{
+  "vllm-qwen3-thinking": {
+    "provider": "openai-compatible",
+    "model": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "baseURLEnv": "VLLM_BASE_URL",
+    "apiKeyEnv": "VLLM_API_KEY",
+    "maxTokens": 8192,
+    "temperature": 0
+  }
+}
+```
+
+| Field         | Required when `provider` = `openai-compatible`              | Description                                                                |
+| ------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `provider`    | Yes                                                         | Must be `"openai-compatible"`. Omitted entries default to gateway routing. |
+| `model`       | Yes                                                         | Model id sent on the wire (whatever the server is serving).                |
+| `baseURL`     | Either `baseURL` _or_ `baseURLEnv` (exactly one)            | Static endpoint URL.                                                       |
+| `baseURLEnv`  | Either `baseURL` _or_ `baseURLEnv` (exactly one)            | Env var holding the endpoint URL — preferred for local dev.                |
+| `apiKey`      | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Bearer token (discouraged inline; commit hooks may flag it).               |
+| `apiKeyEnv`   | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Env var holding the bearer token.                                          |
+
+Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limited` as the judge. Swapping in a local judge changes the metric — validate on a small subset against the default judge before reporting cross-paper numbers.
+
 ### Custom models
 
 Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/models/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
@@ -415,9 +461,13 @@ packages/
     __tests__/                       CLI test suites
     models/                          Model-related modules
       model.ts                       Model interface definition
+      createModel.ts                 Slug-to-model dispatcher
       gatewayModel.ts                AI SDK gateway model implementation
+      openAICompatibleModel.ts       OpenAI-compatible model implementation (vLLM, …)
+      openAICompatibleProviders.ts   Built-in registry of provider prefixes
       modelConfig.ts                 Model registry loader
       customModel.ts                 Custom model hook (edit to add your own)
+      _shared.ts                     Shared retry / JSON-extraction helpers
     retry.ts                         Retry with exponential backoff
     cli.ts                           CLI entry point
 ```

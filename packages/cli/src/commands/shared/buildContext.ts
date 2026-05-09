@@ -1,7 +1,7 @@
 import {JudgeModel, Scenario, TestContext} from "@korabench/benchmark";
 import * as R from "remeda";
+import {createModel} from "../../models/createModel.js";
 import {createCustomModel} from "../../models/customModel.js";
-import {createGatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
 
 export async function buildContext(
@@ -43,5 +43,5 @@ export function resolveTargetGatewayModel(
 ): Model | undefined {
   return targetModelSlug.startsWith("custom-")
     ? undefined
-    : createGatewayModel(modelsJsonPath, targetModelSlug);
+    : createModel(modelsJsonPath, targetModelSlug);
 }

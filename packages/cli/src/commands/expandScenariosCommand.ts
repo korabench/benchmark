@@ -12,10 +12,7 @@ import * as readline from "node:readline";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {
-  createGatewayModel,
-  createGatewayModelChain,
-} from "../models/gatewayModel.js";
+import {createModel, createModelChain} from "../models/createModel.js";
 
 async function* readSeedsFromJsonl(
   filePath: string,
@@ -81,9 +78,9 @@ export async function expandScenariosCommand(
   // level fixes that.
   const expansionModels = modelSlugs.map(slug => ({
     label: slug,
-    model: createGatewayModel(modelsJsonPath, slug),
+    model: createModel(modelsJsonPath, slug),
   }));
-  const userModel = createGatewayModelChain(modelsJsonPath, userModelSlugs);
+  const userModel = createModelChain(modelsJsonPath, userModelSlugs);
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
