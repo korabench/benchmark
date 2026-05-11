@@ -11,13 +11,29 @@ export type PinnedRaceEthnicity =
   | "black"
   | "asian"
   | "other";
+export type PinnedMaturity = "low" | "medium" | "high";
 
 export interface PinnedDemographics {
   ageRange: AgeRange;
+  childAge: number;
   gender: PinnedGender;
   ses: PinnedSES;
   raceEthnicity: PinnedRaceEthnicity;
+  cognitiveMaturity: PinnedMaturity;
+  emotionalMaturity: PinnedMaturity;
 }
+
+export const UNIFORM_MATURITY_DISTRIBUTION: Record<PinnedMaturity, number> = {
+  low: 1 / 3,
+  medium: 1 / 3,
+  high: 1 / 3,
+};
+
+const AGES_IN_BRACKET: Record<AgeRange, readonly number[]> = {
+  "7to9": [7, 8, 9],
+  "10to12": [10, 11, 12],
+  "13to17": [13, 14, 15, 16, 17],
+};
 
 function renormalize<K extends string>(
   proportions: Record<K, number>,
@@ -36,10 +52,14 @@ function renormalize<K extends string>(
   >;
 }
 
-function expandCounts<K extends string>(counts: Record<K, number>): K[] {
+export function expandCounts<K extends string>(counts: Record<K, number>): K[] {
   return (Object.keys(counts) as K[]).flatMap(key =>
     Array.from({length: counts[key]}, () => key)
   );
+}
+
+function pickUniform<T>(items: readonly T[], rng: () => number): T {
+  return items[Math.floor(rng() * items.length)]!;
 }
 
 /**
@@ -54,6 +74,11 @@ function expandCounts<K extends string>(counts: Record<K, number>): K[] {
  * The four shuffled arrays are zipped index-wise into PinnedDemographics.
  * Marginals are exact by construction; the joint distribution is the product
  * of marginals in expectation (independent assignment).
+ *
+ * Cognitive and emotional maturity are pinned as a hardcoded uniform 1/3 split
+ * (benchmark-coverage requirement, not a real-world population parameter).
+ * `childAge` is an independent uniform draw from the integer ages of the
+ * persona's pinned bracket.
  *
  * `allowedAgeRanges` restricts and renormalizes the age dimension (useful when
  * the user passes `--age-ranges` alongside `--distribution`). When omitted,
@@ -76,16 +101,32 @@ export function allocatePersonas(
   const genderCounts = largestRemainderCounts(distribution.gender, total);
   const sesCounts = largestRemainderCounts(distribution.ses, total);
   const raceCounts = largestRemainderCounts(distribution.raceEthnicity, total);
+  const cognitiveCounts = largestRemainderCounts(
+    UNIFORM_MATURITY_DISTRIBUTION,
+    total
+  );
+  const emotionalCounts = largestRemainderCounts(
+    UNIFORM_MATURITY_DISTRIBUTION,
+    total
+  );
 
   const ages = shuffleWith(expandCounts(ageCounts), rng);
   const genders = shuffleWith(expandCounts(genderCounts), rng);
   const sesValues = shuffleWith(expandCounts(sesCounts), rng);
   const races = shuffleWith(expandCounts(raceCounts), rng);
+  const cognitives = shuffleWith(expandCounts(cognitiveCounts), rng);
+  const emotionals = shuffleWith(expandCounts(emotionalCounts), rng);
 
-  return ages.map((ageRange, i) => ({
-    ageRange: ageRange as AgeRange,
-    gender: genders[i] as PinnedGender,
-    ses: sesValues[i] as PinnedSES,
-    raceEthnicity: races[i] as PinnedRaceEthnicity,
-  }));
+  return ages.map((ageRange, i) => {
+    const band = ageRange as AgeRange;
+    return {
+      ageRange: band,
+      childAge: pickUniform(AGES_IN_BRACKET[band], rng),
+      gender: genders[i] as PinnedGender,
+      ses: sesValues[i] as PinnedSES,
+      raceEthnicity: races[i] as PinnedRaceEthnicity,
+      cognitiveMaturity: cognitives[i] as PinnedMaturity,
+      emotionalMaturity: emotionals[i] as PinnedMaturity,
+    };
+  });
 }

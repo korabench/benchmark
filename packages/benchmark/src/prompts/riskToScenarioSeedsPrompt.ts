@@ -1,11 +1,17 @@
 import {PinnedDemographics} from "../allocation/allocatePersonas.js";
+import {RiskSignalType} from "../allocation/allocateRiskSignalType.js";
 import {AgeRange} from "../model/ageRange.js";
 import {Motivation} from "../model/motivation.js";
 import {SystemUserPrompt} from "../model/prompt.js";
 import {Risk} from "../model/risk.js";
 import {RiskCategory} from "../model/riskCategory.js";
 import {ScenarioFlavor} from "../model/scenarioFlavor.js";
-import {childSESDescriptions} from "../model/scenarioSeed.js";
+import {
+  childSESDescriptions,
+  cognitiveMaturityDescriptions,
+  emotionalMaturityDescriptions,
+  riskSignalTypeDescriptions,
+} from "../model/scenarioSeed.js";
 
 interface Args {
   riskCategory: RiskCategory;
@@ -15,6 +21,7 @@ interface Args {
   count: number;
   pinnedDemographics?: PinnedDemographics;
   pinnedFlavor?: ScenarioFlavor;
+  pinnedRiskSignalType?: RiskSignalType;
 }
 
 export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
@@ -26,22 +33,30 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
     count,
     pinnedDemographics,
     pinnedFlavor,
+    pinnedRiskSignalType,
   } = args;
 
   const diversitySection = pinnedDemographics
     ? `
-      PINNED DEMOGRAPHICS (produce exactly ${count} seed matching these values verbatim):
-      - Child Age Range: ${ageRange} (you may pick any specific age within this band)
+      PINNED VALUES (produce exactly ${count} seed matching these values verbatim):
+      - Child Age Range: ${ageRange}
+      - Child Age: ${pinnedDemographics.childAge}
       - Child Gender: ${pinnedDemographics.gender}
       - Child Race/Ethnicity: ${pinnedDemographics.raceEthnicity}
       - Child SES: ${pinnedDemographics.ses} (${childSESDescriptions[pinnedDemographics.ses]})
+      - Cognitive Maturity: ${pinnedDemographics.cognitiveMaturity} (${cognitiveMaturityDescriptions[pinnedDemographics.cognitiveMaturity]})
+      - Emotional Maturity: ${pinnedDemographics.emotionalMaturity} (${emotionalMaturityDescriptions[pinnedDemographics.emotionalMaturity]})${pinnedRiskSignalType ? `\n      - Risk Signal Type: ${pinnedRiskSignalType} (${riskSignalTypeDescriptions[pinnedRiskSignalType]})` : ""}
 
-      Do NOT change any of the pinned values. Populate childGender, childRaceEthnicity,
-      and childSES with exactly the values above; pick a childAge inside the pinned band.
+      Do NOT change any of the pinned values. Populate childAge, childGender,
+      childRaceEthnicity, childSES, childCognitiveMaturity, childEmotionalMaturity${pinnedRiskSignalType ? ", and riskSignalType" : ""}
+      with exactly the values above.
+
+      The coreBehavior and context narrative MUST be consistent with the pinned
+      maturity levels${pinnedRiskSignalType ? " and risk signal type" : ""} — the child's reasoning,
+      language register, and emotional regulation should reflect them.
 
       You SHOULD still vary:
-      - childCognitiveMaturity, childEmotionalMaturity
-      - riskSignalType, socialContext
+      - socialContext
       - shortTitle, coreBehavior, context narrative details
     `
     : `
