@@ -9,7 +9,7 @@ import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
-import {createGatewayModelChain} from "../models/gatewayModel.js";
+import {createModelChain} from "../models/createModel.js";
 
 function formatCounts(counts: Record<string, number>): string {
   return Object.entries(counts)
@@ -65,7 +65,7 @@ export async function generateSeeds(
     }
   }
 
-  const model = createGatewayModelChain(modelsJsonPath, modelSlugs);
+  const model = createModelChain(modelsJsonPath, modelSlugs);
 
   const context: GenerateSeedsContext = {
     getResponse: async request => ({

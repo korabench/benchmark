@@ -253,6 +253,100 @@ Models are configured in a `models.json` file at the project root. The CLI searc
 
 Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
+### OpenAI-compatible providers (vLLM, …)
+
+Any model server that exposes the OpenAI Chat Completions API can be used as the target, judge, or user model. The current built-in provider is **vLLM**; the registry in `packages/cli/src/models/openAICompatibleProviders.ts` is one-line-per-provider, with a TODO list covering SGLang, Ollama, LM Studio, llama.cpp, Together, Fireworks, Groq, DeepInfra, OpenRouter, Perplexity, Cerebras, Mistral, and Anyscale.
+
+There are two ways to address an OpenAI-compatible model:
+
+**1. Slug form `<prefix>/<model-id>` (no `models.json` entry needed).**
+
+```bash
+# Start vLLM locally first:
+#   vllm serve Qwen/Qwen3-30B-A3B-Thinking-2507 --port 8000
+export VLLM_BASE_URL=http://localhost:8000/v1
+export VLLM_API_KEY=EMPTY  # vLLM ignores the value but the header must be present
+
+yarn kora run gpt-5.2:medium:limited \
+  --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507
+```
+
+The model id may contain `/` (HuggingFace-style namespaces) — the slug is split on the first `/` only.
+
+**2. Named entry in `models.json` (use when you want non-default `maxTokens` / `temperature` / `providerOptions`).**
+
+```json
+{
+  "vllm-qwen3-thinking": {
+    "provider": "openai-compatible",
+    "model": "Qwen/Qwen3-30B-A3B-Thinking-2507",
+    "baseURLEnv": "VLLM_BASE_URL",
+    "apiKeyEnv": "VLLM_API_KEY",
+    "maxTokens": 8192,
+    "temperature": 0
+  }
+}
+```
+
+| Field         | Required when `provider` = `openai-compatible`              | Description                                                                |
+| ------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `provider`    | Yes                                                         | Must be `"openai-compatible"`. Omitted entries default to gateway routing. |
+| `model`       | Yes                                                         | Model id sent on the wire (whatever the server is serving).                |
+| `baseURL`     | Either `baseURL` _or_ `baseURLEnv` (exactly one)            | Static endpoint URL.                                                       |
+| `baseURLEnv`  | Either `baseURL` _or_ `baseURLEnv` (exactly one)            | Env var holding the endpoint URL — preferred for local dev.                |
+| `apiKey`      | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Bearer token (discouraged inline; commit hooks may flag it).               |
+| `apiKeyEnv`   | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Env var holding the bearer token.                                          |
+
+Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limited` as the judge. Swapping in a local judge changes the metric — validate on a small subset against the default judge before reporting cross-paper numbers.
+
+#### Running a benchmark end-to-end against a local model
+
+1.  **Start vLLM** (any port / API key, just keep them in sync with step 2):
+
+    ```bash
+    vllm serve Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --port 8081 \
+      --api-key soulfuzz101
+    ```
+
+    If you pass `--served-model-name <alias>` to expose the model under a different OpenAI-API `id`, kora auto-resolves the slug against `GET /v1/models` (matching first by `id`, then by `root`), so `vllm/Qwen/Qwen3-30B-A3B-Thinking-2507` keeps working regardless of the alias.
+
+2.  **Point kora at the server.** Either export the vars directly or commit them to `.env.local-model` and `source` it before running:
+
+    ```bash
+    export VLLM_BASE_URL=http://localhost:8081/v1
+    export VLLM_API_KEY=soulfuzz101            # whatever you passed to `vllm serve`
+    export VLLM_MAX_TOKENS=8192                # optional cap; recommended for thinking models
+    ```
+
+3.  **Smoke-test with `--limit 1`** before launching the full sweep:
+
+    ```bash
+    yarn kora run \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --limit 1
+    ```
+
+    The positional arguments are `<target-model> [user-model]`; `--judges` accepts a comma-separated list. Re-using the same slug for all three is the cheapest fully-self-hosted configuration. Drop `--limit` (or raise it) once one task completes successfully.
+
+4.  **Run the full benchmark** and write results to a path you choose:
+
+    ```bash
+    yarn kora run \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      -o data/results-local.json
+    ```
+
+Notes for self-hosted thinking models:
+
+- `<PREFIX>_MAX_TOKENS` (e.g. `VLLM_MAX_TOKENS`) caps generation length for every slug-form call against that provider — set this when the model can otherwise emit unbounded `<think>` traces and stall the run.
+- The HTTP client uses a 4-hour header/body timeout (instead of undici's 10s default), so a deep reasoning trace with slow first-token latency won't drop mid-completion.
+- For per-model `maxTokens` / `temperature` / `providerOptions`, prefer the `models.json` form above — it overrides the env-level `<PREFIX>_MAX_TOKENS` cap.
+
 ### Custom models
 
 Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/models/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
@@ -415,9 +509,13 @@ packages/
     __tests__/                       CLI test suites
     models/                          Model-related modules
       model.ts                       Model interface definition
+      createModel.ts                 Slug-to-model dispatcher
       gatewayModel.ts                AI SDK gateway model implementation
+      openAICompatibleModel.ts       OpenAI-compatible model implementation (vLLM, …)
+      openAICompatibleProviders.ts   Built-in registry of provider prefixes
       modelConfig.ts                 Model registry loader
       customModel.ts                 Custom model hook (edit to add your own)
+      _shared.ts                     Shared retry / JSON-extraction helpers
     retry.ts                         Retry with exponential backoff
     cli.ts                           CLI entry point
 ```

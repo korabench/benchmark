@@ -8,7 +8,7 @@ import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
+import {createModel} from "../models/createModel.js";
 import {Model} from "../models/model.js";
 import {
   buildContext,
@@ -159,12 +159,9 @@ export async function runCommand(
   }
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
-    judgeModelSlugs.map(slug => [
-      slug,
-      createGatewayModel(modelsJsonPath, slug),
-    ])
+    judgeModelSlugs.map(slug => [slug, createModel(modelsJsonPath, slug)])
   );
-  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+  const userModel = createModel(modelsJsonPath, userModelSlug);
   const targetGatewayModel = resolveTargetGatewayModel(
     modelsJsonPath,
     targetModelSlug

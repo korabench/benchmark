@@ -12,10 +12,7 @@ import * as readline from "node:readline";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {
-  createGatewayModel,
-  createGatewayModelChain,
-} from "../models/gatewayModel.js";
+import {createModel, createModelChain} from "../models/createModel.js";
 
 async function* readSeedsFromJsonl(
   filePath: string,
@@ -76,14 +73,14 @@ export async function expandScenariosCommand(
   // primary model first, then advances to the next on either a thrown error
   // OR a ScenarioValidationError (the model returned valid JSON but the
   // content was rejected by the validator — e.g. truncated mid-sentence).
-  // The per-call retry/fallback inside createGatewayModelChain only catches
-  // thrown errors, so validation failures slip past it; rotating at the task
-  // level fixes that.
+  // The per-call retry/fallback inside the model chain only catches thrown
+  // errors, so validation failures slip past it; rotating at the task level
+  // fixes that.
   const expansionModels = modelSlugs.map(slug => ({
     label: slug,
-    model: createGatewayModel(modelsJsonPath, slug),
+    model: createModel(modelsJsonPath, slug),
   }));
-  const userModel = createGatewayModelChain(modelsJsonPath, userModelSlugs);
+  const userModel = createModelChain(modelsJsonPath, userModelSlugs);
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
