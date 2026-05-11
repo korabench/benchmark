@@ -223,18 +223,23 @@ export const kora = Benchmark.new({
                 ? allocateFlavors(risk.scenarioFlavors, totalSeeds!, rng)
                 : undefined;
               const signalTypes = allocateRiskSignalTypes(totalSeeds!, rng);
-              return personas.map((pinned, i) => ({
-                riskCategory,
-                risk,
-                ageRange: pinned.ageRange,
-                motivation: motivationCycle[i % motivationCycle.length]!,
-                seedsToGenerate: 1,
-                pinnedDemographics: pinned,
-                pinnedFlavor: flavorIds
+              return personas.map((pinned, i) => {
+                const flavor = flavorIds
                   ? risk.scenarioFlavors!.find(f => f.id === flavorIds[i])
-                  : undefined,
-                pinnedRiskSignalType: signalTypes[i],
-              }));
+                  : undefined;
+                return {
+                  riskCategory,
+                  risk,
+                  ageRange: pinned.ageRange,
+                  motivation: motivationCycle[i % motivationCycle.length]!,
+                  seedsToGenerate: 1,
+                  pinnedDemographics: pinned,
+                  pinnedFlavor: flavor,
+                  pinnedRiskSignalType:
+                    (flavor?.riskSignalType as RiskSignalType | undefined) ??
+                    signalTypes[i],
+                };
+              });
             })
         )
       : riskCategories.flatMap<Task>(riskCategory =>

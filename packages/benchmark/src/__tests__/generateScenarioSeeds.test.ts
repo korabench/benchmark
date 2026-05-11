@@ -509,6 +509,34 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
     ).toHaveLength(8);
   });
 
+  it("overrides the allocator's riskSignalType when the pinned flavor sets one (privacy 7.3)", async () => {
+    const calls: Call[] = [];
+    // LLM always returns "subtle" — should be overwritten by the flavor-specific
+    // riskSignalType (a_direct→direct, b_gradual→subtle, d_authority/e_fictional→ambiguous).
+    const context = makeReturn(
+      {...makeFakeSeed(), riskSignalType: "subtle"},
+      calls
+    );
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 20,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    const flavorSignalPairs = R.countBy(
+      seeds,
+      s => `${s.scenarioFlavorId}:${s.riskSignalType}`
+    );
+    expect(flavorSignalPairs).toEqual({
+      "a_direct:direct": 5,
+      "b_gradual:subtle": 8,
+      "d_authority:ambiguous": 4,
+      "e_fictional:ambiguous": 3,
+    });
+  });
+
   it("leaves scenarioFlavorId undefined for risks without flavors", async () => {
     const calls: Call[] = [];
     const context = makeReturn(makeFakeSeed(), calls);
