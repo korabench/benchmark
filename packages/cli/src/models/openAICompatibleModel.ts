@@ -2,6 +2,7 @@ import {createOpenAICompatible} from "@ai-sdk/openai-compatible";
 import {ModelRequest, TypedModelRequest} from "@korabench/core";
 import {toJsonSchema} from "@valibot/to-json-schema";
 import {generateObject, generateText, jsonSchema, LanguageModel} from "ai";
+import {Agent, fetch as undiciFetch} from "undici";
 import * as v from "valibot";
 import {withRetry} from "../retry.js";
 import {buildRetryOptions, extractJson, ModelOptions} from "./_shared.js";
@@ -12,6 +13,19 @@ import {
   ParsedProviderSlug,
   resolveProviderConnection,
 } from "./openAICompatibleProviders.js";
+
+// Self-hosted models (vLLM, sglang, ...) running large/thinking models can take
+// minutes per non-streaming completion, which trips undici's default header
+// timeout. Use a generous dispatcher so kora can survive slow first responses
+// and deep request queues.
+const SLOW_MODEL_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+const slowAgent = new Agent({
+  headersTimeout: SLOW_MODEL_TIMEOUT_MS,
+  bodyTimeout: SLOW_MODEL_TIMEOUT_MS,
+  keepAliveTimeout: 60_000,
+});
+const slowFetch: typeof globalThis.fetch = (input, init) =>
+  undiciFetch(input as any, {...(init as any), dispatcher: slowAgent}) as any;
 
 interface ResolvedTarget {
   label: string;
@@ -28,12 +42,24 @@ function fromParsedSlug(
   slug: string
 ): ResolvedTarget {
   const conn = resolveProviderConnection(parsed.provider);
+  // Optional `<PREFIX>_MAX_TOKENS` cap. Useful for thinking/reasoning models
+  // where unbounded generation can otherwise stall a benchmark.
+  const maxTokensEnv = `${parsed.provider.prefix.toUpperCase()}_MAX_TOKENS`;
+  const maxTokensRaw = process.env[maxTokensEnv]?.trim();
+  const maxTokens = maxTokensRaw
+    ? Number.parseInt(maxTokensRaw, 10)
+    : undefined;
+  if (maxTokensRaw && (!Number.isFinite(maxTokens) || maxTokens! <= 0)) {
+    throw new Error(
+      `${maxTokensEnv} must be a positive integer (got: ${maxTokensRaw}).`
+    );
+  }
   return {
     label: slug,
     modelId: parsed.modelId,
     baseURL: conn.baseURL,
     apiKey: conn.apiKey,
-    maxTokens: undefined,
+    maxTokens,
     temperature: undefined,
     providerOptions: undefined,
   };
@@ -67,21 +93,114 @@ function readEnv(envName: string, slug: string, field: string): string {
   return value;
 }
 
-function buildLanguageModel(target: ResolvedTarget): LanguageModel {
+function buildLanguageModel(
+  target: ResolvedTarget,
+  modelId: string
+): LanguageModel {
   const provider = createOpenAICompatible({
     name: target.label,
     baseURL: target.baseURL,
     apiKey: target.apiKey,
+    fetch: slowFetch,
   });
-  return provider(target.modelId);
+  return provider(modelId);
+}
+
+// Cache resolution per (baseURL, requestedModelId) so multiple Model instances
+// pointing at the same server share a single /v1/models lookup.
+const resolutionCache = new Map<string, Promise<string>>();
+
+interface ServedModel {
+  readonly id: string;
+  readonly root?: string;
+}
+
+async function fetchAvailableModels(
+  baseURL: string,
+  apiKey: string
+): Promise<readonly ServedModel[]> {
+  const response = await slowFetch(`${baseURL}/models`, {
+    headers: {Authorization: `Bearer ${apiKey}`},
+  });
+  if (!response.ok) {
+    throw new Error(
+      `GET ${baseURL}/models returned HTTP ${response.status} ${response.statusText}`
+    );
+  }
+  const json = (await response.json()) as {
+    data?: {id?: unknown; root?: unknown}[];
+  };
+  return (json.data ?? []).flatMap(m =>
+    typeof m.id === "string"
+      ? [{id: m.id, root: typeof m.root === "string" ? m.root : undefined}]
+      : []
+  );
+}
+
+export async function resolveServedModelId(
+  target: ResolvedTarget,
+  fetchModels: (
+    baseURL: string,
+    apiKey: string
+  ) => Promise<readonly ServedModel[]> = fetchAvailableModels
+): Promise<string> {
+  let models: readonly ServedModel[];
+  try {
+    models = await fetchModels(target.baseURL, target.apiKey);
+  } catch {
+    // Couldn't enumerate (e.g., endpoint missing) — pass the slug through and
+    // let the actual chat-completions call surface the real error.
+    return target.modelId;
+  }
+  if (models.length === 0) return target.modelId;
+  if (models.some(m => m.id === target.modelId)) return target.modelId;
+  const byRoot = models.find(m => m.root === target.modelId);
+  if (byRoot) return byRoot.id;
+  const formatted = models
+    .map(m => (m.root ? `"${m.id}" (root: "${m.root}")` : `"${m.id}"`))
+    .join(", ");
+  throw new Error(
+    `Model "${target.modelId}" is not served at ${target.baseURL}. ` +
+      `Available models: ${formatted}.`
+  );
+}
+
+function resolveModelIdCached(target: ResolvedTarget): Promise<string> {
+  const key = `${target.baseURL}::${target.apiKey}::${target.modelId}`;
+  let promise = resolutionCache.get(key);
+  if (!promise) {
+    promise = resolveServedModelId(target);
+    // If resolution fails, drop the cache so a later retry can re-attempt
+    // (e.g., user fixed the server and re-ran).
+    promise.catch(() => {
+      if (resolutionCache.get(key) === promise) resolutionCache.delete(key);
+    });
+    resolutionCache.set(key, promise);
+  }
+  return promise;
 }
 
 function buildModel(target: ResolvedTarget, options?: ModelOptions): Model {
   const retryOptions = buildRetryOptions(target.label, options);
-  const languageModel = buildLanguageModel(target);
+  let languageModelPromise: Promise<LanguageModel> | undefined;
+
+  function getLanguageModel(): Promise<LanguageModel> {
+    if (!languageModelPromise) {
+      languageModelPromise = (async () => {
+        const resolvedId = await resolveModelIdCached(target);
+        return buildLanguageModel(target, resolvedId);
+      })();
+      // Forget a rejected build so a retry can re-resolve.
+      languageModelPromise.catch(() => {
+        languageModelPromise = undefined;
+      });
+    }
+    return languageModelPromise;
+  }
 
   return {
     async getTextResponse(request: ModelRequest): Promise<string> {
+      const languageModel = await getLanguageModel();
       const maxTokens = request.maxTokens ?? target.maxTokens;
       const temperature = request.temperature ?? target.temperature;
 
@@ -110,6 +229,7 @@ function buildModel(target: ResolvedTarget, options?: ModelOptions): Model {
     },
 
     async getStructuredResponse<T>(request: TypedModelRequest<T>): Promise<T> {
+      const languageModel = await getLanguageModel();
       const outputSchema = toJsonSchema(request.outputType);
       const maxTokens = request.maxTokens ?? target.maxTokens;
       const temperature = request.temperature ?? target.temperature;
