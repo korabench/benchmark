@@ -299,6 +299,54 @@ The model id may contain `/` (HuggingFace-style namespaces) — the slug is spli
 
 Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limited` as the judge. Swapping in a local judge changes the metric — validate on a small subset against the default judge before reporting cross-paper numbers.
 
+#### Running a benchmark end-to-end against a local model
+
+1.  **Start vLLM** (any port / API key, just keep them in sync with step 2):
+
+    ```bash
+    vllm serve Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --port 8081 \
+      --api-key soulfuzz101
+    ```
+
+    If you pass `--served-model-name <alias>` to expose the model under a different OpenAI-API `id`, kora auto-resolves the slug against `GET /v1/models` (matching first by `id`, then by `root`), so `vllm/Qwen/Qwen3-30B-A3B-Thinking-2507` keeps working regardless of the alias.
+
+2.  **Point kora at the server.** Either export the vars directly or commit them to `.env.local-model` and `source` it before running:
+
+    ```bash
+    export VLLM_BASE_URL=http://localhost:8081/v1
+    export VLLM_API_KEY=soulfuzz101            # whatever you passed to `vllm serve`
+    export VLLM_MAX_TOKENS=8192                # optional cap; recommended for thinking models
+    ```
+
+3.  **Smoke-test with `--limit 1`** before launching the full sweep:
+
+    ```bash
+    yarn kora run \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --limit 1
+    ```
+
+    The positional arguments are `<target-model> [user-model]`; `--judges` accepts a comma-separated list. Re-using the same slug for all three is the cheapest fully-self-hosted configuration. Drop `--limit` (or raise it) once one task completes successfully.
+
+4.  **Run the full benchmark** and write results to a path you choose:
+
+    ```bash
+    yarn kora run \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      --judges vllm/Qwen/Qwen3-30B-A3B-Thinking-2507 \
+      -o data/results-local.json
+    ```
+
+Notes for self-hosted thinking models:
+
+- `<PREFIX>_MAX_TOKENS` (e.g. `VLLM_MAX_TOKENS`) caps generation length for every slug-form call against that provider — set this when the model can otherwise emit unbounded `<think>` traces and stall the run.
+- The HTTP client uses a 4-hour header/body timeout (instead of undici's 10s default), so a deep reasoning trace with slow first-token latency won't drop mid-completion.
+- For per-model `maxTokens` / `temperature` / `providerOptions`, prefer the `models.json` form above — it overrides the env-level `<PREFIX>_MAX_TOKENS` cap.
+
 ### Custom models
 
 Model slugs that start with `custom-` bypass the AI SDK gateway and are routed to `packages/cli/src/models/customModel.ts`. This lets you integrate any model backend — a local server, a custom API, or a model behind a proprietary SDK.
