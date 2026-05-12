@@ -5,9 +5,7 @@ import {
 } from "../allocateRiskSignalType.js";
 import {makeRng} from "../rng.js";
 
-function histogram(
-  values: readonly RiskSignalType[]
-): Record<string, number> {
+function histogram(values: readonly RiskSignalType[]): Record<string, number> {
   return values.reduce<Record<string, number>>((acc, v) => {
     acc[v] = (acc[v] ?? 0) + 1;
     return acc;
