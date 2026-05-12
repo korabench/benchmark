@@ -29,11 +29,19 @@ export interface JudgeModel {
   ) => Promise<TypedModelResponse<T>>;
 }
 
+export type TraceEvent =
+  | {phase: "user_message"; turn: number; durationMs: number}
+  | {phase: "assistant_response"; turn: number; durationMs: number}
+  | {phase: "judge"; slug: string; durationMs: number}
+  | {phase: "judges"; durationMs: number; judgeCount: number};
+
 export interface TestContext {
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
+  /** Optional observability hook. No-op when undefined. */
+  trace?: (event: TraceEvent) => void;
 }
 
 export interface GenerationEvent<T> {

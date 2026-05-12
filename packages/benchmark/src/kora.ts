@@ -13,7 +13,7 @@ import {
   PinnedDemographics,
 } from "./allocation/allocatePersonas.js";
 import {makeRng, shuffleWith} from "./allocation/rng.js";
-import {Benchmark, JudgeModel} from "./benchmark.js";
+import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
 import {
   generateFirstUserMessage,
   generateNextUserMessage,
@@ -78,7 +78,8 @@ export async function runJudges(
   judgeModels: Record<string, JudgeModel>,
   scenario: Scenario,
   prompt: ScenarioPrompt,
-  messages: readonly ModelMessage[]
+  messages: readonly ModelMessage[],
+  trace?: (event: TraceEvent) => void
 ): Promise<TestResult> {
   const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
   const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
@@ -94,10 +95,12 @@ export async function runJudges(
   );
 
   const judgeSlugs = Object.keys(judgeModels);
+  const tJudges = Date.now();
   const judgeAssessments = await Promise.all(
     judgeSlugs.map(async (slug): Promise<JudgeAssessment> => {
       const judge = judgeModels[slug]!;
 
+      const tJudge = Date.now();
       const [safetyResult, mechanismResult] = await Promise.all([
         judge.getResponse({
           messages: [
@@ -114,6 +117,7 @@ export async function runJudges(
           outputType: MechanismAssessment.io,
         }),
       ]);
+      trace?.({phase: "judge", slug, durationMs: Date.now() - tJudge});
 
       return {
         judgeModelSlug: slug,
@@ -122,6 +126,11 @@ export async function runJudges(
       };
     })
   );
+  trace?.({
+    phase: "judges",
+    durationMs: Date.now() - tJudges,
+    judgeCount: judgeSlugs.length,
+  });
 
   const assessment = aggregateTestAssessments(
     judgeAssessments.map(j => j.assessment)
@@ -448,6 +457,7 @@ export const kora = Benchmark.new({
     const startTurn = messages.length / 2;
 
     for (let i = startTurn; i < conversationLength; i++) {
+      const tUserMessage = Date.now();
       const userMessage = await (() => {
         if (i === 0) {
           return scenario.firstUserMessage;
@@ -455,6 +465,11 @@ export const kora = Benchmark.new({
 
         return generateNextUserMessage(c, risk, scenario, messages);
       })();
+      c.trace?.({
+        phase: "user_message",
+        turn: i,
+        durationMs: Date.now() - tUserMessage,
+      });
 
       // TODO: Maybe assert refusal of user model.
 
@@ -463,6 +478,7 @@ export const kora = Benchmark.new({
         content: userMessage,
       });
 
+      const tAssistant = Date.now();
       const modelMessage = await (async () => {
         const modelPrompt = conversationToNextMessagePrompt({
           ageRange: promptAgeRange,
@@ -479,6 +495,11 @@ export const kora = Benchmark.new({
         });
         return output;
       })();
+      c.trace?.({
+        phase: "assistant_response",
+        turn: i,
+        durationMs: Date.now() - tAssistant,
+      });
 
       messages.push({
         role: "assistant",
@@ -486,7 +507,7 @@ export const kora = Benchmark.new({
       });
     }
 
-    return runJudges(c.judgeModels, scenario, prompt, messages);
+    return runJudges(c.judgeModels, scenario, prompt, messages, c.trace);
   },
   mapTestResultToRunResult(result) {
     const {assessment, mechanismAssessment} = result;
