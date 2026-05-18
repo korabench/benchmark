@@ -209,12 +209,23 @@ program
     "--limit <count>",
     "maximum number of test tasks to run (useful for smoke tests)"
   )
+  .option(
+    "--concurrency <n>",
+    "max test tasks run in parallel (default 10; use 1 when the target is a single shared app account, e.g. kora-app-*)",
+    "10"
+  )
   .action((targetModel, userModel, opts) => {
     const limit =
       opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
     if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
       throw new Error(
         `--limit must be a positive integer (got: ${opts.limit})`
+      );
+    }
+    const concurrency = parseInt(opts.concurrency, 10);
+    if (!Number.isFinite(concurrency) || concurrency <= 0) {
+      throw new Error(
+        `--concurrency must be a positive integer (got: ${opts.concurrency})`
       );
     }
 
@@ -233,6 +244,7 @@ program
           .map(id => id.trim())
           .filter(id => id.length > 0),
         limit,
+        concurrency,
       }
     );
   });

@@ -125,6 +125,10 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
 export interface RunCommandOptions {
   riskIds?: readonly string[];
   limit?: number;
+  /** Max test tasks run in parallel. Defaults to 10. Set to 1 when the target
+   * is a single shared app account (kora-app-*) to avoid concurrent-session
+   * rate-limiting / bot-flagging. */
+  concurrency?: number;
 }
 
 export async function runCommand(
@@ -157,6 +161,8 @@ export async function runCommand(
   if (filters.limit !== undefined) {
     console.log(`Limiting to first ${filters.limit} test task(s).`);
   }
+  const concurrency = options.concurrency ?? 10;
+  console.log(`Concurrency: ${concurrency} parallel test task(s).`);
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
     judgeModelSlugs.map(slug => [
@@ -198,7 +204,7 @@ export async function runCommand(
 
   const {failureCount, testCount, runResult} = await pipeline(
     () => scenariosToTestTasks(scenariosFilePath, prompts, filters),
-    flatTransform(10, async (task: TestTask): Promise<TaskOutcome[]> => {
+    flatTransform(concurrency, async (task: TestTask): Promise<TaskOutcome[]> => {
       const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
       // Check if already processed (graceful restart).
