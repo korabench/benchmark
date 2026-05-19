@@ -214,6 +214,15 @@ program
     "max test tasks run in parallel (default 10; use 1 when the target is a single shared app account, e.g. kora-app-*)",
     "10"
   )
+  .option(
+    "--reverse",
+    "process scenarios in reverse file order (last scenario first); useful for order-effect comparisons"
+  )
+  .option(
+    "--cooldown <seconds>",
+    "seconds to sleep between sequential test tasks; use with --concurrency 1 to avoid app rate-limiting (default 0)",
+    "0"
+  )
   .action((targetModel, userModel, opts) => {
     const limit =
       opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
@@ -226,6 +235,12 @@ program
     if (!Number.isFinite(concurrency) || concurrency <= 0) {
       throw new Error(
         `--concurrency must be a positive integer (got: ${opts.concurrency})`
+      );
+    }
+    const cooldownSeconds = parseInt(opts.cooldown, 10);
+    if (!Number.isFinite(cooldownSeconds) || cooldownSeconds < 0) {
+      throw new Error(
+        `--cooldown must be a non-negative integer (got: ${opts.cooldown})`
       );
     }
 
@@ -245,6 +260,8 @@ program
           .filter(id => id.length > 0),
         limit,
         concurrency,
+        reverse: opts.reverse === true,
+        cooldownMs: cooldownSeconds * 1000,
       }
     );
   });

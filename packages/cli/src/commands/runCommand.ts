@@ -35,6 +35,13 @@ interface RunState {
 export interface ScenarioFilters {
   riskIds?: ReadonlySet<string>;
   limit?: number;
+  /** Process scenarios last-first (buffers the matched task list, then
+   * reverses, then applies limit). Used for order-effect comparisons. */
+  reverse?: boolean;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function taskTempFileName(key: string): string {
@@ -65,6 +72,25 @@ export async function* scenariosToTestTasks(
   prompts: readonly ScenarioPrompt[],
   filters: ScenarioFilters
 ): AsyncGenerator<TestTask> {
+  if (filters.reverse) {
+    // Reverse requires the full matched list up front; the corpus is small
+    // (one risk = tens of scenarios) so buffering is cheap. Limit is applied
+    // AFTER reversing, i.e. it keeps the first N of the reversed order.
+    const tasks: TestTask[] = [];
+    for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
+      for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
+        tasks.push({scenario, key});
+      }
+    }
+    tasks.reverse();
+    const capped =
+      filters.limit !== undefined ? tasks.slice(0, filters.limit) : tasks;
+    for (const task of capped) {
+      yield task;
+    }
+    return;
+  }
+
   let yielded = 0;
   for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
@@ -129,6 +155,12 @@ export interface RunCommandOptions {
    * is a single shared app account (kora-app-*) to avoid concurrent-session
    * rate-limiting / bot-flagging. */
   concurrency?: number;
+  /** Process scenarios last-first. See ScenarioFilters.reverse. */
+  reverse?: boolean;
+  /** Milliseconds to sleep between sequential freshly-executed test tasks
+   * (skipped before the first task and for graceful-restart cache hits).
+   * Pair with concurrency=1 to space out calls to a rate-limited app. */
+  cooldownMs?: number;
 }
 
 export async function runCommand(
@@ -154,6 +186,7 @@ export async function runCommand(
   const filters: ScenarioFilters = {
     riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
     limit: options.limit,
+    reverse: options.reverse === true,
   };
   if (filters.riskIds) {
     console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
@@ -161,8 +194,18 @@ export async function runCommand(
   if (filters.limit !== undefined) {
     console.log(`Limiting to first ${filters.limit} test task(s).`);
   }
+  if (filters.reverse) {
+    console.log("Processing scenarios in REVERSE order (last scenario first).");
+  }
   const concurrency = options.concurrency ?? 10;
   console.log(`Concurrency: ${concurrency} parallel test task(s).`);
+  const cooldownMs = options.cooldownMs ?? 0;
+  if (cooldownMs > 0) {
+    console.log(
+      `Cooldown between sequential tasks: ${cooldownMs / 1000}s.`
+    );
+  }
+  let freshStarted = 0;
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
     judgeModelSlugs.map(slug => [
@@ -216,6 +259,19 @@ export async function runCommand(
       } catch {
         // Not yet processed.
       }
+
+      // Cooldown: space out fresh executions to avoid app rate-limiting.
+      // Skipped before the very first fresh task and (via the early return
+      // above) for graceful-restart cache hits, so there is no trailing or
+      // leading dead time. Race-free at concurrency=1, which is the only
+      // setting where cooldown is meaningful.
+      if (cooldownMs > 0 && freshStarted > 0) {
+        console.log(
+          `\nCooldown ${cooldownMs / 1000}s before next task (${task.key})…`
+        );
+        await sleep(cooldownMs);
+      }
+      freshStarted++;
 
       const built = await buildContext(
         judgeModels,
