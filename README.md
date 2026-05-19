@@ -127,6 +127,9 @@ yarn kora run <target-model> [user-model]
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
 | `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
+| `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)             |
+| `--reverse`           | Process scenarios in reverse file order (last scenario first); useful for order-effect comparisons                 |
+| `--cooldown <secs>`   | Seconds to sleep between sequential test tasks; pair with `--concurrency 1` to avoid app rate-limiting (default: 0) |
 
 By default a single judge (`gpt-5.2:medium:limited`) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 

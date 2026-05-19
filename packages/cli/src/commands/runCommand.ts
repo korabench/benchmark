@@ -35,6 +35,13 @@ interface RunState {
 export interface ScenarioFilters {
   riskIds?: ReadonlySet<string>;
   limit?: number;
+  /** Process scenarios last-first (buffers the matched task list, then
+   * reverses, then applies limit). Used for order-effect comparisons. */
+  reverse?: boolean;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function taskTempFileName(key: string): string {
@@ -65,6 +72,25 @@ export async function* scenariosToTestTasks(
   prompts: readonly ScenarioPrompt[],
   filters: ScenarioFilters
 ): AsyncGenerator<TestTask> {
+  if (filters.reverse) {
+    // Reverse requires the full matched list up front; the corpus is small
+    // (one risk = tens of scenarios) so buffering is cheap. Limit is applied
+    // AFTER reversing, i.e. it keeps the first N of the reversed order.
+    const tasks: TestTask[] = [];
+    for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
+      for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
+        tasks.push({scenario, key});
+      }
+    }
+    tasks.reverse();
+    const capped =
+      filters.limit !== undefined ? tasks.slice(0, filters.limit) : tasks;
+    for (const task of capped) {
+      yield task;
+    }
+    return;
+  }
+
   let yielded = 0;
   for await (const scenario of readScenariosFromJsonl(filePath, filters)) {
     for (const key of kora.mapScenarioToKeys(scenario, prompts)) {
@@ -125,6 +151,16 @@ async function hasTempFiles(tempDir: string): Promise<boolean> {
 export interface RunCommandOptions {
   riskIds?: readonly string[];
   limit?: number;
+  /** Max test tasks run in parallel. Defaults to 10. Set to 1 when the target
+   * is a single shared app account (kora-app-*) to avoid concurrent-session
+   * rate-limiting / bot-flagging. */
+  concurrency?: number;
+  /** Process scenarios last-first. See ScenarioFilters.reverse. */
+  reverse?: boolean;
+  /** Milliseconds to sleep between sequential freshly-executed test tasks
+   * (skipped before the first task and for graceful-restart cache hits).
+   * Pair with concurrency=1 to space out calls to a rate-limited app. */
+  cooldownMs?: number;
 }
 
 export async function runCommand(
@@ -150,6 +186,7 @@ export async function runCommand(
   const filters: ScenarioFilters = {
     riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
     limit: options.limit,
+    reverse: options.reverse === true,
   };
   if (filters.riskIds) {
     console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
@@ -157,6 +194,16 @@ export async function runCommand(
   if (filters.limit !== undefined) {
     console.log(`Limiting to first ${filters.limit} test task(s).`);
   }
+  if (filters.reverse) {
+    console.log("Processing scenarios in REVERSE order (last scenario first).");
+  }
+  const concurrency = options.concurrency ?? 10;
+  console.log(`Concurrency: ${concurrency} parallel test task(s).`);
+  const cooldownMs = options.cooldownMs ?? 0;
+  if (cooldownMs > 0) {
+    console.log(`Cooldown between sequential tasks: ${cooldownMs / 1000}s.`);
+  }
+  let freshStarted = 0;
 
   const judgeModels: Record<string, Model> = Object.fromEntries(
     judgeModelSlugs.map(slug => [
@@ -198,38 +245,66 @@ export async function runCommand(
 
   const {failureCount, testCount, runResult} = await pipeline(
     () => scenariosToTestTasks(scenariosFilePath, prompts, filters),
-    flatTransform(10, async (task: TestTask): Promise<TaskOutcome[]> => {
-      const tempFile = path.join(tempDir, taskTempFileName(task.key));
+    flatTransform(
+      concurrency,
+      async (task: TestTask): Promise<TaskOutcome[]> => {
+        const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
-      // Check if already processed (graceful restart).
-      try {
-        const content = await fs.readFile(tempFile, "utf-8");
-        progress.increment(true);
-        const testResult = v.parse(kora.testResultType, JSON.parse(content));
-        return [{kind: "success", testResult}];
-      } catch {
-        // Not yet processed.
+        // Check if already processed (graceful restart).
+        try {
+          const content = await fs.readFile(tempFile, "utf-8");
+          progress.increment(true);
+          const testResult = v.parse(kora.testResultType, JSON.parse(content));
+          return [{kind: "success", testResult}];
+        } catch {
+          // Not yet processed.
+        }
+
+        // Cooldown: space out fresh executions to avoid app rate-limiting.
+        // Skipped before the very first fresh task and (via the early return
+        // above) for graceful-restart cache hits, so there is no trailing or
+        // leading dead time. Race-free at concurrency=1, which is the only
+        // setting where cooldown is meaningful.
+        if (cooldownMs > 0 && freshStarted > 0) {
+          console.log(
+            `\nCooldown ${cooldownMs / 1000}s before next task (${task.key})…`
+          );
+          await sleep(cooldownMs);
+        }
+        freshStarted++;
+
+        const built = await buildContext(
+          judgeModels,
+          userModel,
+          targetModelSlug,
+          targetGatewayModel,
+          task.scenario
+        );
+
+        let outcome: "completed" | "errored" = "errored";
+        try {
+          const testResult = await kora.runTest(
+            built.context,
+            task.scenario,
+            task.key
+          );
+          outcome = "completed";
+          await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
+          progress.increment(true);
+          return [{kind: "success", testResult}];
+        } catch (error) {
+          console.error(`\nTest failed for key ${task.key}: ${error}`);
+          progress.increment(false);
+          return [{kind: "failure"}];
+        } finally {
+          await built.dispose(outcome).catch(err => {
+            console.error(
+              `\nDispose failed for key ${task.key}: ${err instanceof Error ? err.message : err}`
+            );
+          });
+        }
       }
-
-      const context = await buildContext(
-        judgeModels,
-        userModel,
-        targetModelSlug,
-        targetGatewayModel,
-        task.scenario
-      );
-
-      try {
-        const testResult = await kora.runTest(context, task.scenario, task.key);
-        await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
-        progress.increment(true);
-        return [{kind: "success", testResult}];
-      } catch (error) {
-        console.error(`\nTest failed for key ${task.key}: ${error}`);
-        progress.increment(false);
-        return [{kind: "failure"}];
-      }
-    }),
+    ),
     reduce(
       (state: RunState, outcome: TaskOutcome): RunState => {
         if (outcome.kind === "failure") {

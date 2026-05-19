@@ -3,6 +3,14 @@ import * as R from "remeda";
 import {createCustomModel} from "../../models/customModel.js";
 import {createGatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
+import {isWebRunnerSlug} from "../../models/webRunnerModel.js";
+
+export interface BuiltContext {
+  context: TestContext;
+  /** Tear down the target model (e.g., release the web-runner browser
+   * session). Always safe to call; idempotent. */
+  dispose: (outcome: "completed" | "errored") => Promise<void>;
+}
 
 export async function buildContext(
   judgeModels: Record<string, Model>,
@@ -10,7 +18,7 @@ export async function buildContext(
   targetModelSlug: string,
   targetGatewayModel: Model | undefined,
   scenario: Scenario
-): Promise<TestContext> {
+): Promise<BuiltContext> {
   const targetModel = await (async () => {
     if (targetGatewayModel) {
       return targetGatewayModel;
@@ -19,7 +27,7 @@ export async function buildContext(
     return createCustomModel(targetModelSlug, scenario);
   })();
 
-  return {
+  const context: TestContext = {
     getUserResponse: async request => ({
       output: await userModel.getTextResponse(request),
     }),
@@ -35,13 +43,29 @@ export async function buildContext(
       })
     ),
   };
+
+  return {
+    context,
+    async dispose(outcome) {
+      // Only the targetModel is expected to hold disposable resources today
+      // (e.g., the WebRunnerModel keeps a browser session). Gateway models
+      // are stateless and have no `dispose`.
+      if (targetModel.dispose) {
+        await targetModel.dispose(outcome);
+      }
+    },
+  };
 }
 
 export function resolveTargetGatewayModel(
   modelsJsonPath: string,
   targetModelSlug: string
 ): Model | undefined {
-  return targetModelSlug.startsWith("custom-")
-    ? undefined
-    : createGatewayModel(modelsJsonPath, targetModelSlug);
+  if (
+    targetModelSlug.startsWith("custom-") ||
+    isWebRunnerSlug(targetModelSlug)
+  ) {
+    return undefined;
+  }
+  return createGatewayModel(modelsJsonPath, targetModelSlug);
 }
