@@ -94,14 +94,11 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
 
   async function postTurn(text: string): Promise<string> {
     if (!sessionId) throw new Error("Session not open.");
-    const r = await fetch(
-      `${config.webRunnerUrl}/sessions/${sessionId}/turn`,
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({userMessage: text}),
-      }
-    );
+    const r = await fetch(`${config.webRunnerUrl}/sessions/${sessionId}/turn`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({userMessage: text}),
+    });
     if (!r.ok) {
       throw new Error(
         `web-runner POST /sessions/${sessionId}/turn failed: ${r.status} ${await r.text()}`

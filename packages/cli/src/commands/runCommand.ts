@@ -201,9 +201,7 @@ export async function runCommand(
   console.log(`Concurrency: ${concurrency} parallel test task(s).`);
   const cooldownMs = options.cooldownMs ?? 0;
   if (cooldownMs > 0) {
-    console.log(
-      `Cooldown between sequential tasks: ${cooldownMs / 1000}s.`
-    );
+    console.log(`Cooldown between sequential tasks: ${cooldownMs / 1000}s.`);
   }
   let freshStarted = 0;
 
@@ -247,63 +245,66 @@ export async function runCommand(
 
   const {failureCount, testCount, runResult} = await pipeline(
     () => scenariosToTestTasks(scenariosFilePath, prompts, filters),
-    flatTransform(concurrency, async (task: TestTask): Promise<TaskOutcome[]> => {
-      const tempFile = path.join(tempDir, taskTempFileName(task.key));
+    flatTransform(
+      concurrency,
+      async (task: TestTask): Promise<TaskOutcome[]> => {
+        const tempFile = path.join(tempDir, taskTempFileName(task.key));
 
-      // Check if already processed (graceful restart).
-      try {
-        const content = await fs.readFile(tempFile, "utf-8");
-        progress.increment(true);
-        const testResult = v.parse(kora.testResultType, JSON.parse(content));
-        return [{kind: "success", testResult}];
-      } catch {
-        // Not yet processed.
-      }
+        // Check if already processed (graceful restart).
+        try {
+          const content = await fs.readFile(tempFile, "utf-8");
+          progress.increment(true);
+          const testResult = v.parse(kora.testResultType, JSON.parse(content));
+          return [{kind: "success", testResult}];
+        } catch {
+          // Not yet processed.
+        }
 
-      // Cooldown: space out fresh executions to avoid app rate-limiting.
-      // Skipped before the very first fresh task and (via the early return
-      // above) for graceful-restart cache hits, so there is no trailing or
-      // leading dead time. Race-free at concurrency=1, which is the only
-      // setting where cooldown is meaningful.
-      if (cooldownMs > 0 && freshStarted > 0) {
-        console.log(
-          `\nCooldown ${cooldownMs / 1000}s before next task (${task.key})…`
-        );
-        await sleep(cooldownMs);
-      }
-      freshStarted++;
-
-      const built = await buildContext(
-        judgeModels,
-        userModel,
-        targetModelSlug,
-        targetGatewayModel,
-        task.scenario
-      );
-
-      let outcome: "completed" | "errored" = "errored";
-      try {
-        const testResult = await kora.runTest(
-          built.context,
-          task.scenario,
-          task.key
-        );
-        outcome = "completed";
-        await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
-        progress.increment(true);
-        return [{kind: "success", testResult}];
-      } catch (error) {
-        console.error(`\nTest failed for key ${task.key}: ${error}`);
-        progress.increment(false);
-        return [{kind: "failure"}];
-      } finally {
-        await built.dispose(outcome).catch(err => {
-          console.error(
-            `\nDispose failed for key ${task.key}: ${err instanceof Error ? err.message : err}`
+        // Cooldown: space out fresh executions to avoid app rate-limiting.
+        // Skipped before the very first fresh task and (via the early return
+        // above) for graceful-restart cache hits, so there is no trailing or
+        // leading dead time. Race-free at concurrency=1, which is the only
+        // setting where cooldown is meaningful.
+        if (cooldownMs > 0 && freshStarted > 0) {
+          console.log(
+            `\nCooldown ${cooldownMs / 1000}s before next task (${task.key})…`
           );
-        });
+          await sleep(cooldownMs);
+        }
+        freshStarted++;
+
+        const built = await buildContext(
+          judgeModels,
+          userModel,
+          targetModelSlug,
+          targetGatewayModel,
+          task.scenario
+        );
+
+        let outcome: "completed" | "errored" = "errored";
+        try {
+          const testResult = await kora.runTest(
+            built.context,
+            task.scenario,
+            task.key
+          );
+          outcome = "completed";
+          await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
+          progress.increment(true);
+          return [{kind: "success", testResult}];
+        } catch (error) {
+          console.error(`\nTest failed for key ${task.key}: ${error}`);
+          progress.increment(false);
+          return [{kind: "failure"}];
+        } finally {
+          await built.dispose(outcome).catch(err => {
+            console.error(
+              `\nDispose failed for key ${task.key}: ${err instanceof Error ? err.message : err}`
+            );
+          });
+        }
       }
-    }),
+    ),
     reduce(
       (state: RunState, outcome: TaskOutcome): RunState => {
         if (outcome.kind === "failure") {
