@@ -95,12 +95,16 @@ describe("generateFirstUserMessage", () => {
     });
   });
 
-  it("passes maxTokens: 300 to context", async () => {
+  it("does not impose a per-request maxTokens on the user model", async () => {
+    // Hardcoded caps starve reasoning models: their <think> trace eats the
+    // budget before any content token is emitted. The provider-level
+    // `<PREFIX>_MAX_TOKENS` cap (or models.json `maxTokens`) is the right
+    // place to bound generation.
     const context = mockContext(["Clean response"]);
 
     await generateFirstUserMessage(context, risk, scenario);
 
-    expect(context.getUserResponse.mock.calls[0]![0].maxTokens).toBe(300);
+    expect(context.getUserResponse.mock.calls[0]![0].maxTokens).toBeUndefined();
   });
 });
 

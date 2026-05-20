@@ -255,7 +255,18 @@ Authentication is handled via the `AI_GATEWAY_API_KEY` environment variable.
 
 ### OpenAI-compatible providers (vLLM, …)
 
-Any model server that exposes the OpenAI Chat Completions API can be used as the target, judge, or user model. The current built-in provider is **vLLM**; the registry in `packages/cli/src/models/openAICompatibleProviders.ts` is one-line-per-provider, with a TODO list covering SGLang, Ollama, LM Studio, llama.cpp, Together, Fireworks, Groq, DeepInfra, OpenRouter, Perplexity, Cerebras, Mistral, and Anyscale.
+Any model server that exposes the OpenAI Chat Completions API can be used as the target, judge, or user model. Built-in providers are **vLLM** (`vllm/...`) and **OpenAI direct** (`openai/...`, hitting `api.openai.com` without the gateway); the registry in `packages/cli/src/models/openAICompatibleProviders.ts` is one-line-per-provider, with a TODO list covering SGLang, Ollama, LM Studio, llama.cpp, Together, Fireworks, Groq, DeepInfra, OpenRouter, Perplexity, Cerebras, Mistral, and Anyscale.
+
+Quick OpenAI direct example (no `models.json` entry needed). Put your key in `.env` next to `AI_GATEWAY_API_KEY` (see `.env.example`) and run with `yarn kora:env`, which loads `.env` via `node --env-file`:
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...
+
+yarn kora:env run openai/gpt-5-nano --judges openai/gpt-5-nano --limit 1
+```
+
+`openai/<model>` routes to `https://api.openai.com/v1` by default; set `OPENAI_BASE_URL` (also in `.env`) to point at an OpenAI-compatible proxy. Gateway-routed OpenAI models (e.g., `gpt-4o`, `gpt-5.2:high`) are still addressed by their named entries in `models.json`.
 
 There are two ways to address an OpenAI-compatible model:
 
@@ -296,6 +307,7 @@ The model id may contain `/` (HuggingFace-style namespaces) — the slug is spli
 | `baseURLEnv`  | Either `baseURL` _or_ `baseURLEnv` (exactly one)            | Env var holding the endpoint URL — preferred for local dev.                |
 | `apiKey`      | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Bearer token (discouraged inline; commit hooks may flag it).               |
 | `apiKeyEnv`   | Either `apiKey` _or_ `apiKeyEnv` (exactly one)              | Env var holding the bearer token.                                          |
+| `supportsStructuredOutputs` | No (defaults to provider built-in; `true` for vllm) | Forward the full JSON Schema via `response_format: { type: "json_schema" }` for server-side enforcement. Set `false` if the server only supports `json_object` mode. |
 
 Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limited` as the judge. Swapping in a local judge changes the metric — validate on a small subset against the default judge before reporting cross-paper numbers.
 
@@ -316,7 +328,7 @@ Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limite
     ```bash
     export VLLM_BASE_URL=http://localhost:8081/v1
     export VLLM_API_KEY=soulfuzz101            # whatever you passed to `vllm serve`
-    export VLLM_MAX_TOKENS=8192                # optional cap; recommended for thinking models
+    export VLLM_MAX_TOKENS=32768               # reasoning + JSON answer share this budget; see note below
     ```
 
 3.  **Smoke-test with `--limit 1`** before launching the full sweep:
@@ -343,7 +355,10 @@ Comparability caveat: the published korabench numbers use `gpt-5.2:medium:limite
 
 Notes for self-hosted thinking models:
 
-- `<PREFIX>_MAX_TOKENS` (e.g. `VLLM_MAX_TOKENS`) caps generation length for every slug-form call against that provider — set this when the model can otherwise emit unbounded `<think>` traces and stall the run.
+- `<PREFIX>_MAX_TOKENS` (e.g. `VLLM_MAX_TOKENS`) caps generation length for every slug-form call against that provider — set this when the model can otherwise emit unbounded `<think>` traces and stall the run. This single cap governs *all* call sites (user-message generation, target assistant responses, and judge structured-output calls); kora no longer applies its own per-site caps, so reasoning models always get the full budget to think before answering.
+- **Size the cap for thinking models.** Reasoning + the JSON answer share this budget. For Qwen3-30B-A3B-Thinking, reasoning traces routinely consume 4–12k tokens before the structured answer; complex schemas like `MechanismAssessment` add another 1–2k. Use **32768** as a comfortable default, or 65536 for belt-and-suspenders. Setting it near the model's `max_model_len` (e.g. 131072) will cause vLLM to reject any request whose `prompt_tokens + max_tokens` exceeds the context window.
+- A request that hits the cap mid-output finishes with `finish_reason="length"` and returns truncated JSON. With server-side `json_schema` enforcement, that means a malformed object → Valibot validation failure → retry. If you see retries logged for `length`-truncated responses, raise the cap.
+- The vllm provider opts into `response_format: { type: "json_schema" }` (see `supportsStructuredOutputs` in the registry), so the judge's Valibot schemas are enforced server-side by vLLM's xgrammar. Without this, the SDK would fall back to schema-less `json_object` mode and strict schemas (e.g. `MechanismAssessment`'s required M1–M7 keys) would fail validation in a retry loop.
 - The HTTP client uses a 4-hour header/body timeout (instead of undici's 10s default), so a deep reasoning trace with slow first-token latency won't drop mid-completion.
 - For per-model `maxTokens` / `temperature` / `providerOptions`, prefer the `models.json` form above — it overrides the env-level `<PREFIX>_MAX_TOKENS` cap.
 

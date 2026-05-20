@@ -76,8 +76,8 @@ describe("createModel dispatcher", () => {
 
   it("throws on a slash-bearing slug whose prefix is not a known provider", () => {
     tmpFile = writeRegistry({});
-    expect(() => createModel(tmpFile!, "openai/gpt-4o")).toThrow(
-      /Unknown model "openai\/gpt-4o"/
+    expect(() => createModel(tmpFile!, "nonprovider/some-model")).toThrow(
+      /Unknown model "nonprovider\/some-model"/
     );
   });
 });

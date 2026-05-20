@@ -9,6 +9,7 @@ const target = {
   maxTokens: undefined,
   temperature: undefined,
   providerOptions: undefined,
+  supportsStructuredOutputs: true,
 };
 
 describe("resolveServedModelId", () => {
@@ -21,7 +22,10 @@ describe("resolveServedModelId", () => {
 
   it("rewrites to served id when requested id matches `root`", async () => {
     const resolved = await resolveServedModelId(target, async () => [
-      {id: "Qwen3-30B-A3B-Thinking-2507", root: "Qwen/Qwen3-30B-A3B-Thinking-2507"},
+      {
+        id: "Qwen3-30B-A3B-Thinking-2507",
+        root: "Qwen/Qwen3-30B-A3B-Thinking-2507",
+      },
     ]);
     expect(resolved).toBe("Qwen3-30B-A3B-Thinking-2507");
   });

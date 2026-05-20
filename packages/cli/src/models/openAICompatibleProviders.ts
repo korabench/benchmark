@@ -18,6 +18,12 @@
 //   - cerebras      defaultBaseURL: https://api.cerebras.ai/v1
 //   - mistral       defaultBaseURL: https://api.mistral.ai/v1
 //   - anyscale      defaultBaseURL: https://api.endpoints.anyscale.com/v1
+//
+// Note on `openai`: the prefix routes directly to api.openai.com via the
+// Chat Completions API, bypassing the AI SDK gateway. Use it when you want
+// to hit OpenAI without the gateway (e.g., for keys that aren't gateway-
+// enabled). Gateway-routed OpenAI models are still addressed by their named
+// entries in `models.json` (e.g., `gpt-4o`, `gpt-5.2:high`).
 
 export interface OpenAICompatibleProvider {
   /** The prefix used in slugs, e.g., "vllm". */
@@ -30,6 +36,15 @@ export interface OpenAICompatibleProvider {
   readonly apiKeyEnv: string;
   /** When true, an empty/missing API key is acceptable (sent as "EMPTY"). */
   readonly apiKeyOptional?: boolean;
+  /**
+   * When true, the server supports `response_format: { type: "json_schema",
+   * json_schema: { ... } }` and the AI SDK will forward the full schema for
+   * server-side enforcement. When false (or omitted), the SDK falls back to
+   * `response_format: { type: "json_object" }`, which produces *some* JSON
+   * but does not constrain its shape — strict Valibot schemas with required
+   * keys / length bounds will fail validation and trigger retries.
+   */
+  readonly supportsStructuredOutputs?: boolean;
 }
 
 const PROVIDERS: readonly OpenAICompatibleProvider[] = [
@@ -38,6 +53,14 @@ const PROVIDERS: readonly OpenAICompatibleProvider[] = [
     baseURLEnv: "VLLM_BASE_URL",
     apiKeyEnv: "VLLM_API_KEY",
     apiKeyOptional: true,
+    supportsStructuredOutputs: true,
+  },
+  {
+    prefix: "openai",
+    defaultBaseURL: "https://api.openai.com/v1",
+    baseURLEnv: "OPENAI_BASE_URL",
+    apiKeyEnv: "OPENAI_API_KEY",
+    supportsStructuredOutputs: true,
   },
 ];
 

@@ -30,6 +30,7 @@ const VOpenAICompatibleModelConfig = v.object({
   baseURLEnv: v.optional(v.string()),
   apiKey: v.optional(v.string()),
   apiKeyEnv: v.optional(v.string()),
+  supportsStructuredOutputs: v.optional(v.boolean()),
 });
 
 const VModelConfig = v.union([

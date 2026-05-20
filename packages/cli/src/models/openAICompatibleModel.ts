@@ -35,6 +35,7 @@ interface ResolvedTarget {
   maxTokens: number | undefined;
   temperature: number | undefined;
   providerOptions: OpenAICompatibleModelConfig["providerOptions"];
+  supportsStructuredOutputs: boolean;
 }
 
 function fromParsedSlug(
@@ -62,6 +63,8 @@ function fromParsedSlug(
     maxTokens,
     temperature: undefined,
     providerOptions: undefined,
+    supportsStructuredOutputs:
+      parsed.provider.supportsStructuredOutputs ?? false,
   };
 }
 
@@ -80,6 +83,7 @@ function fromConfig(
     maxTokens: config.maxTokens,
     temperature: config.temperature,
     providerOptions: config.providerOptions,
+    supportsStructuredOutputs: config.supportsStructuredOutputs ?? false,
   };
 }
 
@@ -102,6 +106,12 @@ function buildLanguageModel(
     baseURL: target.baseURL,
     apiKey: target.apiKey,
     fetch: slowFetch,
+    // When the server can enforce a JSON Schema via
+    // `response_format: { type: "json_schema", ... }`, opt into it. Without
+    // this flag the AI SDK falls back to the schema-less `json_object` mode,
+    // which lets the model invent shape and fails strict Valibot validation
+    // (especially for our multi-key MechanismAssessment / minLength reasons).
+    supportsStructuredOutputs: target.supportsStructuredOutputs,
   });
   return provider(modelId);
 }

@@ -47,7 +47,6 @@ async function generateUserMessage(
     }
 
     const {output} = await c.getUserResponse({
-      maxTokens: 300,
       messages,
     });
 
