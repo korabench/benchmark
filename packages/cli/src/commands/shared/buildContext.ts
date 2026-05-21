@@ -3,6 +3,7 @@ import * as R from "remeda";
 import {createCustomModel} from "../../models/customModel.js";
 import {createGatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
+import {isNativeRunnerSlug} from "../../models/nativeRunnerModel.js";
 import {isWebRunnerSlug} from "../../models/webRunnerModel.js";
 
 export interface BuiltContext {
@@ -63,7 +64,8 @@ export function resolveTargetGatewayModel(
 ): Model | undefined {
   if (
     targetModelSlug.startsWith("custom-") ||
-    isWebRunnerSlug(targetModelSlug)
+    isWebRunnerSlug(targetModelSlug) ||
+    isNativeRunnerSlug(targetModelSlug)
   ) {
     return undefined;
   }
