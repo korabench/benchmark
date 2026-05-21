@@ -148,5 +148,9 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
 }
 
 export function isWebRunnerSlug(slug: string): boolean {
-  return slug.startsWith(KORA_APP_PREFIX);
+  if (!slug.startsWith(KORA_APP_PREFIX)) return false;
+  // Native targets share the kora-app- prefix but carry a platform suffix
+  // (-android, …). They are handled by NativeRunnerModel; keep them out of
+  // the web bucket so the two routings stay disjoint.
+  return !/-android$/.test(slug);
 }
