@@ -15,8 +15,9 @@ export function resolveSoulBody(dataPath: string): string {
   const envPath = process.env.SOUL_MD_PATH;
   const seedPath = path.join(dataPath, "souls", "seed.md");
 
+  const fromEnv = envPath !== undefined && envPath.length > 0;
   const {body, resolvedPath} = (() => {
-    if (envPath !== undefined && envPath.length > 0) {
+    if (fromEnv) {
       try {
         return {body: readFileSync(envPath, "utf-8"), resolvedPath: envPath};
       } catch (err) {
@@ -39,9 +40,10 @@ export function resolveSoulBody(dataPath: string): string {
   })();
 
   if (body.trim().length === 0) {
-    throw new Error(
-      `Soul body at ${resolvedPath} is empty. Set SOUL_MD_PATH or populate ${resolvedPath}.`
-    );
+    const hint = fromEnv
+      ? `Populate ${resolvedPath} or unset SOUL_MD_PATH to fall back to ${seedPath}.`
+      : `Populate ${resolvedPath} or set SOUL_MD_PATH to a different file.`;
+    throw new Error(`Soul body at ${resolvedPath} is empty. ${hint}`);
   }
 
   return body;

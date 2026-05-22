@@ -147,6 +147,22 @@ export async function continueCommand(
     allRecords.push(record);
   }
 
+  // The "soul" prompt variant is intentionally out of scope for `continue`
+  // (see plans/issue-4-soul-prompts.md, "Out of scope"). Reject up front
+  // instead of letting the run crash mid-pipeline at the soulBody invariant
+  // in conversationToNextMessagePrompt.
+  const soulIds = allRecords
+    .filter(r => r.prompt === "soul")
+    .map(r => r.id);
+  if (soulIds.length > 0) {
+    throw new Error(
+      `\`kora continue\` does not support prompt="soul" records yet ` +
+        `(${soulIds.length} found, e.g. ${soulIds.slice(0, 3).join(", ")}). ` +
+        `Filter them out with --risk-ids / --target-models, or re-run them via \`kora run --prompts soul\`. ` +
+        `See plans/issue-4-soul-prompts.md ("Out of scope").`
+    );
+  }
+
   if (allRecords.length === 0) {
     if (riskIdsFilter || targetModelsFilter) {
       throw new Error(

@@ -51,18 +51,22 @@ describe("resolveSoulBody", () => {
     expect(() => resolveSoulBody(dataPath)).toThrow(/seed\.md/);
   });
 
-  it("throws when env-resolved body is empty", () => {
+  it("throws when env-resolved body is empty; hint suggests populating the env path or unsetting", () => {
     writeFileSync(envPath, "   \n\t  \n");
     process.env.SOUL_MD_PATH = envPath;
 
     expect(() => resolveSoulBody(dataPath)).toThrow(/empty/);
     expect(() => resolveSoulBody(dataPath)).toThrow(/soul-from-env\.md/);
+    // Hint should NOT re-suggest setting SOUL_MD_PATH (already set to envPath).
+    expect(() => resolveSoulBody(dataPath)).toThrow(/unset SOUL_MD_PATH/);
+    expect(() => resolveSoulBody(dataPath)).toThrow(/seed\.md/);
   });
 
-  it("throws when seed-resolved body is empty", () => {
+  it("throws when seed-resolved body is empty; hint suggests populating seed.md or setting SOUL_MD_PATH", () => {
     writeFileSync(seedPath, "");
 
     expect(() => resolveSoulBody(dataPath)).toThrow(/empty/);
     expect(() => resolveSoulBody(dataPath)).toThrow(/seed\.md/);
+    expect(() => resolveSoulBody(dataPath)).toThrow(/set SOUL_MD_PATH/);
   });
 });
