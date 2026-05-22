@@ -161,6 +161,10 @@ export interface RunCommandOptions {
    * (skipped before the first task and for graceful-restart cache hits).
    * Pair with concurrency=1 to space out calls to a rate-limited app. */
   cooldownMs?: number;
+  /** Verbatim system-prompt body for the "soul" prompt variant. Threaded
+   * into TestContext so every runTest call sees the same string. Resolved
+   * once in cli.ts before runCommand is invoked. */
+  soulBody?: string;
 }
 
 export async function runCommand(
@@ -275,7 +279,8 @@ export async function runCommand(
           userModel,
           targetModelSlug,
           targetGatewayModel,
-          task.scenario
+          task.scenario,
+          options.soulBody
         );
 
         let outcome: "completed" | "errored" = "errored";

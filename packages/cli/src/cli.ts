@@ -16,6 +16,7 @@ import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
+import {resolveSoulBody} from "./commands/shared/resolveSoulBody.js";
 import {statsCommand} from "./commands/statsCommand.js";
 
 function findConfigFile(filename: string): string {
@@ -250,7 +251,7 @@ program
   .option("-o, --output <path>", "output results JSON file", defaultResultsPath)
   .option(
     "--prompts <prompts>",
-    "comma-separated prompts to test (default, child)",
+    "comma-separated prompts to test (default, child, soul); soul reads the system prompt body from SOUL_MD_PATH or data/souls/seed.md",
     ScenarioPrompt.list[0]
   )
   .option(
@@ -296,6 +297,13 @@ program
       );
     }
 
+    const prompts = opts.prompts
+      .split(",")
+      .map(p => v.parse(ScenarioPrompt.io, p.trim()));
+    const soulBody = prompts.includes("soul")
+      ? resolveSoulBody(dataPath)
+      : undefined;
+
     return runCommand(
       program,
       modelsJsonPath,
@@ -304,7 +312,7 @@ program
       userModel,
       opts.input,
       opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
+      prompts,
       {
         riskIds: opts.riskIds
           ?.split(",")
@@ -314,6 +322,7 @@ program
         concurrency,
         reverse: opts.reverse === true,
         cooldownMs: cooldownSeconds * 1000,
+        soulBody,
       }
     );
   });

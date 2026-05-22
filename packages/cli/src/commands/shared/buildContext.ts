@@ -17,7 +17,8 @@ export async function buildContext(
   userModel: Model,
   targetModelSlug: string,
   targetGatewayModel: Model | undefined,
-  scenario: Scenario
+  scenario: Scenario,
+  soulBody?: string
 ): Promise<BuiltContext> {
   const targetModel = await (async () => {
     if (targetGatewayModel) {
@@ -42,6 +43,7 @@ export async function buildContext(
         }),
       })
     ),
+    soulBody,
   };
 
   return {

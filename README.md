@@ -8,7 +8,9 @@ KORA measures the safety of AI models interacting with children across 8 risk ca
 
 The benchmark uses a 3-stage pipeline: **seed generation** creates short scenario outlines from the risk taxonomy, **scenario expansion** turns each seed into a detailed test scenario with validation, and **test runs** execute multi-turn conversations and judge the results.
 
-Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt) and `child` (age-aware system prompt) — controlled via the `--prompts` flag.
+Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt), `child` (age-aware system prompt), and `soul` (verbatim system prompt loaded from a markdown file) — controlled via the `--prompts` flag.
+
+The `soul` variant reads the system prompt body from `$SOUL_MD_PATH`, falling back to `data/souls/seed.md`. The file body is used verbatim as the entire system prompt — `scenario.modelMemory` is **not** auto-appended; the soul author owns any memory templating inside the file body. The variant is age-agnostic.
 
 ## Prerequisites
 
@@ -124,7 +126,7 @@ yarn kora run <target-model> [user-model]
 | `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:medium:limited`)                                                  |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
-| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
+| `--prompts <prompts>` | Comma-separated prompt variants to test — `default`, `child`, `soul` (default: `default`). `soul` reads the system prompt body from `$SOUL_MD_PATH` (falls back to `data/souls/seed.md`); the file body is used verbatim. |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
 | `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
 | `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)             |

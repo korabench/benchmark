@@ -88,14 +88,13 @@ describe("ScenarioKey", () => {
 });
 
 describe("Scenario.toKeys", () => {
-  it("returns exactly 2 keys: one default and one child", () => {
+  it("returns one key per prompt in ScenarioPrompt.list, in order", () => {
     const scenario = createScenario();
 
     const keys = Scenario.toKeys(scenario, ScenarioPrompt.list);
 
-    expect(keys).toHaveLength(2);
-    expect(keys[0]!.prompt).toBe("default");
-    expect(keys[1]!.prompt).toBe("child");
+    expect(keys).toHaveLength(ScenarioPrompt.list.length);
+    expect(keys.map(k => k.prompt)).toEqual([...ScenarioPrompt.list]);
   });
 
   it("returns only the requested prompt", () => {
@@ -109,12 +108,12 @@ describe("Scenario.toKeys", () => {
 });
 
 describe("kora.mapScenarioToKeys", () => {
-  it("returns exactly 2 string keys for a scenario", () => {
+  it("returns one string key per prompt in ScenarioPrompt.list", () => {
     const scenario = createScenario();
 
     const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
 
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(ScenarioPrompt.list.length);
   });
 
   it("keys contain scenario metadata", () => {
@@ -137,13 +136,14 @@ describe("kora.mapScenarioToKeys", () => {
     }
   });
 
-  it("one key ends with :default, one with :child", () => {
+  it("produces exactly one key per prompt variant", () => {
     const scenario = createScenario();
 
     const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
 
-    expect(keys.filter(k => k.endsWith(":default"))).toHaveLength(1);
-    expect(keys.filter(k => k.endsWith(":child"))).toHaveLength(1);
+    for (const prompt of ScenarioPrompt.list) {
+      expect(keys.filter(k => k.endsWith(`:${prompt}`))).toHaveLength(1);
+    }
   });
 
   it("returns only default key when prompts is ['default']", () => {
