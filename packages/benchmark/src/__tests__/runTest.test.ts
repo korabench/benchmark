@@ -74,6 +74,7 @@ describe("kora.runTest", () => {
   const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
+  const soulKey = keys.find(k => k.endsWith(":soul"))!;
 
   it("produces a 3-turn conversation with 6 messages", async () => {
     const context = createTestContext();
@@ -156,6 +157,24 @@ describe("kora.runTest", () => {
     await kora.runTest(context, scenario, defaultKey);
 
     expect(context.judgeModel.getResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes soulBody verbatim as the system prompt when prompt='soul'", async () => {
+    const context = createTestContext();
+    const soulBody = "SOUL_BODY_X — verbatim system prompt for SOULFuzz.";
+    context.soulBody = soulBody;
+
+    await kora.runTest(context, scenario, soulKey);
+
+    const calls = (
+      context.getAssistantResponse as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    for (const [request] of calls) {
+      const systemMessage = request.messages[0]!;
+      expect(systemMessage.role).toBe("system");
+      expect(systemMessage.content).toBe(soulBody);
+    }
   });
 
   it("judgeAssessments length matches number of judge models", async () => {

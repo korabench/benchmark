@@ -483,6 +483,8 @@ export const kora = Benchmark.new({
         const modelPrompt = conversationToNextMessagePrompt({
           ageRange: promptAgeRange,
           modelMemory: scenario.modelMemory,
+          prompt: key.prompt,
+          soulBody: c.soulBody,
         });
         const {output} = await c.getAssistantResponse({
           messages: [

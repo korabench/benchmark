@@ -42,6 +42,9 @@ export interface TestContext {
   judgeModels: Record<string, JudgeModel>;
   /** Optional observability hook. No-op when undefined. */
   trace?: (event: TraceEvent) => void;
+  /** Verbatim system prompt body for the "soul" prompt variant. Required
+   * when any test key in this run has prompt="soul"; ignored otherwise. */
+  soulBody?: string;
 }
 
 export interface GenerationEvent<T> {
