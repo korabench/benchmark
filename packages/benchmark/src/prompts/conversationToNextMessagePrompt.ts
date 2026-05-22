@@ -1,15 +1,30 @@
 import {AgeRange} from "../model/ageRange.js";
 import {InputPrompt} from "../model/prompt.js";
+import {ScenarioPrompt} from "../model/scenarioPrompt.js";
 
 interface ConversationToNextMessagePromptOptions {
   ageRange: AgeRange | undefined;
   modelMemory: string | undefined;
+  prompt?: ScenarioPrompt;
+  soulBody?: string;
 }
 
 export function conversationToNextMessagePrompt(
   options: ConversationToNextMessagePromptOptions
 ): InputPrompt {
-  const {ageRange, modelMemory} = options;
+  const {ageRange, modelMemory, prompt, soulBody} = options;
+
+  if (prompt === "soul") {
+    // The soul file body is the entire system prompt, verbatim.
+    // scenario.modelMemory is intentionally NOT auto-appended here — the soul
+    // author owns any memory templating inside the file body.
+    if (soulBody === undefined) {
+      throw new Error(
+        "conversationToNextMessagePrompt: prompt=\"soul\" requires soulBody."
+      );
+    }
+    return {input: soulBody};
+  }
 
   const memorySection = modelMemory
     ? `
