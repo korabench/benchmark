@@ -43,9 +43,12 @@ scenario changes.
 ### `packages/benchmark/src/prompts/conversationToNextMessagePrompt.ts`
 - Add optional `prompt?: ScenarioPrompt` and `soulBody?: string` to the
   options interface.
-- When `prompt === "soul"`: return `{input: soulBody}` verbatim. Throw with a
-  clear message if `soulBody` is missing (defensive invariant; the CLI layer
-  guarantees this).
+- When `prompt === "soul"`: return `{input: soulBody}` verbatim. Throw if
+  `soulBody` is missing — this is the single owner of the "soul requires a
+  body" invariant.
+- Add an inline comment in the soul branch noting that `scenario.modelMemory`
+  is intentionally NOT auto-appended for soul; the file body is the entire
+  system prompt and the soul author owns any memory templating.
 - Otherwise: unchanged `ageRange` switch.
 
 ### `packages/benchmark/src/benchmark.ts`
@@ -53,10 +56,12 @@ scenario changes.
   test key's prompt is `"soul"`.
 
 ### `packages/benchmark/src/kora.ts`
-- In `runTest` and `runJudges`, pass `prompt: key.prompt` and
-  `soulBody: c.soulBody` into `conversationToNextMessagePrompt`.
-- Add a runtime check: `key.prompt === "soul"` with `c.soulBody === undefined`
-  throws naming `SOUL_MD_PATH`.
+- In `runTest` only, pass `prompt: key.prompt` and `soulBody: c.soulBody`
+  into `conversationToNextMessagePrompt`. `runJudges` is untouched — it
+  doesn't call `conversationToNextMessagePrompt` and has no access to
+  `TestContext`, so it has nothing to thread.
+- No runtime check here; the "soulBody required for soul" invariant lives
+  in `conversationToNextMessagePrompt` (single owner).
 
 ### `packages/cli/src/commands/shared/resolveSoulBody.ts` (new)
 - Exported function `resolveSoulBody(dataPath: string): string`:
@@ -64,6 +69,8 @@ scenario changes.
      with a message naming `SOUL_MD_PATH` and the failing path.
   2. Else read `path.join(dataPath, "souls", "seed.md")`. Missing → throw
      with a message naming both `SOUL_MD_PATH` and the seed path.
+  3. After reading, if `body.trim().length === 0` → throw naming the
+     resolved path (catches truncated files, bad symlinks, blanked seeds).
 - Pure (no side effects beyond file IO).
 
 ### `packages/cli/src/commands/shared/buildContext.ts`
@@ -84,13 +91,27 @@ scenario changes.
 
 ### `packages/cli/src/commands/shared/__tests__/resolveSoulBody.test.ts` (new)
 - `SOUL_MD_PATH` set & readable → returns file contents.
+- `SOUL_MD_PATH` set but file unreadable → throws naming `SOUL_MD_PATH` and
+  the failing path (typo / moved-file case).
 - `SOUL_MD_PATH` unset, seed present → returns seed contents.
 - Both missing → throws naming `SOUL_MD_PATH`.
+- Empty / whitespace-only body (either source) → throws naming the resolved
+  path.
 
 ### `packages/benchmark/src/prompts/__tests__/conversationToNextMessagePrompt.test.ts` (new or extended)
 - `prompt: "soul", soulBody: "X"` → `{input: "X"}`.
 - `prompt: "soul"` without `soulBody` → throws.
 - Existing `default` / `child` cases remain green.
+
+### `packages/benchmark/src/model/__tests__/scenarioPrompt.test.ts` (new)
+- `ScenarioPrompt.toAgeRange("soul", any)` returns `undefined`.
+- Existing `default` / `child` mapping remains.
+
+### `packages/benchmark/src/__tests__/runTest.test.ts` (extended)
+- Add one integration test: stub `TestContext` with `soulBody = "SOUL_BODY_X"`,
+  run a 1-turn scenario with a key whose `prompt === "soul"`, capture the
+  system content sent to `getAssistantResponse`, assert it equals
+  `"SOUL_BODY_X"` verbatim. Pins the wiring from CLI → TestContext → prompt.
 
 ## Verification
 
@@ -104,10 +125,50 @@ scenario changes.
 - `--prompts default` and `--prompts child` smoke runs to confirm no
   regression.
 
+## Documentation
+
+- README: add a short paragraph under the existing prompts section noting
+  `soul` as a third option, the `SOUL_MD_PATH` / `data/souls/seed.md`
+  resolution order, and that the file body is the full system prompt
+  (no auto-appended memory).
+
 ## Out of scope
 
 - HCB judge registration (SOULFuzz touch point #4).
 - `custom-cfa-*` model slugs and `packages/cfa/` workspace.
 - `intimacyCalibration` mechanism.
-- Wiring `soul` through `continueCommand` / `reassessCommand`.
+- Wiring `soul` through `continueCommand` / `reassessCommand`. Note:
+  `continueCommand` would currently throw on a soul-prompted transcript
+  because it calls `conversationToNextMessagePrompt` without `soulBody`;
+  `reassessCommand` is unaffected (judge prompts don't use the soul body).
 - Persisting the soul body / hash into the result JSON.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | — |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | — |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 1 arch + 3 code-quality + 2 test-gap, all incorporated |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | n/a | No UI surface |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | — |
+
+- **UNRESOLVED:** 0
+- **VERDICT:** ENG CLEARED — ready to implement
+
+### Plan changes from this review
+
+- **A1 (arch):** `kora.ts` instruction corrected — `runJudges` is untouched
+  (no access to `TestContext`, doesn't call `conversationToNextMessagePrompt`).
+- **C1 (quality):** Soul-body invariant lives only in
+  `conversationToNextMessagePrompt`. `runTest` just forwards.
+- **C2 (quality):** `resolveSoulBody` rejects empty/whitespace bodies.
+- **C3 (quality):** Inline comment in soul branch + README note documenting
+  that `scenario.modelMemory` is not auto-appended for soul.
+- **T1 (test):** Add `runTest` integration test pinning the
+  CLI → TestContext → system-prompt wiring for `prompt="soul"`.
+- **T2 (test):** Add `resolveSoulBody` test for the
+  `SOUL_MD_PATH-set-but-unreadable` case (distinct error from "both missing").
+- **T3 (test):** Add empty-body test under `resolveSoulBody`.
+- **T4 (test):** Add `scenarioPrompt.test.ts` covering
+  `toAgeRange("soul", _) === undefined`.
