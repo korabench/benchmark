@@ -299,6 +299,174 @@ Then use the slug on the command line like any other model:
 yarn kora run custom-my-model
 ```
 
+## Running against real apps (web-runner / native-runner)
+
+Two custom-model adapters route to the sibling [`kora-apps`](https://github.com/korabench/apps) repo so the benchmark can target real product UIs (ChatGPT.com, TikTok's Tako, …) instead of API models. Both runners speak the same HTTP contract (`POST /sessions`, `POST /sessions/:id/turn`, `DELETE /sessions/:id`); only the underlying transport differs.
+
+The slug suffix decides the routing (see `packages/cli/src/models/customModel.ts`):
+
+| Slug shape                    | Runner          | Default URL             | URL override         | Auth (optional)        |
+| ----------------------------- | --------------- | ----------------------- | -------------------- | ---------------------- |
+| `kora-app-<name>-android`     | `native-runner` | `http://localhost:7200` | `NATIVE_RUNNER_URL`  | `NATIVE_RUNNER_API_KEY` |
+| `kora-app-<name>` (no suffix) | `web-runner`    | `http://localhost:7100` | `WEB_RUNNER_URL`     | `WEB_RUNNER_API_KEY`   |
+| anything else                 | AI Gateway      | n/a                     | n/a                  | `AI_GATEWAY_API_KEY`   |
+
+Both runners live in `../kora-apps`. Set up that repo once: `yarn install` and `cp .env.example .env`.
+
+### Web-runner (browser-based apps)
+
+Drives the installed Google Chrome (Stagehand `env: "LOCAL"`, with `LOCAL_REAL_CHROME=true` by default) against the app's web UI through a persistent profile. Playwright's bundled Chromium is intentionally not used — it gets flagged by Cloudflare/DataDome — and `resolveChromeExecutable()` throws loudly if a real Chrome install isn't found. Registered drivers today: `gemini`, `character-ai`, `chatgpt`, `copilot`, `meta-ai`, `perplexity`, `polybuzz`, `schoolai`, `snapchat-myai`, `khanmigo`, `magicschool`.
+
+**1. Configure `../kora-apps/.env`:**
+
+| Env                                            | Required                       | Purpose |
+| ---------------------------------------------- | ------------------------------ | ------- |
+| `ANTHROPIC_API_KEY`                            | yes                            | Stagehand's `page.act` / `page.extract` inner LLM |
+| `STAGEHAND_MODEL_NAME`                         | no (`claude-haiku-4-5-...`)    | Override Stagehand's internal model |
+| `STAGEHAND_MODEL_API_KEY`                      | no (falls back to Anthropic)   | Separate key for Stagehand's LLM |
+| `PORT`                                         | no (`7100`)                    | HTTP server port |
+| `ACCOUNTS_DIR`                                 | no (`./accounts`)              | File-based account directory |
+| `WEB_RUNNER_API_KEY`                           | no                             | Require `Authorization: Bearer …` on requests |
+| `LOCAL_REAL_CHROME`                            | no (`true`)                    | Launch the installed Google Chrome via a persistent profile. Defaults on — set `false` only if you have a specific reason to use Playwright's bundled Chromium (expect anti-bot blocks) |
+| `LOCAL_CHROME_PATH`                            | no (auto-detect)               | Absolute path to the Chrome binary. Auto-detects per platform if unset; throws if no install is found |
+| `LOCAL_PROFILE_BASE_DIR`                       | no (`./browser-profiles`)      | Base dir for per-(app, account) persistent profiles |
+| `HUMAN_UNBLOCK` / `HUMAN_UNBLOCK_TIMEOUT_MS`   | no (`true` / `300000`)         | Pause headed sessions on captcha/login wall and wait for a human to clear it |
+| `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` / `PROXY_BYPASS` / `PROXY_APPS` | conditional | Bright Data residential/ISP proxy. All four required to activate. `PROXY_APPS` is a comma-separated allowlist (currently used for `khanmigo`) |
+| `WEB_RUNNER_ENV=BROWSERBASE` + `BROWSERBASE_API_KEY` + `BROWSERBASE_PROJECT_ID` | conditional | Phase 2 cloud sessions; leave unset for local |
+
+**2. Provision per-app accounts:**
+
+- **Anonymous (guest) apps** — Gemini accepts guest traffic. No account needed.
+- **Email magic-link or password apps** — log in once interactively and capture cookies + localStorage:
+
+  ```bash
+  cd ../kora-apps
+  yarn workspace @korabench/apps-web-runner harvest \
+    --app character-ai \
+    --output ./accounts/character-ai.json \
+    --email you@example.com
+  ```
+
+  Account JSONs land under `../kora-apps/accounts/<app>.json`. Cookies typically last weeks; re-harvest when the driver returns `BlockedReason="login_required"`. When the HTTP server can't find an account file for an app, it falls back to anonymous — fine for Gemini, flagged `login_required` by drivers that require auth.
+
+**3. Confirm Google Chrome is installed:**
+
+The runner launches the installed Chrome, not Playwright's bundled Chromium. If `LOCAL_CHROME_PATH` is unset it auto-detects per platform (`/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` on macOS); otherwise point `LOCAL_CHROME_PATH` at the binary. Only run `yarn workspace @korabench/apps-web-runner exec -- playwright install chromium` if you've intentionally set `LOCAL_REAL_CHROME=false`.
+
+**4. Boot the web-runner:**
+
+```bash
+cd ../kora-apps
+yarn web-runner:dev   # tsx watch --env-file=../../.env src/server.ts on :7100
+```
+
+Before wiring up the benchmark, smoke-test a single driver in isolation:
+
+```bash
+yarn workspace @korabench/apps-web-runner smoke --app gemini --message "What's 2+2?"
+yarn workspace @korabench/apps-web-runner smoke \
+  --app character-ai --account ./accounts/character-ai.json --message "Hi"
+```
+
+**5. Run the benchmark:**
+
+The default input is `data/scenarios.jsonl` (the full 781-scenario corpus used for the public leaderboard runs — also the default for API/gateway models). Web targets can take this directly:
+
+```bash
+cd /Users/thibaut/dev/kora-benchmark
+yarn kora run kora-app-gemini \
+  --concurrency 1 \
+  -o data/gemini-run.json
+```
+
+`--concurrency 1` is required because every `kora-app-*` slug today uses a single shared session/account. `WEB_RUNNER_URL` defaults to `http://localhost:7100`, so you only need to set it explicitly when the runner is on a different host or port (e.g. a worktree on `:7101`).
+
+**Worked example: smoke-test against Gemini (anonymous)**
+
+Gemini accepts guest traffic, so no account-harvest step is needed — useful for verifying the whole pipeline in one shot:
+
+```bash
+# Terminal 1 — boot the runner.
+cd ../kora-apps
+yarn web-runner:dev
+
+# Terminal 2 — first confirm the driver works in isolation, then run the bench.
+cd ../kora-apps
+yarn workspace @korabench/apps-web-runner smoke --app gemini --message "What's 2+2?"
+
+cd /Users/thibaut/dev/kora-benchmark
+yarn kora run kora-app-gemini \
+  --concurrency 1 \
+  --limit 2 \
+  -o data/gemini-smoke.json
+```
+
+`--limit 2` caps the run at two scenarios so you can sanity-check end-to-end (session opens, turns flow, judges produce scores, results write to disk) before committing to the full 781-scenario corpus.
+
+### Native-runner (Android apps)
+
+Drives a physical Android device via [`agent-device`](https://www.npmjs.com/package/agent-device) (pinned in `../kora-apps/packages/native-runner/package.json`). Registered drivers today: `tiktok-android` (slug `kora-app-tiktok-android`). See `../kora-apps/MOBILE_TESTING.md` for the full operator guide; the summary below covers a local run end-to-end.
+
+**1. Prep the phone:**
+
+- Plug it in, unlock it, leave the screen on (`agent-device` cannot wake or unlock).
+- Confirm it's reachable and no stale session is holding it:
+
+  ```bash
+  npx agent-device devices --platform android
+  npx agent-device session list
+  npx agent-device --session <other> close   # if needed
+  ```
+
+**2. Configure `../kora-apps/.env`:**
+
+| Env                            | Required | Default          | Purpose |
+| ------------------------------ | -------- | ---------------- | ------- |
+| `ANTHROPIC_API_KEY`            | yes      | —                | Vision fallback when the AX tree truncates replies (Tako case) |
+| `PORT`                         | no       | `7200`           | HTTP server port |
+| `NATIVE_RUNNER_API_KEY`        | no       | —                | Require `Authorization: Bearer …` on requests |
+| `AGENT_DEVICE_SESSION_NAME`    | no       | `kora-native`    | `agent-device --session <name>` identifier |
+| `SESSION_ACQUIRE_TIMEOUT_MS`   | no       | `1800000` (30 min) | How long a queued `/sessions` request waits for the device |
+| `SESSION_IDLE_TIMEOUT_MS`      | no       | `600000` (10 min)  | Idle GC threshold |
+
+No account-harvest step exists for native — log into the app once on the device by hand, leave it logged in.
+
+**3. Boot the native-runner:**
+
+```bash
+cd ../kora-apps/packages/native-runner
+yarn dev   # tsx watch --env-file=../../.env src/server.ts on :7200
+```
+
+**4. Run the benchmark:**
+
+Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file exists only to keep scenarios short enough for the on-device app's input window (e.g. Tako's). Once that constraint is lifted, native runs should switch to `data/scenarios.jsonl` like the web targets.
+
+```bash
+cd /Users/thibaut/dev/kora-benchmark
+yarn kora run kora-app-tiktok-android \
+  --concurrency 1 \
+  --cooldown 60 \
+  -i data/104-scenario-apps.strict.jsonl \
+  -o data/tiktok-android-run.json
+```
+
+For a smoke test, add `--limit 2` to cap the run at two scenarios — see `data/2026-05-26-tiktok-android-smoke/` for what a small native run's output looks like.
+
+Two flags are non-negotiable for native targets:
+
+- `--concurrency 1` — one physical device, one `agent-device` session. Higher values just queue requests behind `SESSION_ACQUIRE_TIMEOUT_MS`.
+- `--cooldown 60`–`120` — sleeps between sequential test tasks. Tako rate-limits aggressively when fired back-to-back; ChatGPT Android trips DataDome/Cloudflare interstitials without one. Recommended starting values: 60–120s for `tiktok-android`, 120s for `chatgpt-android` (once registered).
+
+### Handling blocked sessions
+
+Both runners surface block states as `blockedReason` on a `200` response (the benchmark treats them as scenario failures, not crashes):
+
+- Web: `captcha`, `rate_limit`, `login_required`, `country_block`, `account_suspended`, `unknown_block` → `BlockedAppError`
+- Native: `device_locked`, `device_busy`, `login_required`, `rate_limit`, `unknown_block` → `BlockedNativeAppError`
+
+If a driver's selectors drift (web only), runs fail with `DriverCalibrationError`. Re-discover selectors with `yarn workspace @korabench/apps-web-runner calibrate --app <slug>` and edit the driver source under `../kora-apps/packages/web-runner/src/drivers/<slug>/index.ts`.
+
 ## Evaluating a different model
 
 To evaluate a new model, only change the `<target-model>` argument in the `run` command. Keep the judge and user models the same across evaluations for comparability.
