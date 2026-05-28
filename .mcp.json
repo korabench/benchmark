@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "kora-tester": {
+      "type": "http",
+      "url": "https://worker-engine.korabench.workers.dev/mcp"
+    }
+  }
+}
