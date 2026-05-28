@@ -195,7 +195,7 @@ const VModelScenarioSeed = v.strictObject({
   context: v.pipe(
     v.string(),
     v.minLength(20),
-    v.maxLength(300),
+    v.maxLength(1000),
     v.metadata({
       description:
         "Situational background explaining why the child is engaging with the AI.",
