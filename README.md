@@ -405,17 +405,20 @@ yarn kora run kora-app-gemini \
 
 ### Native-runner (Android apps)
 
-Drives a physical Android device via [`agent-device`](https://www.npmjs.com/package/agent-device) (pinned in `../kora-apps/packages/native-runner/package.json`). Registered drivers today: `tiktok-android` (slug `kora-app-tiktok-android`). See `../kora-apps/MOBILE_TESTING.md` for the full operator guide; the summary below covers a local run end-to-end.
+Drives a physical Android device via [`agent-device`](https://www.npmjs.com/package/agent-device) (pinned `^0.16.7` in `../kora-apps/packages/native-runner/package.json`). Registered drivers today: `tiktok-android` (slug `kora-app-tiktok-android`) and `tiktok-ios`. See `../kora-apps/MOBILE_TESTING.md` for the full operator guide; the summary below covers a local run end-to-end.
+
+> **iOS not yet routable via the CLI:** slug routing keys on the `-android` suffix only (`NATIVE_SUFFIXES` in `packages/cli/src/models/nativeRunnerModel.ts`), so `kora-app-tiktok-ios` would fall through to the web-runner. The `tiktok-ios` driver exists in the native-runner but needs `-ios` (or platform-explicit) routing before it can run end-to-end.
 
 **1. Prep the phone:**
 
 - Plug it in, unlock it, leave the screen on (`agent-device` cannot wake or unlock).
-- Confirm it's reachable and no stale session is holding it:
+- Confirm it's reachable and no stale session is holding it. agent-device lives in the kora-apps workspace (the pnpm linker does not hoist its CLI to a repo root), so invoke it through that workspace:
 
   ```bash
-  npx agent-device devices --platform android
-  npx agent-device session list
-  npx agent-device --session <other> close   # if needed
+  cd ../kora-apps
+  yarn workspace @korabench/apps-native-runner exec agent-device devices --platform android
+  yarn workspace @korabench/apps-native-runner exec agent-device session list
+  yarn workspace @korabench/apps-native-runner exec agent-device --session <other> close   # if needed
   ```
 
 **2. Configure `../kora-apps/.env`:**
