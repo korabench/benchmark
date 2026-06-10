@@ -253,9 +253,7 @@ describe("generateScenarioSeeds distribution mode", () => {
 
     expect(calls).toHaveLength(60);
     expect(seeds).toHaveLength(60);
-    expect(calls.every(c => c.userPrompt.includes("PINNED DEMOGRAPHICS"))).toBe(
-      true
-    );
+    expect(calls.every(c => c.userPrompt.includes("PINNED VALUES"))).toBe(true);
   });
 
   it("overwrites LLM demographic drift with the pinned values", async () => {
@@ -294,9 +292,9 @@ describe("generateScenarioSeeds distribution mode", () => {
     });
   });
 
-  it("clamps childAge to the pinned band even if the LLM drifts", async () => {
+  it("overrides LLM-supplied childAge with the pinned integer in-bracket", async () => {
     const calls: Call[] = [];
-    // LLM returns age=17 regardless — must be clamped to the pinned band.
+    // LLM returns age=17 regardless — must be replaced with the pinned value.
     const context = makeReturn({...makeFakeSeed(), childAge: 17}, calls);
 
     const seeds = await collectSeeds(context, {
@@ -306,10 +304,72 @@ describe("generateScenarioSeeds distribution mode", () => {
       randomSeed: 3,
     });
 
+    const inBracket = {
+      "7to9": new Set([7, 8, 9]),
+      "10to12": new Set([10, 11, 12]),
+      "13to17": new Set([13, 14, 15, 16, 17]),
+    } as const;
     for (const s of seeds) {
-      if (s.ageRange === "7to9") expect(s.childAge).toBeLessThanOrEqual(9);
-      if (s.ageRange === "10to12") expect([10, 11, 12]).toContain(s.childAge);
+      expect(Number.isInteger(s.childAge)).toBe(true);
+      expect(inBracket[s.ageRange].has(s.childAge)).toBe(true);
     }
+  });
+
+  it("overrides LLM-supplied maturity with the pinned uniform allocation", async () => {
+    const calls: Call[] = [];
+    // LLM always returns medium/medium — overwritten by the uniform allocation.
+    const context = makeReturn(
+      {
+        ...makeFakeSeed(),
+        childCognitiveMaturity: "medium",
+        childEmotionalMaturity: "medium",
+      },
+      calls
+    );
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 21,
+    });
+
+    expect(R.countBy(seeds, s => s.childCognitiveMaturity)).toEqual({
+      low: 20,
+      medium: 20,
+      high: 20,
+    });
+    expect(R.countBy(seeds, s => s.childEmotionalMaturity)).toEqual({
+      low: 20,
+      medium: 20,
+      high: 20,
+    });
+  });
+
+  it("pins riskSignalType at 20/40/40 on every risk in distribution mode", async () => {
+    const calls: Call[] = [];
+    // LLM always returns "subtle" — should be overwritten by the pinned allocation.
+    const context = makeReturn(
+      {...makeFakeSeed(), riskSignalType: "subtle"},
+      calls
+    );
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 20,
+      riskIds: ["bias_and_stereotyping"],
+      randomSeed: 4,
+    });
+
+    expect(seeds).toHaveLength(20);
+    expect(R.countBy(seeds, s => s.riskSignalType)).toEqual({
+      direct: 4,
+      subtle: 8,
+      ambiguous: 8,
+    });
+    expect(calls.every(c => c.userPrompt.includes("Risk Signal Type:"))).toBe(
+      true
+    );
   });
 
   it("cycles motivations evenly (60 seeds / 10 motivations = 6 each)", async () => {
@@ -447,6 +507,34 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
     expect(
       calls.filter(c => c.userPrompt.includes("Flavor id: b_gradual"))
     ).toHaveLength(8);
+  });
+
+  it("overrides the allocator's riskSignalType when the pinned flavor sets one (privacy 7.3)", async () => {
+    const calls: Call[] = [];
+    // LLM always returns "subtle" — should be overwritten by the flavor-specific
+    // riskSignalType (a_direct→direct, b_gradual→subtle, d_authority/e_fictional→ambiguous).
+    const context = makeReturn(
+      {...makeFakeSeed(), riskSignalType: "subtle"},
+      calls
+    );
+
+    const seeds = await collectSeeds(context, {
+      distribution: census,
+      totalSeeds: 20,
+      riskIds: ["privacy_and_personal_data_protection"],
+      randomSeed: 1,
+    });
+
+    const flavorSignalPairs = R.countBy(
+      seeds,
+      s => `${s.scenarioFlavorId}:${s.riskSignalType}`
+    );
+    expect(flavorSignalPairs).toEqual({
+      "a_direct:direct": 5,
+      "b_gradual:subtle": 8,
+      "d_authority:ambiguous": 4,
+      "e_fictional:ambiguous": 3,
+    });
   });
 
   it("leaves scenarioFlavorId undefined for risks without flavors", async () => {

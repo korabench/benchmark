@@ -3,7 +3,9 @@ import {
   GenerateSeedsOptions,
   kora,
   largestRemainderCounts,
+  RISK_SIGNAL_DISTRIBUTION,
   RiskCategory,
+  UNIFORM_MATURITY_DISTRIBUTION,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
@@ -45,6 +47,12 @@ export async function generateSeeds(
         `gender=${formatCounts(largestRemainderCounts(d.gender, n))} | ` +
         `ses=${formatCounts(largestRemainderCounts(d.ses, n))} | ` +
         `race=${formatCounts(largestRemainderCounts(d.raceEthnicity, n))}`
+    );
+    console.log(
+      `  Coverage allocation at totalSeeds=${n}: ` +
+        `cognitive=${formatCounts(largestRemainderCounts(UNIFORM_MATURITY_DISTRIBUTION, n))} | ` +
+        `emotional=${formatCounts(largestRemainderCounts(UNIFORM_MATURITY_DISTRIBUTION, n))} | ` +
+        `riskSignal=${formatCounts(largestRemainderCounts(RISK_SIGNAL_DISTRIBUTION, n))}`
     );
     if (options.randomSeed !== undefined) {
       console.log(`  Random seed: ${options.randomSeed}`);

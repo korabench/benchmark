@@ -56,14 +56,20 @@ yarn kora generate-seeds [model]
 | `--age-ranges <ranges>`    | Comma-separated age ranges to generate seeds for (default: all)                       |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict generation to (default: all risks)               |
 | `--motivations <names>`    | Comma-separated motivation names to restrict generation to (default: all motivations) |
-| `--distribution <preset-or-path>` | Pin persona demographics (age band, gender, SES, race/ethnicity) to a target population. Preset name (e.g. `us-census-2020`) or path to a JSON distribution file. Requires `--total-seeds`. |
+| `--distribution <preset-or-path>` | Pin persona demographics (age band, gender, SES, race/ethnicity) to a target population, plus the benchmark-coverage axes (specific child age, cognitive/emotional maturity, and `riskSignalType` at 20/40/40 across every risk). Preset name (e.g. `us-census-2020`) or path to a JSON distribution file. Requires `--total-seeds`. |
 | `--random-seed <int>`      | RNG seed for reproducible demographic allocation (distribution mode only)             |
 
 Use `--total-seeds` for small, focused runs where you want an exact scenario count per risk (e.g. `--total-seeds 24 --risk-ids privacy_and_personal_data_protection`). It randomly samples `count` distinct (age × motivation) combinations and generates one seed for each; it errors if `count` exceeds the number of combos available for a risk.
 
 #### Population-distribution mode
 
-When `--distribution` is set, the CLI pre-allocates each persona's demographics so the generated population's marginals match a target distribution. Each dimension (age band, gender, SES, race/ethnicity) is allocated independently using the largest-remainder (Hamilton) method, then shuffled and zipped into personas. Within a pinned age band the LLM still picks the specific age. `childSES` (`low` / `middle` / `high`) is threaded into the expansion prompt so `childBackground` narratives stay consistent with the bucket.
+When `--distribution` is set, the CLI pre-allocates each persona's demographics so the generated population's marginals match a target distribution. Each demographic dimension (age band, gender, SES, race/ethnicity) is allocated independently using the largest-remainder (Hamilton) method, then shuffled and zipped into personas. `childSES` (`low` / `middle` / `high`) is threaded into the expansion prompt so `childBackground` narratives stay consistent with the bucket.
+
+To prevent benchmark-coverage drift on the LLM-generated fields, three additional axes are pinned alongside demographics:
+
+- **`childAge`** — drawn uniformly from the integer ages of each persona's pinned bracket (`{7,8,9}` / `{10,11,12}` / `{13,14,15,16,17}`) rather than chosen by the LLM.
+- **`childCognitiveMaturity`** and **`childEmotionalMaturity`** — pinned to a hardcoded uniform `low / medium / high` split (≈33/33/33 via largest-remainder).
+- **`riskSignalType`** — pinned across every risk at 20% direct / 40% subtle / 40% ambiguous so the dataset always exercises the explicit-signal path. Unconstrained generation drifts heavily toward `subtle`/`ambiguous` on most risks (we observed 0% direct on some risks at N=30), which would leave large coverage gaps without this floor.
 
 Example:
 
@@ -75,7 +81,7 @@ yarn kora generate-seeds gpt-4o \
   --output /tmp/preview.jsonl
 ```
 
-At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity). Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), 31/15/8/3/3 (race/ethnicity), 20/20/20 on each maturity axis, and 12/24/24 (direct/subtle/ambiguous) on `riskSignalType`. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema. The maturity and risk-signal targets are hardcoded benchmark constants and not configurable via the population-distribution file.
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, distribution mode allocates flavors via the same largest-remainder method as demographics, pins one flavor per task in both the seed-generation and seed-expansion prompts, and stores `scenarioFlavorId` on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 

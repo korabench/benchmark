@@ -73,6 +73,33 @@ describe("allocatePersonas", () => {
     expect(histogram(personas, "gender")).toEqual({girl: 30, boy: 30});
   });
 
+  it("produces exact uniform marginals for cognitive and emotional maturity (60 → 20/20/20)", () => {
+    const personas = allocatePersonas(census, 60, makeRng(42));
+    expect(histogram(personas, "cognitiveMaturity")).toEqual({
+      low: 20,
+      medium: 20,
+      high: 20,
+    });
+    expect(histogram(personas, "emotionalMaturity")).toEqual({
+      low: 20,
+      medium: 20,
+      high: 20,
+    });
+  });
+
+  it("draws childAge as an integer within the pinned bracket for every persona", () => {
+    const personas = allocatePersonas(census, 120, makeRng(13));
+    const inBracket = {
+      "7to9": new Set([7, 8, 9]),
+      "10to12": new Set([10, 11, 12]),
+      "13to17": new Set([13, 14, 15, 16, 17]),
+    } as const;
+    for (const p of personas) {
+      expect(Number.isInteger(p.childAge)).toBe(true);
+      expect(inBracket[p.ageRange].has(p.childAge)).toBe(true);
+    }
+  });
+
   it("renormalizes proportions across allowed age ranges", () => {
     // Allowed: 10to12 (0.27) + 13to17 (0.46) = 0.73
     // → renormalized: 10to12 = 0.27/0.73 ≈ 0.37, 13to17 ≈ 0.63
