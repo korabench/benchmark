@@ -2,6 +2,7 @@
 import {Command} from "@commander-js/extra-typings";
 import {
   AgeRange,
+  Language,
   PopulationDistribution,
   ScenarioPrompt,
 } from "@korabench/benchmark";
@@ -213,6 +214,11 @@ program
     "--risk-ids <ids>",
     "comma-separated risk IDs to restrict expansion to (defaults to all seeds in the input file)"
   )
+  .option(
+    "--language <language>",
+    `conversation language for generated scenarios (${Language.list.join(", ")})`,
+    Language.default
+  )
   .action((model, userModel, opts) =>
     expandScenariosCommand(
       program,
@@ -224,7 +230,8 @@ program
       opts.riskIds
         ?.split(",")
         .map(id => id.trim())
-        .filter(id => id.length > 0)
+        .filter(id => id.length > 0),
+      v.parse(Language.io, opts.language)
     )
   );
 

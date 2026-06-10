@@ -7,6 +7,7 @@ import {
   TypedModelResponse,
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
+import {Language} from "./model/language.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 
@@ -49,6 +50,13 @@ export interface GenerationEvent<T> {
   items: readonly T[];
 }
 
+export interface ExpandScenarioOptions {
+  /** Language of the generated conversation content (first user message and
+   * subsequent simulated child turns). Defaults to English. Scenario metadata
+   * (narrative, evaluation criteria, ...) stays in English regardless. */
+  language?: Language;
+}
+
 export interface GenerateSeedsOptions {
   seedsPerTask?: number;
   totalSeeds?: number;
@@ -70,7 +78,8 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
   ): AsyncGenerator<GenerationEvent<TScenarioSeed>>;
   expandScenario(
     c: ExpandScenarioContext,
-    seed: TScenarioSeed
+    seed: TScenarioSeed,
+    options?: ExpandScenarioOptions
   ): Promise<readonly TScenario[]>;
   mapScenarioToKeys(
     scenario: TScenario,

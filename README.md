@@ -108,6 +108,7 @@ yarn kora expand-scenarios [model] [user-model]
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
+| `--language <language>` | Conversation language for generated scenarios: `en` or `fr` (default: `en`). The first user message is generated in that language, the language is stored on each scenario, and downstream user-simulation and judge prompts pick it up automatically (`run`, `continue`, `reassess`). Scenario metadata (narrative, evaluation criteria, ...) stays in English. |
 
 ### `run`
 

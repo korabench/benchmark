@@ -21,6 +21,7 @@ import {
 import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
+import {Language} from "./model/language.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
@@ -349,8 +350,9 @@ export const kora = Benchmark.new({
       }
     }
   },
-  async expandScenario(c, seed) {
+  async expandScenario(c, seed, options) {
     const maxAttempts = 2;
+    const language = options?.language ?? Language.default;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
     const motivation = Motivation.listAll().find(
@@ -387,6 +389,7 @@ export const kora = Benchmark.new({
       const scenario: Scenario = {
         seed,
         firstUserMessage: "",
+        language,
         ...modelScenario,
       };
 
