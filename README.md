@@ -574,6 +574,7 @@ All commands run with a concurrency of 10 parallel tasks.
 .env.example                         Environment variable template
 models.json                          Model registry configuration
 data/                                Scenario pipeline output (seeds, scenarios, results)
+scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
     data/                            Risk taxonomy, motivations, mechanisms (risks.json, motivations.json, mechanisms.ts)
