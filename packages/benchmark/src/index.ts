@@ -9,6 +9,7 @@ export * from "./kora.js";
 export * from "./model/ageRange.js";
 export * from "./model/assessmentGrade.js";
 export * from "./model/judgeAssessment.js";
+export * from "./model/language.js";
 export * from "./model/mechanism.js";
 export * from "./model/mechanismAssessment.js";
 export * from "./model/motivation.js";

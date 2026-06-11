@@ -85,17 +85,30 @@ describe("ScenarioKey", () => {
 
     expect(ScenarioKey.toAgeRange(key)).toBe("10to12");
   });
+
+  it("toAgeRange returns undefined for custom prompt", () => {
+    const key: ScenarioKey = {
+      riskCategoryId: "cat",
+      riskId: "risk",
+      ageRange: "10to12",
+      id: "id",
+      prompt: "custom",
+    };
+
+    expect(ScenarioKey.toAgeRange(key)).toBeUndefined();
+  });
 });
 
 describe("Scenario.toKeys", () => {
-  it("returns exactly 2 keys: one default and one child", () => {
+  it("returns exactly 3 keys: default, child and custom", () => {
     const scenario = createScenario();
 
     const keys = Scenario.toKeys(scenario, ScenarioPrompt.list);
 
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(3);
     expect(keys[0]!.prompt).toBe("default");
     expect(keys[1]!.prompt).toBe("child");
+    expect(keys[2]!.prompt).toBe("custom");
   });
 
   it("returns only the requested prompt", () => {
@@ -109,12 +122,12 @@ describe("Scenario.toKeys", () => {
 });
 
 describe("kora.mapScenarioToKeys", () => {
-  it("returns exactly 2 string keys for a scenario", () => {
+  it("returns exactly 3 string keys for a scenario", () => {
     const scenario = createScenario();
 
     const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
 
-    expect(keys).toHaveLength(2);
+    expect(keys).toHaveLength(3);
   });
 
   it("keys contain scenario metadata", () => {
@@ -137,13 +150,14 @@ describe("kora.mapScenarioToKeys", () => {
     }
   });
 
-  it("one key ends with :default, one with :child", () => {
+  it("one key ends with :default, one with :child, one with :custom", () => {
     const scenario = createScenario();
 
     const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
 
     expect(keys.filter(k => k.endsWith(":default"))).toHaveLength(1);
     expect(keys.filter(k => k.endsWith(":child"))).toHaveLength(1);
+    expect(keys.filter(k => k.endsWith(":custom"))).toHaveLength(1);
   });
 
   it("returns only default key when prompts is ['default']", () => {

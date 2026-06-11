@@ -21,6 +21,7 @@ import {
 import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
+import {Language} from "./model/language.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
@@ -349,8 +350,9 @@ export const kora = Benchmark.new({
       }
     }
   },
-  async expandScenario(c, seed) {
+  async expandScenario(c, seed, options) {
     const maxAttempts = 2;
+    const language = options?.language ?? Language.default;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
     const motivation = Motivation.listAll().find(
@@ -387,6 +389,7 @@ export const kora = Benchmark.new({
       const scenario: Scenario = {
         seed,
         firstUserMessage: "",
+        language,
         ...modelScenario,
       };
 
@@ -439,6 +442,13 @@ export const kora = Benchmark.new({
     const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
     const prompt = key.prompt;
     const promptAgeRange = ScenarioKey.toAgeRange(key);
+    if (prompt === "custom" && c.customSystemPrompt === undefined) {
+      throw new Error(
+        `Test key ${keyString} uses the "custom" prompt but the test context has no customSystemPrompt.`
+      );
+    }
+    const customSystemPrompt =
+      prompt === "custom" ? c.customSystemPrompt : undefined;
 
     if (startMessages && startMessages.length % 2 !== 0) {
       throw new Error(
@@ -483,6 +493,7 @@ export const kora = Benchmark.new({
         const modelPrompt = conversationToNextMessagePrompt({
           ageRange: promptAgeRange,
           modelMemory: scenario.modelMemory,
+          customSystemPrompt,
         });
         const {output} = await c.getAssistantResponse({
           messages: [

@@ -161,6 +161,9 @@ export interface RunCommandOptions {
    * (skipped before the first task and for graceful-restart cache hits).
    * Pair with concurrency=1 to space out calls to a rate-limited app. */
   cooldownMs?: number;
+  /** Target system prompt used verbatim for the "custom" prompt arm. Required
+   * when prompts includes "custom". */
+  customSystemPrompt?: string;
 }
 
 export async function runCommand(
@@ -183,6 +186,12 @@ export async function runCommand(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
 
+  if (prompts.includes("custom") && options.customSystemPrompt === undefined) {
+    throw new Error(
+      '--prompts includes "custom" but no custom system prompt was provided (set --custom-prompt).'
+    );
+  }
+
   const filters: ScenarioFilters = {
     riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
     limit: options.limit,
@@ -202,6 +211,11 @@ export async function runCommand(
   const cooldownMs = options.cooldownMs ?? 0;
   if (cooldownMs > 0) {
     console.log(`Cooldown between sequential tasks: ${cooldownMs / 1000}s.`);
+  }
+  if (options.customSystemPrompt !== undefined) {
+    console.log(
+      `Custom system prompt: ${options.customSystemPrompt.length} character(s).`
+    );
   }
   let freshStarted = 0;
 
@@ -278,7 +292,8 @@ export async function runCommand(
           userModel,
           targetModelSlug,
           targetGatewayModel,
-          task.scenario
+          task.scenario,
+          options.customSystemPrompt
         );
 
         let outcome: "completed" | "errored" = "errored";

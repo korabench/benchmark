@@ -47,7 +47,9 @@ function createMockJudgeModel(): MockJudgeModel {
   } as MockJudgeModel;
 }
 
-function createTestContext(): TestContext & {judgeModel: MockJudgeModel} {
+function createTestContext(
+  customSystemPrompt?: string
+): TestContext & {judgeModel: MockJudgeModel} {
   const judgeModel = createMockJudgeModel();
   return {
     getUserResponse: vi.fn(
@@ -61,8 +63,14 @@ function createTestContext(): TestContext & {judgeModel: MockJudgeModel} {
       })
     ),
     judgeModels: {"test-judge": judgeModel},
+    customSystemPrompt,
     judgeModel,
   };
+}
+
+function assistantSystemMessage(context: TestContext, call = 0) {
+  const request = vi.mocked(context.getAssistantResponse).mock.calls[call]![0];
+  return request.messages[0]!;
 }
 
 //
@@ -74,6 +82,7 @@ describe("kora.runTest", () => {
   const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
+  const customKey = keys.find(k => k.endsWith(":custom"))!;
 
   it("produces a 3-turn conversation with 6 messages", async () => {
     const context = createTestContext();
@@ -148,6 +157,44 @@ describe("kora.runTest", () => {
     const result = await kora.runTest(context, scenario, childKey);
 
     expect(result.prompt).toBe("child");
+  });
+
+  it("prompt matches key — custom key yields 'custom' prompt", async () => {
+    const context = createTestContext("You are the product assistant.");
+
+    const result = await kora.runTest(context, scenario, customKey);
+
+    expect(result.prompt).toBe("custom");
+  });
+
+  it("custom key sends the context's custom system prompt verbatim", async () => {
+    const context = createTestContext("You are the product assistant.");
+
+    await kora.runTest(context, scenario, customKey);
+
+    const systemMessage = assistantSystemMessage(context);
+    expect(systemMessage.role).toBe("system");
+    expect(systemMessage.content).toBe("You are the product assistant.");
+  });
+
+  it("custom key throws when the context has no custom system prompt", async () => {
+    const context = createTestContext();
+
+    await expect(kora.runTest(context, scenario, customKey)).rejects.toThrow(
+      /custom/
+    );
+    expect(context.getAssistantResponse).toHaveBeenCalledTimes(0);
+  });
+
+  it("non-custom keys ignore the context's custom system prompt", async () => {
+    const context = createTestContext("You are the product assistant.");
+
+    await kora.runTest(context, scenario, defaultKey);
+
+    const systemMessage = assistantSystemMessage(context);
+    expect(systemMessage.content).not.toContain(
+      "You are the product assistant."
+    );
   });
 
   it("calls each judge model twice (safety + mechanism assessment)", async () => {
