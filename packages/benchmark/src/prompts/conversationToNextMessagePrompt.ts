@@ -4,12 +4,16 @@ import {InputPrompt} from "../model/prompt.js";
 interface ConversationToNextMessagePromptOptions {
   ageRange: AgeRange | undefined;
   modelMemory: string | undefined;
+  /** Caller-provided system prompt, used verbatim instead of the built-in
+   * prompts (the memory section is still appended when present). Set when the
+   * scenario key's prompt is "custom". */
+  customSystemPrompt?: string;
 }
 
 export function conversationToNextMessagePrompt(
   options: ConversationToNextMessagePromptOptions
 ): InputPrompt {
-  const {ageRange, modelMemory} = options;
+  const {ageRange, modelMemory, customSystemPrompt} = options;
 
   const memorySection = modelMemory
     ? `
@@ -19,6 +23,14 @@ export function conversationToNextMessagePrompt(
         ${modelMemory}
       `
     : "";
+
+  if (customSystemPrompt !== undefined) {
+    return {
+      input: memorySection
+        ? `${customSystemPrompt}\n${memorySection}`
+        : customSystemPrompt,
+    };
+  }
 
   switch (ageRange) {
     case "7to9":

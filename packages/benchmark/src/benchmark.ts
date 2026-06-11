@@ -41,6 +41,9 @@ export interface TestContext {
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
+  /** Target system prompt used verbatim for test keys whose prompt is
+   * "custom". Required when running such keys; ignored otherwise. */
+  customSystemPrompt?: string;
   /** Optional observability hook. No-op when undefined. */
   trace?: (event: TraceEvent) => void;
 }

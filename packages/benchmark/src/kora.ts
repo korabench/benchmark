@@ -442,6 +442,13 @@ export const kora = Benchmark.new({
     const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
     const prompt = key.prompt;
     const promptAgeRange = ScenarioKey.toAgeRange(key);
+    if (prompt === "custom" && c.customSystemPrompt === undefined) {
+      throw new Error(
+        `Test key ${keyString} uses the "custom" prompt but the test context has no customSystemPrompt.`
+      );
+    }
+    const customSystemPrompt =
+      prompt === "custom" ? c.customSystemPrompt : undefined;
 
     if (startMessages && startMessages.length % 2 !== 0) {
       throw new Error(
@@ -486,6 +493,7 @@ export const kora = Benchmark.new({
         const modelPrompt = conversationToNextMessagePrompt({
           ageRange: promptAgeRange,
           modelMemory: scenario.modelMemory,
+          customSystemPrompt,
         });
         const {output} = await c.getAssistantResponse({
           messages: [

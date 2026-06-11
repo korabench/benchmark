@@ -49,6 +49,14 @@ function splitCsv(value: string): readonly string[] {
   return parts;
 }
 
+function parseCustomPrompt(value: string): string {
+  const content = value.trim();
+  if (content.length === 0) {
+    throw new Error("--custom-prompt must not be empty.");
+  }
+  return content;
+}
+
 function readPackageVersion(): string {
   const pkgPath = path.join(
     dirname(fileURLToPath(import.meta.url)),
@@ -257,8 +265,12 @@ program
   .option("-o, --output <path>", "output results JSON file", defaultResultsPath)
   .option(
     "--prompts <prompts>",
-    "comma-separated prompts to test (default, child)",
+    `comma-separated prompts to test (${ScenarioPrompt.list.join(", ")})`,
     ScenarioPrompt.list[0]
+  )
+  .option(
+    "--custom-prompt <prompt>",
+    'target system prompt used verbatim for the "custom" prompt, e.g. to compare your own product prompt against the built-in ones (pass a file with --custom-prompt "$(cat my-prompt.md)")'
   )
   .option(
     "--risk-ids <ids>",
@@ -302,6 +314,18 @@ program
         `--cooldown must be a non-negative integer (got: ${opts.cooldown})`
       );
     }
+    const prompts = opts.prompts
+      .split(",")
+      .map(p => v.parse(ScenarioPrompt.io, p.trim()));
+    const customSystemPrompt =
+      opts.customPrompt !== undefined
+        ? parseCustomPrompt(opts.customPrompt)
+        : undefined;
+    if (customSystemPrompt !== undefined && !prompts.includes("custom")) {
+      throw new Error(
+        '--custom-prompt is set but --prompts does not include "custom" (e.g. --prompts default,custom).'
+      );
+    }
 
     return runCommand(
       program,
@@ -311,7 +335,7 @@ program
       userModel,
       opts.input,
       opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
+      prompts,
       {
         riskIds: opts.riskIds
           ?.split(",")
@@ -321,6 +345,7 @@ program
         concurrency,
         reverse: opts.reverse === true,
         cooldownMs: cooldownSeconds * 1000,
+        customSystemPrompt,
       }
     );
   });
@@ -429,6 +454,10 @@ program
     "--limit-per-risk <count>",
     "maximum number of records per risk (deterministic by record id; fails fast if any requested risk has fewer records than requested)"
   )
+  .option(
+    "--custom-prompt <prompt>",
+    'target system prompt for records whose prompt is "custom"'
+  )
   .action((userModel, opts) => {
     const limitPerRisk =
       opts.limitPerRisk !== undefined
@@ -460,6 +489,10 @@ program
           .map(id => id.trim())
           .filter(id => id.length > 0),
         limitPerRisk,
+        customSystemPrompt:
+          opts.customPrompt !== undefined
+            ? parseCustomPrompt(opts.customPrompt)
+            : undefined,
       }
     );
   });

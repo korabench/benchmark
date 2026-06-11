@@ -6,7 +6,7 @@ import {AgeRange} from "./ageRange.js";
 // Runtime type.
 //
 
-const VScenarioPrompt = v.picklist(["default", "child"]);
+const VScenarioPrompt = v.picklist(["default", "child", "custom"]);
 
 //
 // Type exports.
@@ -25,6 +25,11 @@ function promptToAgeRange(ageRange: AgeRange, prompt: ScenarioPrompt) {
 
     case "child":
       return ageRange;
+
+    case "custom":
+      // The caller-provided system prompt is used verbatim; no age-banded
+      // prompt is selected from it.
+      return undefined;
 
     default:
       unreachable(prompt);

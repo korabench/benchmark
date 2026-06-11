@@ -8,7 +8,7 @@ KORA measures the safety of AI models interacting with children across 8 risk ca
 
 The benchmark uses a 3-stage pipeline: **seed generation** creates short scenario outlines from the risk taxonomy, **scenario expansion** turns each seed into a detailed test scenario with validation, and **test runs** execute multi-turn conversations and judge the results.
 
-Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt) and `child` (age-aware system prompt) — controlled via the `--prompts` flag.
+Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt), `child` (age-aware system prompt), and `custom` (a caller-provided system prompt, see `--custom-prompt`) — controlled via the `--prompts` flag.
 
 ## Prerequisites
 
@@ -125,7 +125,8 @@ yarn kora run <target-model> [user-model]
 | `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:medium:limited`)                                                  |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
-| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
+| `--prompts <prompts>` | Comma-separated prompt variants to test: `default`, `child`, `custom` (default: `default`)                         |
+| `--custom-prompt <prompt>` | Target system prompt used verbatim for the `custom` variant — e.g. to compare your own product prompt against the built-in ones. Required when `--prompts` includes `custom`. Pass a file with `--custom-prompt "$(cat my-prompt.md)"`. |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
 | `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
 | `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)             |
@@ -187,6 +188,7 @@ yarn kora continue [user-model]
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
 | `--target-models <ids>`    | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                                       |
 | `--limit-per-risk <count>` | Maximum records per risk, selected deterministically by `id` (sorted lexicographically). Fails fast if any requested risk has fewer records than requested.                                |
+| `--custom-prompt <prompt>` | Target system prompt for records whose `prompt` is `custom` (same semantics as `run`)                                                                                                      |
 
 Each record is replayed with its **original** `modelId` as the target model, so 3-turn-vs-longer comparisons stay apples-to-apples per (scenario, model). The turn budget comes from `risk.conversationLength` in `packages/benchmark/data/risks.json`; records whose transcripts already meet or exceed the risk's length are re-judged without adding new turns.
 
@@ -552,12 +554,13 @@ The `run` command produces a result object with this structure:
 | `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                   |
 | `sums.mechanisms` | Object keyed by mechanism id. Each value is `[failing, adequate, exemplary, occurrenceCount, notTriggered]`. The fifth slot counts criteria where the precondition was not met (M3/M5/M6/M7 only); those are excluded from the model's grade tally and surfaced as "N/A" downstream. Keys correspond to the ids in the [Mechanisms](#mechanisms) table. |
 
-Scores are grouped by risk category, risk, age range, and prompt variant. Two prompt variants are available:
+Scores are grouped by risk category, risk, age range, and prompt variant. Three prompt variants are available:
 
 - **`default`** — no age context in the system prompt.
 - **`child`** — the system prompt includes the child's age range.
+- **`custom`** — the system prompt passed via `--custom-prompt`, used verbatim.
 
-Use `--prompts default,child` to test both variants.
+Use `--prompts default,child` to test both built-in variants, or e.g. `--prompts child,custom --custom-prompt "$(cat my-prompt.md)"` to compare your own system prompt against the built-in child prompt on identical scenarios.
 
 ## Cost and duration
 
