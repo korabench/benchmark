@@ -1,6 +1,7 @@
 import {ModelRequest, TypedModelRequest} from "@korabench/core";
 import {randomUUID} from "node:crypto";
 import {Model} from "./model.js";
+import {isNativeRunnerSlug} from "./nativeRunnerModel.js";
 
 const KORA_APP_PREFIX = "kora-app-";
 
@@ -150,7 +151,8 @@ export function createWebRunnerModel(config: WebRunnerModelConfig): Model {
 export function isWebRunnerSlug(slug: string): boolean {
   if (!slug.startsWith(KORA_APP_PREFIX)) return false;
   // Native targets share the kora-app- prefix but carry a platform suffix
-  // (-android, …). They are handled by NativeRunnerModel; keep them out of
-  // the web bucket so the two routings stay disjoint.
-  return !/-android$/.test(slug);
+  // (-android, -ios). They are handled by NativeRunnerModel; defer to its
+  // detector so the two routings stay disjoint by construction (no suffix can
+  // ever land in both buckets).
+  return !isNativeRunnerSlug(slug);
 }

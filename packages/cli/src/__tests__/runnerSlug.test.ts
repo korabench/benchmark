@@ -13,6 +13,11 @@ describe("runner slug routing", () => {
     expect(isWebRunnerSlug("kora-app-tiktok-android")).toBe(false);
   });
 
+  it("routes -ios suffix to native (not web)", () => {
+    expect(isNativeRunnerSlug("kora-app-tiktok-ios")).toBe(true);
+    expect(isWebRunnerSlug("kora-app-tiktok-ios")).toBe(false);
+  });
+
   it("ignores non-kora slugs entirely", () => {
     expect(isWebRunnerSlug("custom-something")).toBe(false);
     expect(isNativeRunnerSlug("custom-something")).toBe(false);

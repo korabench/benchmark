@@ -3,7 +3,7 @@ import {randomUUID} from "node:crypto";
 import {Model} from "./model.js";
 
 const KORA_APP_PREFIX = "kora-app-";
-const NATIVE_SUFFIXES = ["-android"] as const;
+const NATIVE_SUFFIXES = ["-android", "-ios"] as const;
 
 export type BlockedReason =
   | "device_locked"
@@ -145,7 +145,7 @@ export function createNativeRunnerModel(
 
 /** True for slugs that map to a native (on-device) target rather than a web one.
  * Convention: `kora-app-<name>-<platform>` where `<platform>` is one of
- * NATIVE_SUFFIXES (currently `-android`). Plain `kora-app-<name>` stays web. */
+ * NATIVE_SUFFIXES (`-android`, `-ios`). Plain `kora-app-<name>` stays web. */
 export function isNativeRunnerSlug(slug: string): boolean {
   if (!slug.startsWith(KORA_APP_PREFIX)) return false;
   return NATIVE_SUFFIXES.some(suffix => slug.endsWith(suffix));
