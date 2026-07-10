@@ -17,6 +17,7 @@ import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
 import {statsCommand} from "./commands/statsCommand.js";
+import {ScreenshotMode, takoPilotCommand} from "./commands/takoPilotCommand.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -83,6 +84,14 @@ const defaultReassessOutputDir = path.relative(
 const defaultContinueOutputDir = path.relative(
   process.cwd(),
   path.join(dataPath, "continue-results")
+);
+const defaultTakoInputPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "104-scenario-apps.strict.jsonl")
+);
+const defaultTakoOutputPath = path.relative(
+  process.cwd(),
+  path.join(dataPath, "tako-pilot", "results.jsonl")
 );
 const defaultCompareOriginalPath = path.relative(
   process.cwd(),
@@ -227,6 +236,82 @@ program
         .filter(id => id.length > 0)
     )
   );
+
+program
+  .command("tako-pilot")
+  .description(
+    "run a resumable one-turn benchmark pilot against TikTok Tako on an attached iPhone"
+  )
+  .option(
+    "-i, --input <path>",
+    "input scenarios JSONL file",
+    defaultTakoInputPath
+  )
+  .option(
+    "-o, --output <path>",
+    "checkpointed output JSONL file",
+    defaultTakoOutputPath
+  )
+  .option("--limit <count>", "maximum scenarios to run", "3")
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to include (defaults to all)"
+  )
+  .option("--wda-url <url>", "WebDriverAgent base URL", "http://127.0.0.1:8100")
+  .option(
+    "--bundle-id <id>",
+    "TikTok iOS bundle id",
+    "com.zhiliaoapp.musically"
+  )
+  .option("--response-timeout <seconds>", "maximum response wait", "90")
+  .option(
+    "--poll-interval <milliseconds>",
+    "accessibility poll interval",
+    "1000"
+  )
+  .option(
+    "--screenshots <mode>",
+    "screenshot mode: failures, all, or none",
+    "failures"
+  )
+  .option(
+    "--ocr-fallback",
+    "allow review-required local OCR when exact clipboard extraction fails"
+  )
+  .option("-n, --dry-run", "preview selected scenarios without using the phone")
+  .option("--json", "print the run summary as JSON")
+  .action(opts => {
+    const positiveInteger = (value: string, flag: string): number => {
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new Error(`${flag} must be a positive integer (got: ${value})`);
+      }
+      return parsed;
+    };
+    const screenshots = v.parse(
+      v.picklist(["failures", "all", "none"]),
+      opts.screenshots
+    ) as ScreenshotMode;
+
+    return takoPilotCommand({
+      inputPath: opts.input,
+      outputPath: opts.output,
+      limit: positiveInteger(opts.limit, "--limit"),
+      riskIds: opts.riskIds
+        ?.split(",")
+        .map(id => id.trim())
+        .filter(Boolean),
+      wdaUrl: opts.wdaUrl,
+      bundleId: opts.bundleId,
+      responseTimeoutMs:
+        positiveInteger(opts.responseTimeout, "--response-timeout") * 1000,
+      pollIntervalMs: positiveInteger(opts.pollInterval, "--poll-interval"),
+      screenshots,
+      ocrFallback: opts.ocrFallback === true,
+      dryRun: opts.dryRun === true,
+      json: opts.json === true,
+    });
+  });
 
 program
   .command("run")

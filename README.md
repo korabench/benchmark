@@ -443,7 +443,7 @@ yarn dev   # tsx watch --env-file=../../.env src/server.ts on :7200
 
 **4. Run the benchmark:**
 
-Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file exists only to keep scenarios short enough for the on-device app's input window (e.g. Tako's). Once that constraint is lifted, native runs should switch to `data/scenarios.jsonl` like the web targets.
+Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file was selected for conservative on-device prompt sizes while app-specific limits are validated. Tako does not publish a chat-input maximum, so native runners must verify that the app retained the exact prompt before sending rather than assuming a character ceiling. Once the full corpus is validated, native runs should switch to `data/scenarios.jsonl` like the web targets.
 
 ```bash
 cd /Users/thibaut/dev/kora-benchmark
@@ -469,6 +469,28 @@ Both runners surface block states as `blockedReason` on a `200` response (the be
 - Native: `device_locked`, `device_busy`, `login_required`, `rate_limit`, `unknown_block` → `BlockedNativeAppError`
 
 If a driver's selectors drift (web only), runs fail with `DriverCalibrationError`. Re-discover selectors with `yarn workspace @korabench/apps-web-runner calibrate --app <slug>` and edit the driver source under `../kora-apps/packages/web-runner/src/drivers/<slug>/index.ts`.
+
+### TikTok Tako iOS pilot harness
+
+`tako-pilot` runs a resumable, one-turn subset directly against Tako's iOS UI through WebDriverAgent. Each conversation gets an isolated WDA session so one invalid XCTest session cannot poison subsequent checkpoints. A fresh WDA session launches TikTok on the For You feed, so the harness first probes the small safe vertical band where the floating Tako entry point moves with the current video layout, verifying the Tako header against a local pixel template after each attempt. It then creates a fresh chat for each scenario, dismisses the keyboard through the empty strip below the navigation bar, and takes one small-hierarchy accessibility snapshot to prove the conversation is empty. The harness captures an idle composer reference, enters `firstUserMessage`, and reads the composer value back to prove the prompt was not truncated. Response completion is detected without serializing or repeatedly querying TikTok's large accessibility hierarchy: a temporary idle composer screenshot is compared locally with the same microphone/stop region while Tako responds. After the stop control returns to the microphone twice, the harness takes one accessibility snapshot and accepts an answer only when it follows the exact current prompt or TikTok's collapsed 80-character-or-longer prefix of that already verified prompt. TikTok sometimes leaves stale static-text children under a current text view, so full child text is accepted only when it begins with the current text-view value; an unmatched or truncated 512-character value is rejected. If the initial native text is incomplete, the harness scrolls to the current response footer and takes one more accessibility snapshot before the Copy fallback. Copy still requires XCTest to resolve the exact visible button and reads that element's live native frame immediately before one touch. It never converts the Copy image match into a touch coordinate and accepts only pasteboard content that changed from a unique sentinel. These local state screenshots are deleted immediately and are never sent to a model. OCR is disabled by default; `--ocr-fallback` enables local Apple Vision OCR only when exact native extraction fails and marks that record `reviewRequired`. Persisted screenshots default to failures only.
+
+Start the existing WebDriverAgent runner and port forward in separate terminals:
+
+```bash
+ios tunnel start --userspace
+ios runwda
+ios forward 8100 8100
+```
+
+Preview and run a three-scenario pilot:
+
+```bash
+yarn tsbuild
+yarn kora tako-pilot --dry-run --limit 3
+yarn kora tako-pilot --limit 3 --output data/tako-pilot/results.jsonl
+```
+
+Each scenario is appended to the output JSONL immediately, so rerunning the same command skips completed scenario IDs and retries failures. Use a new output path for a clean timing run. Completed records include prompt input verification and response extraction provenance (`clipboard`, or review-required `ocr`; `accessibility` remains valid for older pilot records). Useful controls include `--risk-ids`, `--response-timeout`, `--poll-interval`, `--screenshots failures|all|none`, `--ocr-fallback`, and `--json`.
 
 ## Evaluating a different model
 
