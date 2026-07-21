@@ -160,5 +160,9 @@
   "glm-5:limited": {
     "model": "zai/glm-5",
     "maxTokens": 16000
+  },
+  "kimi-k3:limited": {
+    "model": "moonshotai/kimi-k3",
+    "maxTokens": 16000
   }
 }
