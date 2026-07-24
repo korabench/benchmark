@@ -63,6 +63,33 @@
       }
     }
   },
+  "gpt-5.6-sol:high": {
+    "model": "openai/gpt-5.6-sol",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "high"
+      }
+    }
+  },
+  "gpt-5.6-sol:medium": {
+    "model": "openai/gpt-5.6-sol",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "medium"
+      }
+    }
+  },
+  "gpt-5.6-sol:low": {
+    "model": "openai/gpt-5.6-sol",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "low"
+      }
+    }
+  },
   "claude-sonnet-4.6:limited": {
     "model": "anthropic/claude-sonnet-4.6",
     "maxTokens": 16000
