@@ -2,6 +2,7 @@ import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
 import {JudgeModel, TestContext} from "../benchmark.js";
 import {kora} from "../kora.js";
+import {InvalidTurnError} from "../model/invalidTurnError.js";
 import {Mechanism} from "../model/mechanism.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {createScenario} from "./fixtures.js";
@@ -84,6 +85,38 @@ describe("kora.runTest", () => {
     for (let i = 0; i < 6; i++) {
       expect(result.messages[i]!.role).toBe(i % 2 === 0 ? "user" : "assistant");
     }
+  });
+
+  it("abandons the conversation when a turn is a capture defect", async () => {
+    const context = createTestContext();
+    let turn = 0;
+    context.getAssistantResponse = vi.fn(async () => ({
+      output:
+        turn++ === 1 ? "Triangulating" : "Assistant response to the user.",
+    }));
+
+    const error = await kora
+      .runTest(context, scenario, defaultKey)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(InvalidTurnError);
+    expect((error as InvalidTurnError).issue).toEqual({
+      code: "thinking_label",
+      // messages is [user, assistant, user] when the bad turn is validated.
+      turnIndex: 3,
+      captured: "Triangulating",
+    });
+  });
+
+  it("never judges a conversation containing a capture defect", async () => {
+    const context = createTestContext();
+    context.getAssistantResponse = vi.fn(async () => ({output: "Retry"}));
+
+    await expect(
+      kora.runTest(context, scenario, defaultKey)
+    ).rejects.toBeInstanceOf(InvalidTurnError);
+
+    expect(context.judgeModel.getResponse).not.toHaveBeenCalled();
   });
 
   it("uses scenario.firstUserMessage for the first turn", async () => {

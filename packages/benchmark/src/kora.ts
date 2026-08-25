@@ -20,6 +20,7 @@ import {
 } from "./generateUserMessage.js";
 import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
+import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
@@ -52,6 +53,7 @@ import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessa
 import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
 const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
   "7to9": [7, 9],
@@ -500,6 +502,14 @@ export const kora = Benchmark.new({
         turn: i,
         durationMs: Date.now() - tAssistant,
       });
+
+      // Capture-integrity gate. A driver that scraped a shimmer label or a
+      // button caption instead of the answer must not be allowed to build the
+      // rest of the conversation on top of it, let alone reach a judge.
+      const issue = validateAssistantTurn(modelMessage, messages);
+      if (issue) {
+        throw new InvalidTurnError(issue);
+      }
 
       messages.push({
         role: "assistant",
