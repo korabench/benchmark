@@ -14,6 +14,7 @@ import {
   buildContext,
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
+import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -293,7 +294,9 @@ export async function runCommand(
           progress.increment(true);
           return [{kind: "success", testResult}];
         } catch (error) {
-          console.error(`\nTest failed for key ${task.key}: ${error}`);
+          if (!reportInvalidTurn(`key ${task.key}`, error)) {
+            console.error(`\nTest failed for key ${task.key}: ${error}`);
+          }
           progress.increment(false);
           return [{kind: "failure"}];
         } finally {

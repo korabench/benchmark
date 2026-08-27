@@ -24,6 +24,7 @@ import {
   readReassessInputsFromJsonl,
   ReassessInput,
 } from "./shared/reassessInput.js";
+import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
 
 interface ContinueTask {
   input: ReassessInput;
@@ -294,9 +295,10 @@ export async function continueCommand(
           },
         ];
       } catch (error) {
-        console.error(
-          `\nContinue run failed for id=${task.input.id} (model=${task.input.modelId}, key=${task.key}): ${error}`
-        );
+        const label = `id=${task.input.id} (model=${task.input.modelId}, key=${task.key})`;
+        if (!reportInvalidTurn(label, error)) {
+          console.error(`\nContinue run failed for ${label}: ${error}`);
+        }
         progress.increment(false);
         return [{kind: "failure"}];
       } finally {
