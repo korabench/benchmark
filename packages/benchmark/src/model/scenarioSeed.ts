@@ -247,6 +247,12 @@ const VScenarioSeed = v.strictObject({
       })
     )
   ),
+  /**
+   * Taxonomy this seed was generated against. Optional: seeds produced before
+   * packs existed carry no stamp, and every corpus under `data/` predates them.
+   */
+  taxonomyId: v.optional(v.string()),
+  taxonomyVersion: v.optional(v.string()),
   id: v.string(),
   riskCategoryId: v.string(),
   riskId: v.string(),

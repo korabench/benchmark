@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import {PackId} from "../packs/packId.js";
 import {ScenarioFlavor} from "./scenarioFlavor.js";
 
 //
@@ -6,7 +7,7 @@ import {ScenarioFlavor} from "./scenarioFlavor.js";
 //
 
 const VRisk = v.object({
-  id: v.string(),
+  id: PackId.io,
   name: v.string(),
   description: v.string(),
   scenarioGuidance: v.optional(v.string()),

@@ -1,9 +1,10 @@
 import * as v from "valibot";
+import {PackId} from "../packs/packId.js";
 
 const SUM_TOLERANCE = 1e-6;
 
 const VScenarioFlavor = v.strictObject({
-  id: v.string(),
+  id: PackId.io,
   proportion: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   description: v.string(),
   conversationLength: v.optional(v.number()),

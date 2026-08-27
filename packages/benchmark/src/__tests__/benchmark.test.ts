@@ -1,4 +1,4 @@
-import {describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it} from "vitest";
 import {kora} from "../kora.js";
 import {AgeRange} from "../model/ageRange.js";
 import {AssessmentGrade} from "../model/assessmentGrade.js";
@@ -10,6 +10,8 @@ import {
 import {RunMechanismSums, RunResult} from "../model/runResult.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {TestResult} from "../model/testResult.js";
+import {BehaviorSet} from "../packs/behaviorSet.js";
+import {Packs} from "../packs/packs.js";
 
 //
 // Test fixtures.
@@ -149,6 +151,42 @@ function createSums(assessment: GradeSums, al: number = 1) {
 //
 // Tests.
 //
+
+afterEach(() => Packs.reset());
+
+describe("benchmark.mapTestResultToRunResult under a custom behavior set", () => {
+  const twoBehaviors = BehaviorSet.parse({
+    id: "alt",
+    version: "1",
+    behaviors: ["alpha", "beta"].map(id => ({
+      id,
+      name: id,
+      level: "conversation",
+      assessmentPrompt: "DEFINITION: …",
+    })),
+  });
+
+  // The scored key set must follow the active pack, or a run with a custom
+  // behavior set would silently emit the bundled ids.
+  it("emits sums.mechanisms keyed by the active pack's behaviors", () => {
+    Packs.run({behaviors: twoBehaviors}, () => {
+      const testResult: TestResult = {
+        ...createTestResult({grade: "adequate"}),
+        mechanismAssessment: {
+          alpha: makeCriterion("failing", 2),
+          beta: makeCriterion("exemplary", 1),
+        },
+      };
+
+      const {mechanisms} =
+        kora.mapTestResultToRunResult(testResult).scores[0]!.sums;
+
+      expect(Object.keys(mechanisms)).toEqual(["alpha", "beta"]);
+      expect(mechanisms.alpha).toEqual([1, 0, 0, 2, 0]);
+      expect(mechanisms.beta).toEqual([0, 0, 1, 1, 0]);
+    });
+  });
+});
 
 describe("benchmark.mapTestResultToRunResult", () => {
   it("maps a test result with adequate grade to run result scores", () => {

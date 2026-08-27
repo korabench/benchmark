@@ -1,29 +1,19 @@
-import {memoize} from "@korabench/core";
-import * as v from "valibot";
-import {mechanisms} from "../../data/mechanisms.js";
+import {Behavior, BehaviorLevel} from "../packs/behaviorSet.js";
+import {Packs} from "../packs/packs.js";
 
 //
-// Runtime model.
+// Bridge between the pack vocabulary ("behavior") and the vocabulary the rest
+// of the codebase and every persisted output still use ("mechanism"). Same
+// concept, two names; see the naming note in `packs/behaviorSet.ts`.
 //
-
-const VMechanismLevel = v.picklist(["conversation"]);
-
-const VMechanism = v.object({
-  id: v.string(),
-  excelId: v.string(),
-  name: v.string(),
-  level: VMechanismLevel,
-  assessmentPrompt: v.string(),
-});
 
 //
 // API.
 //
 
-const listAll = memoize(() => {
-  const type = v.pipe(v.array(VMechanism), v.readonly());
-  return v.parse(type, mechanisms);
-});
+function listAll(): readonly Mechanism[] {
+  return Packs.current().behaviors.behaviors;
+}
 
 function find(id: string): Mechanism {
   const result = listAll().find(m => m.id === id);
@@ -37,11 +27,13 @@ function find(id: string): Mechanism {
 // Exports.
 //
 
-export type MechanismLevel = v.InferOutput<typeof VMechanismLevel>;
-export interface Mechanism extends v.InferOutput<typeof VMechanism> {}
+export type MechanismLevel = BehaviorLevel;
+export type Mechanism = Behavior;
 
 export const Mechanism = {
-  io: VMechanism,
+  io: Behavior.io,
+  codeOf: Behavior.codeOf,
+  hasPrecondition: Behavior.hasPrecondition,
   listAll,
   find,
 };

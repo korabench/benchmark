@@ -60,10 +60,18 @@ export interface GenerateSeedsOptions {
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
-  scenarioSeedType: SchemaWithOutput<TScenarioSeed>;
-  scenarioType: SchemaWithOutput<TScenario>;
-  testResultType: SchemaWithOutput<TTestResult>;
-  runResultType: SchemaWithOutput<TRunResult>;
+  //
+  // Schema accessors.
+  //
+  // Implementations whose schemas depend on the active pack MUST expose these
+  // as getters (see `kora.ts`). Reading a pack-dependent schema at module scope
+  // freezes it against whichever pack was active at import time, which no type
+  // error catches — `packs/__tests__/moduleInit.test.ts` is the only guard.
+  //
+  readonly scenarioSeedType: SchemaWithOutput<TScenarioSeed>;
+  readonly scenarioType: SchemaWithOutput<TScenario>;
+  readonly testResultType: SchemaWithOutput<TTestResult>;
+  readonly runResultType: SchemaWithOutput<TRunResult>;
   generateScenarioSeeds(
     c: GenerateSeedsContext,
     options?: GenerateSeedsOptions
