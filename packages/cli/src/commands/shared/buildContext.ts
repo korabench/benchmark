@@ -18,7 +18,8 @@ export async function buildContext(
   userModel: Model,
   targetModelSlug: string,
   targetGatewayModel: Model | undefined,
-  scenario: Scenario
+  scenario: Scenario,
+  customSystemPrompt?: string
 ): Promise<BuiltContext> {
   const targetModel = await (async () => {
     if (targetGatewayModel) {
@@ -43,6 +44,7 @@ export async function buildContext(
         }),
       })
     ),
+    customSystemPrompt,
   };
 
   return {

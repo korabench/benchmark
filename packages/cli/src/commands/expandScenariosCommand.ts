@@ -1,6 +1,7 @@
 import {
   ExpandScenarioContext,
   kora,
+  Language,
   Scenario,
   ScenarioSeed,
   ScenarioValidationError,
@@ -60,7 +61,8 @@ export async function expandScenariosCommand(
   userModelSlugs: readonly string[],
   seedsFilePath: string,
   outputFilePath: string,
-  riskIds?: readonly string[]
+  riskIds?: readonly string[],
+  language?: Language
 ) {
   const fmtChain = (slugs: readonly string[]) =>
     slugs.length === 1 ? slugs[0] : slugs.join(" → ");
@@ -70,6 +72,9 @@ export async function expandScenariosCommand(
   const riskIdFilter = riskIds?.length ? new Set(riskIds) : undefined;
   if (riskIdFilter) {
     console.log(`Filtering to risk IDs: ${[...riskIdFilter].join(", ")}`);
+  }
+  if (language && language !== Language.default) {
+    console.log(`Conversation language: ${Language.toName(language)}.`);
   }
 
   // Expansion is wrapped in a task-level fallback chain: each seed tries the
@@ -129,7 +134,9 @@ export async function expandScenariosCommand(
           };
 
           try {
-            const scenarios = await kora.expandScenario(context, seed);
+            const scenarios = await kora.expandScenario(context, seed, {
+              language,
+            });
             await fs.writeFile(tempFile, JSON.stringify(scenarios, null, 2));
             progress.increment(true);
             return [];

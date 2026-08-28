@@ -99,6 +99,9 @@ export interface ContinueCommandOptions {
   riskIds?: readonly string[];
   targetModels?: readonly string[];
   limitPerRisk?: number;
+  /** Target system prompt used verbatim for records whose prompt is "custom".
+   * Required when the input contains such records. */
+  customSystemPrompt?: string;
 }
 
 export async function continueCommand(
@@ -274,7 +277,8 @@ export async function continueCommand(
           userModel,
           task.input.modelId,
           getTargetGateway(task.input.modelId),
-          task.input.scenario
+          task.input.scenario,
+          options.customSystemPrompt
         );
         const testResult = await kora.runTest(
           built.context,

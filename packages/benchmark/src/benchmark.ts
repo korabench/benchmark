@@ -7,6 +7,7 @@ import {
   TypedModelResponse,
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
+import {Language} from "./model/language.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 
@@ -40,6 +41,9 @@ export interface TestContext {
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
+  /** Target system prompt used verbatim for test keys whose prompt is
+   * "custom". Required when running such keys; ignored otherwise. */
+  customSystemPrompt?: string;
   /** Optional observability hook. No-op when undefined. */
   trace?: (event: TraceEvent) => void;
 }
@@ -47,6 +51,13 @@ export interface TestContext {
 export interface GenerationEvent<T> {
   total: number;
   items: readonly T[];
+}
+
+export interface ExpandScenarioOptions {
+  /** Language of the generated conversation content (first user message and
+   * subsequent simulated child turns). Defaults to English. Scenario metadata
+   * (narrative, evaluation criteria, ...) stays in English regardless. */
+  language?: Language;
 }
 
 export interface GenerateSeedsOptions {
@@ -70,7 +81,8 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
   ): AsyncGenerator<GenerationEvent<TScenarioSeed>>;
   expandScenario(
     c: ExpandScenarioContext,
-    seed: TScenarioSeed
+    seed: TScenarioSeed,
+    options?: ExpandScenarioOptions
   ): Promise<readonly TScenario[]>;
   mapScenarioToKeys(
     scenario: TScenario,

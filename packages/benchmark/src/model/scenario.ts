@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import {Language} from "./language.js";
 import {ScenarioKey} from "./scenarioKey.js";
 import {ScenarioPrompt} from "./scenarioPrompt.js";
 import {ScenarioSeed} from "./scenarioSeed.js";
@@ -79,6 +80,15 @@ const VScenario = v.strictObject({
   ...VModelScenario.entries,
   seed: ScenarioSeed.io,
   firstUserMessage: v.string(),
+  language: v.optional(
+    v.pipe(
+      Language.io,
+      v.metadata({
+        description:
+          "Language of the conversation (first user message, simulated child turns). Absent means English; scenario metadata fields stay in English regardless.",
+      })
+    )
+  ),
 });
 
 //

@@ -173,6 +173,38 @@ describe("kora.expandScenario", () => {
     expect(context.getUserResponse).toHaveBeenCalledTimes(0);
   });
 
+  it("stamps the default language when no language is requested", async () => {
+    const seed = createScenarioSeed();
+    const context = createExpandContext([
+      validModelScenarioLight(),
+      passingValidation(),
+    ]);
+
+    const result = await kora.expandScenario(context, seed);
+
+    expect(result[0]!.language).toBe("en");
+  });
+
+  it("stamps the requested language and asks for user messages in it", async () => {
+    const seed = createScenarioSeed();
+    const context = createExpandContext(
+      [validModelScenarioLight(), passingValidation()],
+      ["Salut, tu peux m'aider ?"]
+    );
+
+    const result = await kora.expandScenario(context, seed, {language: "fr"});
+
+    expect(result[0]!.language).toBe("fr");
+    expect(result[0]!.firstUserMessage).toBe("Salut, tu peux m'aider ?");
+
+    const firstUserMessageRequest = vi.mocked(context.getUserResponse).mock
+      .calls[0]![0];
+    const systemMessage = firstUserMessageRequest.messages[0]!;
+    expect(systemMessage.role).toBe("system");
+    expect(systemMessage.content).toContain("LANGUAGE REQUIREMENT");
+    expect(systemMessage.content).toContain("French");
+  });
+
   it("uses ModelScenarioWithMemory for risks with provideUserContext", async () => {
     const seed = createScenarioSeed({
       riskCategoryId: "sexual_content_exploitation_and_predation",

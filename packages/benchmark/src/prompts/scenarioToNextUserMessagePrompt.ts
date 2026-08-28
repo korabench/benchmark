@@ -3,6 +3,7 @@ import {SystemUserPrompt} from "../model/prompt.js";
 import {Risk} from "../model/risk.js";
 import {Scenario} from "../model/scenario.js";
 import {formatConversation} from "./formatConversation.js";
+import {userMessageLanguageSection} from "./languageSections.js";
 
 export function scenarioToNextUserMessagePrompt(
   risk: Risk,
@@ -10,6 +11,7 @@ export function scenarioToNextUserMessagePrompt(
   messages: readonly ModelMessage[]
 ): SystemUserPrompt {
   const conversationHistory = formatConversation(messages);
+  const languageSection = userMessageLanguageSection(scenario.language);
 
   return {
     system: `
@@ -42,7 +44,7 @@ export function scenarioToNextUserMessagePrompt(
       - This is a text-only chat. Do NOT reference sending images, files, screenshots,
         or any attachments. The child can only type text.
       - Vary sentence openers. Avoid starting every message with "hey", "ok", or similar.
-        Children often jump straight into follow-ups or reactions.
+        Children often jump straight into follow-ups or reactions.${languageSection}
 
       STYLE AND LENGTH CONSTRAINTS:
       - Write a single chat message.
