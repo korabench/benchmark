@@ -36,6 +36,13 @@
       "import": "./build/src/index.js"
     }
   },
+  "imports": {
+    "#packScope": {
+      "types": "./src/packs/packScope.node.ts",
+      "browser": "./build/src/packs/packScope.browser.js",
+      "default": "./build/src/packs/packScope.node.js"
+    }
+  },
   "dependencies": {
     "@korabench/core": "^1.0.6",
     "remeda": "^2.33.6",
