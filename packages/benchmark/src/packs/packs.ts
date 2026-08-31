@@ -1,4 +1,4 @@
-import {AsyncLocalStorage} from "node:async_hooks";
+import {createPackScope} from "#packScope";
 import {BehaviorSet} from "./behaviorSet.js";
 import {bundledPacks} from "./bundled.js";
 import {PackStamp} from "./packStamp.js";
@@ -28,13 +28,15 @@ export interface PacksOverride {
 //     --behaviors once per invocation and every command reads it.
 //   - `storage` is an async-context scope. kora-infra serves several runs
 //     concurrently from a single Cloudflare isolate, so a mutable global is not
-//     enough there; each run wraps its work in `Packs.run(...)`.
+//     enough there; each run wraps its work in `Packs.run(...)`. It comes from
+//     `#packScope` rather than `node:async_hooks` directly, so that a browser
+//     bundle can resolve a node-free implementation — see packScope.ts.
 //
 // Callers should pick one. Mixing them is legal but makes it much harder to
 // reason about which pack a given schema was built from.
 //
 
-const storage = new AsyncLocalStorage<ActivePacks>();
+const storage = createPackScope<ActivePacks>();
 
 let configured: ActivePacks | undefined;
 
