@@ -1,11 +1,20 @@
 import {ModelRequest, TypedModelRequest} from "@korabench/core";
 import {toJsonSchema} from "@valibot/to-json-schema";
 import {gateway, generateObject, generateText, jsonSchema} from "ai";
+import {createOpenAI} from "@ai-sdk/openai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
 import {createFallbackModel} from "./fallbackModel.js";
 import {Model} from "./model.js";
 import {resolveModelConfig} from "./modelConfig.js";
+
+function getLanguageModel(modelString: string): any {
+  if (process.env.OPENAI_API_KEY && modelString.startsWith("openai/")) {
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    return openai(modelString.replace("openai/", ""));
+  }
+  return gateway(modelString);
+}
 
 export interface ModelOptions {
   retry?: RetryOptions;
@@ -76,7 +85,7 @@ export function createGatewayModel(
       const result = await withRetry(
         () =>
           generateText({
-            model: gateway(config.model),
+            model: getLanguageModel(config.model),
             system: request.messages.find(m => m.role === "system")?.content,
             messages: request.messages
               .filter(m => m.role !== "system")
@@ -125,7 +134,7 @@ export function createGatewayModel(
 
         return withRetry(async () => {
           const result = await generateText({
-            model: gateway(config.model),
+            model: getLanguageModel(config.model),
             system: combinedSystem,
             messages: userMessages,
             maxOutputTokens: maxTokens,
@@ -141,7 +150,7 @@ export function createGatewayModel(
 
       return withRetry(async () => {
         const result = await generateObject({
-          model: gateway(config.model),
+          model: getLanguageModel(config.model),
           system: systemMessage,
           messages: userMessages,
           schema: jsonSchema(outputSchema),

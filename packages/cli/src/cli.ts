@@ -10,6 +10,26 @@ import * as path from "node:path";
 import {dirname} from "node:path";
 import {fileURLToPath} from "node:url";
 import * as v from "valibot";
+
+try {
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (existsSync(envPath)) {
+    const envContent = readFileSync(envPath, "utf-8");
+    for (const line of envContent.split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed && !trimmed.startsWith("#")) {
+        const eqIdx = trimmed.indexOf("=");
+        if (eqIdx > 0) {
+          const key = trimmed.slice(0, eqIdx).trim();
+          const val = trimmed.slice(eqIdx + 1).trim();
+          if (!process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    }
+  }
+} catch {}
 import {compareAssessmentsCommand} from "./commands/compareAssessmentsCommand.js";
 import {continueCommand} from "./commands/continueCommand.js";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
@@ -250,7 +270,7 @@ program
   .option("-o, --output <path>", "output results JSON file", defaultResultsPath)
   .option(
     "--prompts <prompts>",
-    "comma-separated prompts to test (default, child)",
+    "comma-separated prompts to test (default, child, custom)",
     ScenarioPrompt.list[0]
   )
   .option(
