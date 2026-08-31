@@ -1,6 +1,8 @@
 import {
   ExpandScenarioContext,
   kora,
+  Packs,
+  RiskTaxonomy,
   Scenario,
   ScenarioSeed,
   ScenarioValidationError,
@@ -16,6 +18,8 @@ import {
   createGatewayModel,
   createGatewayModelChain,
 } from "../models/gatewayModel.js";
+import {resolveRiskIdFilter} from "./shared/riskFilters.js";
+import {assertInputConforms} from "./shared/validateInputFile.js";
 
 async function* readSeedsFromJsonl(
   filePath: string,
@@ -67,7 +71,11 @@ export async function expandScenariosCommand(
   console.log(
     `Expanding scenarios using ${fmtChain(modelSlugs)} (user: ${fmtChain(userModelSlugs)})...`
   );
-  const riskIdFilter = riskIds?.length ? new Set(riskIds) : undefined;
+  const riskIdFilter = resolveRiskIdFilter(riskIds);
+  const seedCount = await assertInputConforms(seedsFilePath, "seeds");
+  console.log(
+    `Validated ${seedCount} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
   if (riskIdFilter) {
     console.log(`Filtering to risk IDs: ${[...riskIdFilter].join(", ")}`);
   }

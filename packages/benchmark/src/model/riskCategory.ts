@@ -1,16 +1,15 @@
-import {memoize} from "@korabench/core";
 import * as R from "remeda";
 import * as v from "valibot";
-import risks from "../../data/risks.json" with {type: "json"};
+import {PackId} from "../packs/packId.js";
+import {Packs} from "../packs/packs.js";
 import {Risk} from "./risk.js";
-import {assertFlavorsSumToOne} from "./scenarioFlavor.js";
 
 //
 // Runtime model.
 //
 
 const VRiskCategory = v.object({
-  id: v.string(),
+  id: PackId.io,
   name: v.string(),
   risks: v.pipe(v.array(Risk.io), v.readonly()),
 });
@@ -18,19 +17,15 @@ const VRiskCategory = v.object({
 //
 // API.
 //
+// These read the *active* pack rather than a bundled file, so the same call
+// resolves differently inside `Packs.run(...)`. Validation (flavor proportions,
+// id uniqueness) now happens once per pack in `RiskTaxonomy.parse`, which is why
+// there is no memoization here — this is a property read, not a parse.
+//
 
-const listAll = memoize(() => {
-  const type = v.pipe(v.array(VRiskCategory), v.readonly());
-  const parsed = v.parse(type, risks);
-  for (const category of parsed) {
-    for (const risk of category.risks) {
-      if (risk.scenarioFlavors) {
-        assertFlavorsSumToOne(risk.id, risk.scenarioFlavors);
-      }
-    }
-  }
-  return parsed;
-});
+function listAll(): readonly RiskCategory[] {
+  return Packs.current().taxonomy.categories;
+}
 
 function find(riskCategoryId: string) {
   const result = listAll().find(r => r.id === riskCategoryId);

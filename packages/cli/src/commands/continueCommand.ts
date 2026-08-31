@@ -1,5 +1,7 @@
 import {
   kora,
+  Packs,
+  RiskTaxonomy,
   ScenarioKey,
   ScenarioPrompt,
   TestResult,
@@ -25,6 +27,8 @@ import {
   ReassessInput,
 } from "./shared/reassessInput.js";
 import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
+import {resolveRiskIdFilter} from "./shared/riskFilters.js";
+import {assertInputConforms} from "./shared/validateInputFile.js";
 
 interface ContinueTask {
   input: ReassessInput;
@@ -119,9 +123,12 @@ export async function continueCommand(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
 
-  const riskIdsFilter = options.riskIds?.length
-    ? new Set(options.riskIds)
-    : undefined;
+  const recordCount = await assertInputConforms(inputFilePath, "reassess");
+  console.log(
+    `Validated ${recordCount} record(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
+
+  const riskIdsFilter = resolveRiskIdFilter(options.riskIds);
   const targetModelsFilter = options.targetModels?.length
     ? new Set(options.targetModels)
     : undefined;
@@ -367,6 +374,7 @@ export async function continueCommand(
     const result = {
       target: modelId,
       judges: judgeModelSlugs,
+      packs: Packs.fingerprint(),
       user: userModelSlug,
       prompts,
       ...runResult,

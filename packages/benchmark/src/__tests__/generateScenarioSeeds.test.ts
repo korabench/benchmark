@@ -115,7 +115,9 @@ describe("generateScenarioSeeds riskIds filter", () => {
         ageRanges: ["7to9"],
         riskIds: ["not_a_real_risk"],
       })
-    ).rejects.toThrow(/Unknown risk IDs: not_a_real_risk/);
+    ).rejects.toThrow(
+      /Unknown risk IDs for taxonomy "kora@2": not_a_real_risk/
+    );
   });
 
   it("processes all risks when riskIds is omitted", async () => {

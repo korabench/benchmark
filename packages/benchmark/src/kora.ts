@@ -1,4 +1,4 @@
-import {ModelMessage} from "@korabench/core";
+import {ModelMessage, SchemaWithOutput} from "@korabench/core";
 import * as R from "remeda";
 import {flatTransform} from "streaming-iterables";
 import {v4 as uuid} from "uuid";
@@ -47,6 +47,8 @@ import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
 import {TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
+import {Conformance} from "./packs/conformance.js";
+import {Packs} from "./packs/packs.js";
 import {conversationToAssessmentPrompt} from "./prompts/conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "./prompts/conversationToMechanismAssessmentPrompt.js";
 import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessagePrompt.js";
@@ -148,14 +150,28 @@ export async function runJudges(
     assessment,
     mechanismAssessment,
     judgeAssessments,
+    packs: Packs.fingerprint(),
   };
 }
 
 export const kora = Benchmark.new({
-  scenarioSeedType: ScenarioSeed.io,
-  scenarioType: Scenario.io,
-  testResultType: TestResult.io,
-  runResultType: RunResult.io,
+  // Getters, not values: `testResultType` embeds the pack-dependent
+  // `MechanismAssessment.io`, and reading it here at module scope would freeze
+  // the behavior set at import time. The others follow the same shape so the
+  // rule is uniform. Every `v.parse(kora.testResultType, ...)` call site is
+  // unaffected — it now simply resolves against the active pack.
+  get scenarioSeedType(): SchemaWithOutput<ScenarioSeed> {
+    return ScenarioSeed.io;
+  },
+  get scenarioType(): SchemaWithOutput<Scenario> {
+    return Scenario.io;
+  },
+  get testResultType(): SchemaWithOutput<TestResult> {
+    return TestResult.io;
+  },
+  get runResultType(): SchemaWithOutput<RunResult> {
+    return RunResult.io;
+  },
   async *generateScenarioSeeds(c, options) {
     const riskCategories = RiskCategory.listAll();
     const allMotivations = Motivation.listAll();
@@ -185,13 +201,7 @@ export const kora = Benchmark.new({
     const seedsPerTask = seedsPerTaskOption ?? 8;
 
     if (riskIds) {
-      const knownRiskIds = new Set(
-        riskCategories.flatMap(c => c.risks.map(r => r.id))
-      );
-      const unknown = riskIds.filter(id => !knownRiskIds.has(id));
-      if (unknown.length > 0) {
-        throw new Error(`Unknown risk IDs: ${unknown.join(", ")}`);
-      }
+      Conformance.assertRiskIdsKnown(riskIds);
     }
     const riskIdSet = riskIds ? new Set(riskIds) : undefined;
 
@@ -314,9 +324,13 @@ export const kora = Benchmark.new({
           outputType: SeedsOutput,
         });
 
+        const {taxonomy} = Packs.current();
+
         return output.seeds.map((s: ModelScenarioSeed): ScenarioSeed => {
           const base: ScenarioSeed = {
             ...s,
+            taxonomyId: taxonomy.id,
+            taxonomyVersion: taxonomy.version,
             id: uuid(),
             riskCategoryId: riskCategory.id,
             riskId: risk.id,

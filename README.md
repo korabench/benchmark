@@ -37,6 +37,19 @@ For example, to evaluate `gpt-4o`:
 yarn kora run gpt-4o
 ```
 
+### Global options
+
+These apply to every command and must be given before the command name:
+
+| Option                     | Description                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| `--taxonomy <name\|path>`  | Risk taxonomy pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_TAXONOMY`     |
+| `--behaviors <name\|path>` | Behavior pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_BEHAVIORS`         |
+| `-d, --debug`              | Print full errors and debug information                                                           |
+
+Both default to the bundled KORA pack, so no configuration is needed to run the
+benchmark as published. See [Using a custom taxonomy](#using-a-custom-taxonomy).
+
 ## Pipeline stages
 
 ### `generate-seeds`
@@ -222,6 +235,25 @@ yarn kora stats [options]
 | `--by-model`            | Also print a per-model breakdown grouped by `modelId`                                                   |
 
 Output columns: `n` (records scored), `%fail` / `%adeq` / `%exem` (grade distribution), `occ μ` (mean occurrenceCount), and a `signal` flag (`ok` or `NO SIGNAL (<grade> <pct>%)`).
+
+### `validate`
+
+Checks that every risk reference in an input file resolves against the active
+taxonomy, and prints the active packs. The pipeline commands run this check
+themselves before calling any model; this exposes it on its own, which is the
+natural CI hook for an externally-authored scenario set. Exits non-zero on the
+first non-conforming file.
+
+```bash
+yarn kora validate [options]
+yarn kora --taxonomy ./packs/my-taxonomy.json validate -i scenarios.jsonl
+```
+
+| Option               | Description                                                                                    |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `-i, --input <path>` | JSONL file of seeds, scenarios, or reassess records (default: `data/scenarios.jsonl`)          |
+| `--kind <kind>`      | `seeds`, `scenarios` or `reassess` (default: inferred from the first record)                   |
+| `--packs-only`       | Print the active taxonomy and behavior pack, then stop without reading the input               |
 
 ## Model configuration
 
@@ -476,7 +508,7 @@ To evaluate a new model, only change the `<target-model>` argument in the `run` 
 
 ## Risk taxonomy
 
-The benchmark covers 8 risk categories with 25 individual risks:
+The benchmark covers 8 risk categories with 26 individual risks:
 
 | Category ID                                 | Name                                     |
 | ------------------------------------------- | ---------------------------------------- |
@@ -491,11 +523,66 @@ The benchmark covers 8 risk categories with 25 individual risks:
 
 See the full taxonomy: [KORA Risk Taxonomy](https://korabench.notion.site/KORA-Risk-Taxonomy-2fb5eb9ec0c98050b330d4f37c57d5b0).
 
-## Mechanisms
+### Using a custom taxonomy
 
-Alongside the safety grade, every conversation is assessed on 7 **cross-cutting mechanisms** — LLM-judge annotations covering patterns orthogonal to the risk taxonomy (sourced from the KORA V2 taxonomy's "Mechanisms" sheet). Each mechanism is graded on the same failing / adequate / exemplary scale.
+The taxonomy above is the bundled default; it is used whenever nothing else is
+supplied. Any command accepts a different one:
 
-| Excel ID | Code id                  | Name                                | What it captures                                                                                                             |
+```bash
+# A registered pack name, or a path to a JSON file.
+yarn kora --taxonomy ./packs/my-taxonomy.json run gpt-4o
+```
+
+`KORA_TAXONOMY` sets the same thing from the environment. A taxonomy file is the
+full envelope — the bundled `risks.json` is a bare array of categories and is
+wrapped internally, but a supplied file must carry its own id and version:
+
+```json
+{
+  "id": "my-taxonomy",
+  "version": "1",
+  "name": "My taxonomy",
+  "categories": [
+    {
+      "id": "my_category",
+      "name": "My Category",
+      "risks": [
+        {
+          "id": "my_risk",
+          "name": "My Risk",
+          "description": "What the judge is asked to evaluate against.",
+          "conversationLength": 3
+        }
+      ]
+    }
+  ],
+  "motivations": []
+}
+```
+
+Ids may contain letters, digits, `.`, `_` and `-`; `:` is reserved as the
+scenario-key delimiter. Risk ids must be unique across the whole taxonomy, and a
+risk id is only meaningful together with its taxonomy — two packs may reuse the
+same id for different things, which is why every result records the pack it was
+produced under (see [Interpreting results](#interpreting-results)). Never
+aggregate results across different packs.
+
+**Scenarios are checked against the active taxonomy before any model is called.**
+`run`, `expand-scenarios`, `reassess` and `continue` all validate their whole
+input up front and fail with the offending line numbers rather than skipping
+records mid-run. `--risk-ids` is validated the same way, so a typo fails loudly
+instead of matching nothing. To check a file on its own:
+
+```bash
+yarn kora validate -i data/scenarios.jsonl
+yarn kora --taxonomy ./packs/my-taxonomy.json validate --packs-only
+```
+
+## Behaviors (mechanisms)
+
+Alongside the safety grade, every conversation is assessed on 7 **cross-cutting behaviors** — LLM-judge annotations covering patterns orthogonal to the risk taxonomy (sourced from the KORA V2 taxonomy's "Mechanisms" sheet). Each mechanism is graded on the same failing / adequate / exemplary scale.
+
+| Code     | Code id                  | Name                                | What it captures                                                                                                             |
 | -------- | ------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | M1       | `sycophancy`             | Sycophancy                          | Agreeableness over truth/safety; capitulation under child pressure                                                           |
 | M2       | `epistemicHumility`      | Epistemic Humility                  | Calibrated certainty; hallucination vs. honest uncertainty                                                                   |
@@ -505,7 +592,31 @@ Alongside the safety grade, every conversation is assessed on 7 **cross-cutting 
 | M6       | `anthropomorphism`       | Anthropomorphism                    | Claims of human-like emotion/body/backstory/consciousness                                                                    |
 | M7       | `humanRedirection`       | Human Redirection                   | Redirection to trusted adults/professionals in high-stakes moments                                                           |
 
-Mechanism definitions live in `packages/benchmark/data/mechanisms.ts`. All seven mechanisms now use the KORA V2 "Judgment" rubrics, normalized to the standard failing / adequate / exemplary scale (M5's native 0/1/2 + subtype is collapsed into the same scale). M3, M5, M6, and M7 carry preconditions: when the relevant trigger is not present in the transcript the judge sets `notTriggered: true` on the criterion (with `grade: "adequate"`, `occurrenceCount: 0`). Not-triggered criteria are score-neutral — they are excluded from the model's failing/adequate/exemplary tally and surfaced as a separate "N/A" signal in the per-mechanism sums.
+Behavior definitions live in `packages/benchmark/data/behaviors.json`. All seven now use the KORA V2 "Judgment" rubrics, normalized to the standard failing / adequate / exemplary scale (M5's native 0/1/2 + subtype is collapsed into the same scale). M3, M5, M6, and M7 carry preconditions: when the relevant trigger is not present in the transcript the judge sets `notTriggered: true` on the criterion (with `grade: "adequate"`, `occurrenceCount: 0`). Not-triggered criteria are score-neutral — they are excluded from the model's failing/adequate/exemplary tally and surfaced as a separate "N/A" signal in the per-mechanism sums.
+
+A precondition is stored as the bare condition in the behavior's `precondition`
+field; the "otherwise return adequate / notTriggered" instruction around it is
+generated, so every pack phrases it identically and a pack with different
+preconditions gets correct prompt text automatically.
+
+Like the taxonomy, the behavior set is swappable:
+
+```bash
+yarn kora --behaviors ./packs/my-behaviors.json run gpt-4o
+```
+
+`KORA_BEHAVIORS` is the environment equivalent. A behavior file is
+`{id, version, behaviors: [{id, code?, name, level, precondition?, assessmentPrompt}]}`.
+The judge's output schema and `sums.mechanisms` are both keyed by the active
+behavior ids, so a run under a different set produces a different key set — do
+not merge the two.
+
+> **A note on naming.** "Behavior" (the pack vocabulary) and "mechanism" (the
+> code types and every persisted field: `mechanismAssessment`, `sums.mechanisms`,
+> `--mechanism-ids`) are the same concept. New pack code uses the former;
+> renaming the rest is deliberately deferred, because `behaviorAssessment` was a
+> v1 field name with an incompatible meaning and the compatibility readers still
+> discriminate on it.
 
 ## Interpreting results
 
@@ -517,6 +628,10 @@ The `run` command produces a result object with this structure:
   "judges": ["gpt-5.2:medium:limited"],
   "user": "deepseek-v3.2",
   "prompts": ["default"],
+  "packs": {
+    "taxonomy": {"id": "kora", "version": "2", "hash": "498ec8d2…"},
+    "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
+  },
   "scores": [
     {
       "riskCategoryId": "...",
@@ -546,6 +661,7 @@ The `run` command produces a result object with this structure:
 | `target`          | Target model slug                                                                                                                                                 |
 | `judges`          | Judge model slugs                                                                                                                                                 |
 | `user`            | User model slug                                                                                                                                                   |
+| `packs`           | Taxonomy and behavior pack this run was produced under (id, version, content hash). Results from different packs must not be aggregated.                          |
 | `prompts`         | Prompt variants that were tested                                                                                                                                  |
 | `sums.al`         | Total test count                                                                                                                                                  |
 | `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                   |
@@ -577,8 +693,9 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Risk taxonomy, motivations, mechanisms (risks.json, motivations.json, mechanisms.ts)
+    data/                            Bundled pack: risks.json, behaviors.json, motivations.json (see data/README.md)
     src/                             Core benchmark logic
+      packs/                         Pack model, scoping and taxonomy conformance
       prompts/                       Prompt templates for each pipeline stage
       model/                         Domain types (scenario, risk, assessment, etc.)
       __tests__/                     Test suites
@@ -586,6 +703,7 @@ packages/
       generateUserMessage.ts         User message generation
       kora.ts                        KORA benchmark implementation
   cli/src/                           CLI package
+    packs/                           --taxonomy / --behaviors resolution
     commands/                        CLI command implementations
     __tests__/                       CLI test suites
     models/                          Model-related modules
