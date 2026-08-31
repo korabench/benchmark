@@ -184,7 +184,7 @@ export async function statsCommand(
   }
 
   const mechanismNames = Object.fromEntries(
-    allMechanisms.map(m => [m.id, `${m.excelId} ${m.name}`])
+    allMechanisms.map(m => [m.id, `${Mechanism.codeOf(m)} ${m.name}`])
   );
 
   console.log(`Input: ${inputPath} (${entries.length} assessments)`);

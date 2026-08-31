@@ -1,4 +1,11 @@
-import {kora, Scenario, ScenarioPrompt, TestResult} from "@korabench/benchmark";
+import {
+  kora,
+  Packs,
+  RiskTaxonomy,
+  Scenario,
+  ScenarioPrompt,
+  TestResult,
+} from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
 import archiver from "archiver";
 import {createWriteStream} from "node:fs";
@@ -14,6 +21,9 @@ import {
   buildContext,
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
+import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
+import {resolveRiskIdFilter} from "./shared/riskFilters.js";
+import {assertInputConforms} from "./shared/validateInputFile.js";
 
 interface TestTask {
   scenario: Scenario;
@@ -45,7 +55,16 @@ function sleep(ms: number): Promise<void> {
 }
 
 function taskTempFileName(key: string): string {
-  return Hash.shortHash(key) + ".json";
+  // Graceful restart reads these back through `kora.testResultType`, which is a
+  // strict object keyed by the active behavior ids — a result written under a
+  // different behavior set would fail to parse. Folding the behavior
+  // fingerprint into the name makes such a file simply miss the cache instead.
+  // Only when a custom pack is active, so default runs (and any in-flight
+  // temp dir) keep byte-identical names.
+  const suffix = Packs.isBundledDefault()
+    ? ""
+    : `|${Packs.fingerprint().behaviors.hash}`;
+  return Hash.shortHash(key + suffix) + ".json";
 }
 
 export async function* readScenariosFromJsonl(
@@ -183,11 +202,21 @@ export async function runCommand(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
 
+  // Validate the risk-id filter and the whole scenario file against the active
+  // taxonomy before any model is constructed — a mismatch must not surface
+  // half-way through a paid run.
   const filters: ScenarioFilters = {
-    riskIds: options.riskIds?.length ? new Set(options.riskIds) : undefined,
+    riskIds: resolveRiskIdFilter(options.riskIds),
     limit: options.limit,
     reverse: options.reverse === true,
   };
+  const scenarioCount = await assertInputConforms(
+    scenariosFilePath,
+    "scenarios"
+  );
+  console.log(
+    `Validated ${scenarioCount} scenario(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
   if (filters.riskIds) {
     console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
   }
@@ -293,7 +322,9 @@ export async function runCommand(
           progress.increment(true);
           return [{kind: "success", testResult}];
         } catch (error) {
-          console.error(`\nTest failed for key ${task.key}: ${error}`);
+          if (!reportInvalidTurn(`key ${task.key}`, error)) {
+            console.error(`\nTest failed for key ${task.key}: ${error}`);
+          }
           progress.increment(false);
           return [{kind: "failure"}];
         } finally {
@@ -340,6 +371,7 @@ export async function runCommand(
     judges: judgeModelSlugs,
     user: userModelSlug,
     prompts,
+    packs: Packs.fingerprint(),
     ...(runResult ?? {}),
   };
 

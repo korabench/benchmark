@@ -1,5 +1,7 @@
 import {
   kora,
+  Packs,
+  RiskTaxonomy,
   ScenarioKey,
   ScenarioPrompt,
   TestResult,
@@ -24,6 +26,9 @@ import {
   readReassessInputsFromJsonl,
   ReassessInput,
 } from "./shared/reassessInput.js";
+import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
+import {resolveRiskIdFilter} from "./shared/riskFilters.js";
+import {assertInputConforms} from "./shared/validateInputFile.js";
 
 interface ContinueTask {
   input: ReassessInput;
@@ -118,9 +123,12 @@ export async function continueCommand(
       "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
     );
 
-  const riskIdsFilter = options.riskIds?.length
-    ? new Set(options.riskIds)
-    : undefined;
+  const recordCount = await assertInputConforms(inputFilePath, "reassess");
+  console.log(
+    `Validated ${recordCount} record(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
+
+  const riskIdsFilter = resolveRiskIdFilter(options.riskIds);
   const targetModelsFilter = options.targetModels?.length
     ? new Set(options.targetModels)
     : undefined;
@@ -294,9 +302,10 @@ export async function continueCommand(
           },
         ];
       } catch (error) {
-        console.error(
-          `\nContinue run failed for id=${task.input.id} (model=${task.input.modelId}, key=${task.key}): ${error}`
-        );
+        const label = `id=${task.input.id} (model=${task.input.modelId}, key=${task.key})`;
+        if (!reportInvalidTurn(label, error)) {
+          console.error(`\nContinue run failed for ${label}: ${error}`);
+        }
         progress.increment(false);
         return [{kind: "failure"}];
       } finally {
@@ -365,6 +374,7 @@ export async function continueCommand(
     const result = {
       target: modelId,
       judges: judgeModelSlugs,
+      packs: Packs.fingerprint(),
       user: userModelSlug,
       prompts,
       ...runResult,

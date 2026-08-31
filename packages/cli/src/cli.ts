@@ -36,7 +36,10 @@ import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
+import {InputKind} from "./commands/shared/validateInputFile.js";
 import {statsCommand} from "./commands/statsCommand.js";
+import {validateCommand} from "./commands/validateCommand.js";
+import {configurePacks} from "./packs/loadPack.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -125,7 +128,27 @@ const program = new Command()
   .name("kora")
   .description("CLI tool to run the KORA benchmark.")
   .version(readPackageVersion(), "-v, --version")
-  .option("-d, --debug", "print full errors and debug information");
+  .option("-d, --debug", "print full errors and debug information")
+  .option(
+    "--taxonomy <name|path>",
+    'risk taxonomy pack: a registered name ("kora") or a path to a JSON file holding a full {id, version, categories} taxonomy',
+    process.env.KORA_TAXONOMY
+  )
+  .option(
+    "--behaviors <name|path>",
+    'behavior (mechanism) pack: a registered name ("kora") or a path to a JSON file holding a full {id, version, behaviors} set',
+    process.env.KORA_BEHAVIORS
+  );
+
+// Packs must be resolved before any command body runs, but AFTER the module
+// graph is fully loaded — `cli.ts` statically imports every command, so nothing
+// may read a pack-dependent schema at module scope. See `benchmark.ts`.
+program.hook("preAction", () =>
+  configurePacks({
+    taxonomy: program.opts().taxonomy,
+    behaviors: program.opts().behaviors,
+  })
+);
 
 export type Program = typeof program;
 
@@ -523,5 +546,36 @@ program
       byModel: opts.byModel === true,
     })
   );
+
+program
+  .command("validate")
+  .description(
+    "check that an input file's risk references resolve against the active taxonomy"
+  )
+  .option(
+    "-i, --input <path>",
+    "input JSONL file (seeds, scenarios, or reassess records)",
+    defaultScenariosPath
+  )
+  .option(
+    "--kind <kind>",
+    "record kind: seeds, scenarios or reassess (default: inferred from the first record)"
+  )
+  .option(
+    "--packs-only",
+    "print the active taxonomy and behavior pack, then stop without reading the input"
+  )
+  .action(opts => {
+    const kind = opts.kind as InputKind | undefined;
+    if (kind && !["seeds", "scenarios", "reassess"].includes(kind)) {
+      throw new Error(
+        `--kind must be one of: seeds, scenarios, reassess (got: ${opts.kind})`
+      );
+    }
+    return validateCommand(program, opts.input, {
+      kind,
+      packsOnly: opts.packsOnly === true,
+    });
+  });
 
 program.parseAsync();
