@@ -1,7 +1,9 @@
 import type {PackScope} from "./packScope.js";
 
 /**
- * The browser stand-in, selected by the `browser` condition on `#packScope`.
+ * The browser stand-in, selected by the `browser` condition on `#packScope`
+ * — which a Cloudflare build also asks for, so the `imports` map answers
+ * `workerd` with the node implementation before `browser` is considered.
  *
  * A page renders against one pack, so there is no concurrent work to keep
  * apart and a save/restore stack is enough. It is accurate for the only shape
