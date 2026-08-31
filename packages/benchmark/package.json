@@ -39,6 +39,7 @@
   "imports": {
     "#packScope": {
       "types": "./src/packs/packScope.node.ts",
+      "workerd": "./build/src/packs/packScope.node.js",
       "browser": "./build/src/packs/packScope.browser.js",
       "default": "./build/src/packs/packScope.node.js"
     }
