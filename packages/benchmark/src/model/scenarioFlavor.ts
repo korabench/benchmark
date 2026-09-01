@@ -3,11 +3,14 @@ import {PackId} from "../packs/packId.js";
 
 const SUM_TOLERANCE = 1e-6;
 
+const VFlavorRiskSignalType = v.picklist(["direct", "subtle", "ambiguous"]);
+
 const VScenarioFlavor = v.strictObject({
   id: PackId.io,
   proportion: v.pipe(v.number(), v.minValue(0), v.maxValue(1)),
   description: v.string(),
   conversationLength: v.optional(v.number()),
+  riskSignalType: v.optional(VFlavorRiskSignalType),
 });
 
 export interface ScenarioFlavor extends v.InferOutput<typeof VScenarioFlavor> {}

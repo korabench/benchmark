@@ -12,6 +12,10 @@ import {
   allocatePersonas,
   PinnedDemographics,
 } from "./allocation/allocatePersonas.js";
+import {
+  allocateRiskSignalTypes,
+  RiskSignalType,
+} from "./allocation/allocateRiskSignalType.js";
 import {makeRng, shuffleWith} from "./allocation/rng.js";
 import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
 import {
@@ -56,20 +60,6 @@ import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js"
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
-
-const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
-  "7to9": [7, 9],
-  "10to12": [10, 12],
-  "13to17": [13, 17],
-};
-
-function clampAgeToBand(age: number, band: AgeRange): number {
-  const [lo, hi] = AGE_BANDS[band];
-  const rounded = Math.round(age);
-  if (rounded < lo) return lo;
-  if (rounded > hi) return hi;
-  return rounded;
-}
 
 /**
  * Run the judge-assessment step on a pre-existing transcript.
@@ -226,6 +216,7 @@ export const kora = Benchmark.new({
       seedsToGenerate: number;
       pinnedDemographics?: PinnedDemographics;
       pinnedFlavor?: ScenarioFlavor;
+      pinnedRiskSignalType?: RiskSignalType;
     }
 
     const tasks: Task[] = distribution
@@ -243,17 +234,24 @@ export const kora = Benchmark.new({
               const flavorIds = risk.scenarioFlavors
                 ? allocateFlavors(risk.scenarioFlavors, totalSeeds!, rng)
                 : undefined;
-              return personas.map((pinned, i) => ({
-                riskCategory,
-                risk,
-                ageRange: pinned.ageRange,
-                motivation: motivationCycle[i % motivationCycle.length]!,
-                seedsToGenerate: 1,
-                pinnedDemographics: pinned,
-                pinnedFlavor: flavorIds
+              const signalTypes = allocateRiskSignalTypes(totalSeeds!, rng);
+              return personas.map((pinned, i) => {
+                const flavor = flavorIds
                   ? risk.scenarioFlavors!.find(f => f.id === flavorIds[i])
-                  : undefined,
-              }));
+                  : undefined;
+                return {
+                  riskCategory,
+                  risk,
+                  ageRange: pinned.ageRange,
+                  motivation: motivationCycle[i % motivationCycle.length]!,
+                  seedsToGenerate: 1,
+                  pinnedDemographics: pinned,
+                  pinnedFlavor: flavor,
+                  pinnedRiskSignalType:
+                    (flavor?.riskSignalType as RiskSignalType | undefined) ??
+                    signalTypes[i],
+                };
+              });
             })
         )
       : riskCategories.flatMap<Task>(riskCategory =>
@@ -305,6 +303,7 @@ export const kora = Benchmark.new({
           seedsToGenerate,
           pinnedDemographics,
           pinnedFlavor,
+          pinnedRiskSignalType,
         } = task;
         const prompt = riskToScenarioSeedsPrompt({
           riskCategory,
@@ -314,6 +313,7 @@ export const kora = Benchmark.new({
           count: seedsToGenerate,
           pinnedDemographics,
           pinnedFlavor,
+          pinnedRiskSignalType,
         });
 
         const {output} = await c.getResponse({
@@ -341,10 +341,15 @@ export const kora = Benchmark.new({
           if (!pinnedDemographics) return base;
           return {
             ...base,
+            childAge: pinnedDemographics.childAge,
             childGender: pinnedDemographics.gender,
             childRaceEthnicity: pinnedDemographics.raceEthnicity,
             childSES: pinnedDemographics.ses,
-            childAge: clampAgeToBand(s.childAge, pinnedDemographics.ageRange),
+            childCognitiveMaturity: pinnedDemographics.cognitiveMaturity,
+            childEmotionalMaturity: pinnedDemographics.emotionalMaturity,
+            ...(pinnedRiskSignalType
+              ? {riskSignalType: pinnedRiskSignalType}
+              : {}),
           };
         });
       },

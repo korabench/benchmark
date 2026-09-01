@@ -1,6 +1,7 @@
 export * from "./aggregateAssessments.js";
 export * from "./allocation/allocateFlavors.js";
 export * from "./allocation/allocatePersonas.js";
+export * from "./allocation/allocateRiskSignalType.js";
 export * from "./allocation/largestRemainder.js";
 export * from "./allocation/rng.js";
 export * from "./benchmark.js";
