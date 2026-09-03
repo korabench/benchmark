@@ -4,9 +4,11 @@ The first public benchmark for AI child safety. Learn more at [korabench.ai](htt
 
 ## Overview
 
-KORA measures the safety of AI models interacting with children across 8 risk categories, 25 individual risks, 3 age groups (7–9, 10–12, 13–17), 10 child motivations, and 7 cross-cutting conversation mechanisms. It produces per-risk grades — failing, adequate, or exemplary — for both safety and each of the 7 mechanisms.
+KORA measures the safety of AI models interacting with children across 8 risk categories, 26 individual risks, 3 age groups (7–9, 10–12, 13–17), 10 child motivations, and 7 cross-cutting conversation mechanisms. It produces per-risk grades — failing, adequate, or exemplary — for both safety and each of the 7 mechanisms.
 
 The benchmark uses a 3-stage pipeline: **seed generation** creates short scenario outlines from the risk taxonomy, **scenario expansion** turns each seed into a detailed test scenario with validation, and **test runs** execute multi-turn conversations and judge the results.
+
+For how each stage works internally — persona allocation, what each prompt asks for, and where the guardrails sit — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
 Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt) and `child` (age-aware system prompt) — controlled via the `--prompts` flag.
 
@@ -51,6 +53,8 @@ Both default to the bundled KORA pack, so no configuration is needed to run the
 benchmark as published. See [Using a custom taxonomy](#using-a-custom-taxonomy).
 
 ## Pipeline stages
+
+This section covers how to invoke each stage. For what happens inside them, see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
 ### `generate-seeds`
 
@@ -688,6 +692,7 @@ All commands run with a concurrency of 10 parallel tasks.
 
 ```
 .env.example                         Environment variable template
+EVALUATION_PROCESS.md                How the pipeline works internally (+ known dead code)
 models.json                          Model registry configuration
 data/                                Scenario pipeline output (seeds, scenarios, results)
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
