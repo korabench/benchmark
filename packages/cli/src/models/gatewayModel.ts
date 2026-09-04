@@ -5,10 +5,19 @@ import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
 import {createFallbackModel} from "./fallbackModel.js";
 import {Model} from "./model.js";
-import {resolveModelConfig} from "./modelConfig.js";
+import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
 
 export interface ModelOptions {
   retry?: RetryOptions;
+}
+
+export interface GatewayModel extends Model {
+  /**
+   * Model ids the provider reported serving, as seen on each response. A
+   * pinned id such as "openai/gpt-5.2" can still resolve to different
+   * snapshots over time; this is the only evidence of which one answered.
+   */
+  readonly served: ReadonlySet<string>;
 }
 
 const defaultRetryOptions: RetryOptions = {
@@ -64,11 +73,28 @@ export function createGatewayModel(
   modelsJsonPath: string,
   modelSlug: string,
   options?: ModelOptions
-): Model {
-  const config = resolveModelConfig(modelsJsonPath, modelSlug);
-  const retryOptions = buildRetryOptions(config.model, options);
+): GatewayModel {
+  return createGatewayModelFromConfig(
+    resolveModelConfig(modelsJsonPath, modelSlug),
+    modelSlug,
+    options
+  );
+}
+
+/** Build a gateway model from an inline config (no registry lookup). */
+export function createGatewayModelFromConfig(
+  config: ModelConfig,
+  label: string,
+  options?: ModelOptions
+): GatewayModel {
+  const retryLabel =
+    label === config.model ? label : `${label} (${config.model})`;
+  const retryOptions = buildRetryOptions(retryLabel, options);
+  const served = new Set<string>();
 
   return {
+    served,
+
     async getTextResponse(request: ModelRequest): Promise<string> {
       const maxTokens = request.maxTokens ?? config.maxTokens;
       const temperature = request.temperature ?? config.temperature;
@@ -94,6 +120,7 @@ export function createGatewayModel(
         retryOptions
       );
 
+      served.add(result.response.modelId);
       return result.text;
     },
 
@@ -134,6 +161,7 @@ export function createGatewayModel(
             maxRetries: 0,
           });
 
+          served.add(result.response.modelId);
           const parsed = JSON.parse(extractJson(result.text));
           return v.parse(request.outputType, parsed);
         }, retryOptions);
@@ -151,6 +179,7 @@ export function createGatewayModel(
           maxRetries: 0,
         });
 
+        served.add(result.response.modelId);
         return v.parse(request.outputType, result.object);
       }, retryOptions);
     },

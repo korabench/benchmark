@@ -4,6 +4,7 @@ import {
   RiskTaxonomy,
   Scenario,
   ScenarioPrompt,
+  Stamp,
   TestResult,
 } from "@korabench/benchmark";
 import {Hash, Script} from "@korabench/core";
@@ -15,13 +16,24 @@ import * as readline from "node:readline";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
-import {Model} from "../models/model.js";
+import {
+  describeProfileRef,
+  resolveEffectiveProfile,
+  RoleOverrides,
+} from "../profiles/effectiveProfile.js";
+import {
+  collectServed,
+  createJudgeModels,
+  createSpecModel,
+} from "../profiles/roleModels.js";
+import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {
   buildContext,
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
+import {assertResumable, hasCachedFiles} from "./shared/cacheStamp.js";
 import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
+import {buildResultHeader} from "./shared/resultHeader.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
 
@@ -158,15 +170,6 @@ async function archiveResults(
   await done;
 }
 
-async function hasTempFiles(tempDir: string): Promise<boolean> {
-  try {
-    const files = await fs.readdir(tempDir);
-    return files.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export interface RunCommandOptions {
   riskIds?: readonly string[];
   limit?: number;
@@ -186,21 +189,20 @@ export async function runCommand(
   _program: Program,
   modelsJsonPath: string,
   targetModelSlug: string,
-  judgeModelSlugs: readonly string[],
-  userModelSlug: string,
+  overrides: RoleOverrides,
   scenariosFilePath: string,
   outputFilePath: string,
   prompts: readonly ScenarioPrompt[],
   options: RunCommandOptions = {}
 ) {
+  const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
+  const {roles} = effective;
+  const judgeModelSlugs = roles.judges.map(spec => spec.name);
+  const userModelSlug = roles.user.name;
+  console.log(`Profile: ${describeProfileRef(effective.ref)}`);
   console.log(
     `Running benchmark: target=${targetModelSlug}, judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
   );
-
-  if (judgeModelSlugs.length % 2 === 0)
-    throw new Error(
-      "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
-    );
 
   // Validate the risk-id filter and the whole scenario file against the active
   // taxonomy before any model is constructed — a mismatch must not surface
@@ -217,6 +219,13 @@ export async function runCommand(
   console.log(
     `Validated ${scenarioCount} scenario(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
   );
+  const stamp = await buildRunStamp({
+    effective,
+    modelsJsonPath,
+    target: targetModelSlug,
+    inputPath: scenariosFilePath,
+  });
+  Stamp.configure(stamp);
   if (filters.riskIds) {
     console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
   }
@@ -234,13 +243,8 @@ export async function runCommand(
   }
   let freshStarted = 0;
 
-  const judgeModels: Record<string, Model> = Object.fromEntries(
-    judgeModelSlugs.map(slug => [
-      slug,
-      createGatewayModel(modelsJsonPath, slug),
-    ])
-  );
-  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+  const judgeModels = createJudgeModels(roles.judges);
+  const userModel = createSpecModel(roles.user);
   const targetGatewayModel = resolveTargetGatewayModel(
     modelsJsonPath,
     targetModelSlug
@@ -250,12 +254,13 @@ export async function runCommand(
   const tempDir = path.join(outputDir, ".kora-run-tmp");
 
   // Clear output file if no process in progress (no temp files)
-  if (!(await hasTempFiles(tempDir))) {
+  if (!(await hasCachedFiles(tempDir))) {
     await fs.mkdir(outputDir, {recursive: true});
     await fs.writeFile(outputFilePath, "");
   }
 
   await fs.mkdir(tempDir, {recursive: true});
+  await assertResumable(tempDir, stamp);
 
   const totalTests = await countTestTasks(scenariosFilePath, prompts, filters);
 
@@ -367,11 +372,17 @@ export async function runCommand(
 
   // Write reduced result.
   const result = {
-    target: targetModelSlug,
-    judges: judgeModelSlugs,
-    user: userModelSlug,
-    prompts,
-    packs: Packs.fingerprint(),
+    ...buildResultHeader({
+      target: targetModelSlug,
+      effective,
+      prompts,
+      stamp,
+      served: collectServed({
+        user: userModel,
+        judges: judgeModels,
+        target: targetGatewayModel,
+      }),
+    }),
     ...(runResult ?? {}),
   };
 

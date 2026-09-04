@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import {RunStamp} from "../stamp/runStamp.js";
 import {AgeRange} from "./ageRange.js";
 import {Motivation} from "./motivation.js";
 
@@ -253,6 +254,8 @@ const VScenarioSeed = v.strictObject({
    */
   taxonomyId: v.optional(v.string()),
   taxonomyVersion: v.optional(v.string()),
+  /** Full provenance of the generating run. Optional for the same reason. */
+  stamp: v.optional(RunStamp.io),
   id: v.string(),
   riskCategoryId: v.string(),
   riskId: v.string(),

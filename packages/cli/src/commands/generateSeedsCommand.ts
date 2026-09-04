@@ -4,12 +4,19 @@ import {
   kora,
   largestRemainderCounts,
   RiskCategory,
+  Stamp,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {Program} from "../cli.js";
-import {createGatewayModelChain} from "../models/gatewayModel.js";
+import {
+  describeProfileRef,
+  resolveEffectiveProfile,
+  RoleOverrides,
+} from "../profiles/effectiveProfile.js";
+import {chainLabel, createChainModel} from "../profiles/roleModels.js";
+import {buildRunStamp} from "../stamp/buildRunStamp.js";
 
 function formatCounts(counts: Record<string, number>): string {
   return Object.entries(counts)
@@ -20,14 +27,18 @@ function formatCounts(counts: Record<string, number>): string {
 export async function generateSeeds(
   _program: Program,
   modelsJsonPath: string,
-  modelSlugs: readonly string[],
+  overrides: RoleOverrides,
   outputFilePath: string,
   options?: GenerateSeedsOptions
 ) {
+  const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
+  const {roles} = effective;
+  console.log(`Profile: ${describeProfileRef(effective.ref)}`);
+  Stamp.configure(await buildRunStamp({effective, modelsJsonPath}));
   console.log(
-    modelSlugs.length === 1
-      ? `Generating seeds using ${modelSlugs[0]}...`
-      : `Generating seeds with fallback chain: ${modelSlugs.join(" → ")}`
+    roles.seeds.length === 1
+      ? `Generating seeds using ${chainLabel(roles.seeds)}...`
+      : `Generating seeds with fallback chain: ${chainLabel(roles.seeds)}`
   );
   if (options?.riskIds?.length) {
     console.log(`Filtering to risk IDs: ${options.riskIds.join(", ")}`);
@@ -65,7 +76,7 @@ export async function generateSeeds(
     }
   }
 
-  const model = createGatewayModelChain(modelsJsonPath, modelSlugs);
+  const {model} = createChainModel(roles.seeds);
 
   const context: GenerateSeedsContext = {
     getResponse: async request => ({

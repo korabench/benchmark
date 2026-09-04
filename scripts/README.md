@@ -8,6 +8,12 @@ Both scripts import the **built** packages (`packages/*/build/...`), so run
 `yarn build` (or `yarn tsbuild`) first, and pass the gateway/runner env with
 `node --env-file=.env`. They read `models.json` from the repo root.
 
+They predate evaluation profiles: models come from `JUDGE` / `USER_MODEL` and
+`models.json`, and the temp files they write carry no run stamp. The follow-up
+`kora run` accepts such a directory with a warning (`without a stamp`) and
+stamps the aggregated result with its own configuration. Adapting the scripts
+to load a profile and stamp their records is a follow-up.
+
 ## `manual-rerun.mjs` — collect conversations, human-in-the-loop
 
 Drives one scenario at a time: prints the user (child) turn, you paste the app's

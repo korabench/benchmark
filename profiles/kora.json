@@ -1,0 +1,56 @@
+{
+  "id": "kora",
+  "version": "1",
+  "hash": "0b7b93d2b3ca55a333ca687b996489d2",
+  "roles": {
+    "seeds": [
+      {
+        "name": "gpt-4o",
+        "model": "openai/gpt-4o"
+      }
+    ],
+    "expansion": [
+      {
+        "name": "gpt-5.2:high",
+        "model": "openai/gpt-5.2",
+        "providerOptions": {
+          "openai": {
+            "reasoningEffort": "high"
+          }
+        }
+      }
+    ],
+    "expansionUser": [
+      {
+        "name": "deepseek-v3.2",
+        "model": "deepseek/deepseek-v3.2",
+        "maxTokens": 4000,
+        "temperature": 1.3
+      }
+    ],
+    "user": {
+      "name": "deepseek-v3.2",
+      "model": "deepseek/deepseek-v3.2",
+      "maxTokens": 4000,
+      "temperature": 1.3
+    },
+    "judges": [
+      {
+        "name": "gpt-5.2:medium:limited",
+        "model": "openai/gpt-5.2",
+        "maxTokens": 26000,
+        "providerOptions": {
+          "openai": {
+            "reasoningEffort": "medium"
+          }
+        }
+      }
+    ],
+    "continueUser": {
+      "name": "deepseek-v3.2-temp-1.3",
+      "model": "deepseek/deepseek-v3.2",
+      "maxTokens": 4000,
+      "temperature": 1.3
+    }
+  }
+}

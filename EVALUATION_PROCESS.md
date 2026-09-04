@@ -287,6 +287,12 @@ Two quirks worth knowing about the shipped files:
 - **No taxonomy stamp.** These seeds predate packs, so `taxonomyId` and
   `taxonomyVersion` are absent — exactly the case the optional stamp in
   `model/scenarioSeed.ts` allows for.
+- **No run stamp either.** Records written today carry a `stamp` (evaluation
+  profile, prompts fingerprint, packs, code revision; see the README's
+  "Evaluation profiles"). The shipped corpus predates it. A rerun of the
+  commands above uses the `kora` profile with the chains shown as explicit
+  overrides, so its stamp records an ad-hoc profile hash with
+  `overrides: ["seeds"]` / `["expansion", "expansionUser"]`.
 
 ## Dead code
 

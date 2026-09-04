@@ -5,6 +5,8 @@ import {kora} from "../kora.js";
 import {InvalidTurnError} from "../model/invalidTurnError.js";
 import {Mechanism} from "../model/mechanism.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
+import {makeStamp} from "../stamp/__tests__/fixtures.js";
+import {Stamp} from "../stamp/stamp.js";
 import {createScenario} from "./fixtures.js";
 
 //
@@ -75,6 +77,23 @@ describe("kora.runTest", () => {
   const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
+
+  it("omits the stamp when none is configured", async () => {
+    const result = await kora.runTest(
+      createTestContext(),
+      scenario,
+      defaultKey
+    );
+    expect("stamp" in result).toBe(false);
+  });
+
+  it("attaches the active stamp", async () => {
+    const stamp = makeStamp();
+    const result = await Stamp.run(stamp, () =>
+      kora.runTest(createTestContext(), scenario, defaultKey)
+    );
+    expect(result.stamp).toBe(stamp);
+  });
 
   it("produces a 3-turn conversation with 6 messages", async () => {
     const context = createTestContext();

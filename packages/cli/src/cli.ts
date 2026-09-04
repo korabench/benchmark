@@ -5,21 +5,23 @@ import {
   PopulationDistribution,
   ScenarioPrompt,
 } from "@korabench/benchmark";
-import {existsSync, readFileSync} from "node:fs";
+import {existsSync} from "node:fs";
 import * as path from "node:path";
-import {dirname} from "node:path";
-import {fileURLToPath} from "node:url";
 import * as v from "valibot";
 import {compareAssessmentsCommand} from "./commands/compareAssessmentsCommand.js";
 import {continueCommand} from "./commands/continueCommand.js";
 import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
+import {profileCommand} from "./commands/profileCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
 import {InputKind} from "./commands/shared/validateInputFile.js";
 import {statsCommand} from "./commands/statsCommand.js";
 import {validateCommand} from "./commands/validateCommand.js";
 import {configurePacks} from "./packs/loadPack.js";
+import {loadProfile, profilesDir} from "./profiles/loadProfile.js";
+import {Profiles} from "./profiles/profiles.js";
+import {readPackageVersion} from "./shared/packageVersion.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -51,13 +53,9 @@ function splitCsv(value: string): readonly string[] {
   return parts;
 }
 
-function readPackageVersion(): string {
-  const pkgPath = path.join(
-    dirname(fileURLToPath(import.meta.url)),
-    "../../package.json"
-  );
-  const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-  return pkg.version || "0.0.0";
+/** `splitCsv` for optional role arguments: absent means "from profile". */
+function optionalCsv(value: string | undefined): readonly string[] | undefined {
+  return value === undefined ? undefined : splitCsv(value);
 }
 
 const modelsJsonPath = findConfigFile("models.json");
@@ -118,17 +116,29 @@ const program = new Command()
     "--behaviors <name|path>",
     'behavior (mechanism) pack: a registered name ("kora") or a path to a JSON file holding a full {id, version, behaviors} set',
     process.env.KORA_BEHAVIORS
+  )
+  .option(
+    "--profile <name|path>",
+    'evaluation profile pinning the model for every role: a name under profiles/ ("kora"), a local scratch profile ("<name>.local"), or a path to a JSON file',
+    process.env.KORA_PROFILE ?? "kora"
   );
 
-// Packs must be resolved before any command body runs, but AFTER the module
-// graph is fully loaded — `cli.ts` statically imports every command, so nothing
-// may read a pack-dependent schema at module scope. See `benchmark.ts`.
-program.hook("preAction", () =>
+// Packs and the profile must be resolved before any command body runs, but
+// AFTER the module graph is fully loaded — `cli.ts` statically imports every
+// command, so nothing may read a pack-dependent schema at module scope. See
+// `benchmark.ts`. The `profile` command loads the profile itself so that
+// `--print-hash` can inspect a file whose hash is stale.
+program.hook("preAction", (_thisCommand, actionCommand) => {
   configurePacks({
     taxonomy: program.opts().taxonomy,
     behaviors: program.opts().behaviors,
-  })
-);
+  });
+  if (actionCommand.name() !== "profile") {
+    Profiles.configure(
+      loadProfile(program.opts().profile, profilesDir(modelsJsonPath))
+    );
+  }
+});
 
 export type Program = typeof program;
 
@@ -137,8 +147,7 @@ program
   .description("generate a new set of scenario seeds")
   .argument(
     "[model]",
-    "model(s) to use for seed generation; comma-separated for per-task fallback chain (e.g. gpt-4o,gpt-5.5:low)",
-    "gpt-4o"
+    "override the profile's seeds role with models.json slug(s); comma-separated for per-task fallback chain (e.g. gpt-4o,gpt-5.5:low)"
   )
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
@@ -185,7 +194,7 @@ program
     return generateSeeds(
       program,
       modelsJsonPath,
-      splitCsv(model),
+      {seeds: optionalCsv(model)},
       opts.output,
       {
         seedsPerTask:
@@ -218,13 +227,11 @@ program
   .description("transform the seeds into fully fleshed out scenarios")
   .argument(
     "[model]",
-    "model(s) for seed expansion; comma-separated for per-task fallback chain",
-    "gpt-5.2:high"
+    "override the profile's expansion role with models.json slug(s); comma-separated for per-task fallback chain"
   )
   .argument(
     "[user-model]",
-    "model(s) for user message generation; comma-separated for per-task fallback chain",
-    "deepseek-v3.2"
+    "override the profile's expansionUser role with models.json slug(s); comma-separated for per-task fallback chain"
   )
   .option("-i, --input <path>", "input seeds JSONL file", defaultSeedsPath)
   .option(
@@ -240,8 +247,7 @@ program
     expandScenariosCommand(
       program,
       modelsJsonPath,
-      splitCsv(model),
-      splitCsv(userModel),
+      {expansion: optionalCsv(model), expansionUser: optionalCsv(userModel)},
       opts.input,
       opts.output,
       opts.riskIds
@@ -257,13 +263,11 @@ program
   .argument("<target-model>", "model to benchmark")
   .argument(
     "[user-model]",
-    "model to use for user message generation",
-    "deepseek-v3.2"
+    "override the profile's user role with a models.json slug"
   )
   .option(
     "--judges <models>",
-    "comma-separated judge models",
-    "gpt-5.2:medium:limited"
+    "override the profile's judges role with comma-separated models.json slugs (odd count)"
   )
   .option(
     "-i, --input <path>",
@@ -323,8 +327,7 @@ program
       program,
       modelsJsonPath,
       targetModel,
-      opts.judges.split(",").map(s => s.trim()),
-      userModel,
+      {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
       opts.input,
       opts.output,
       opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
@@ -348,13 +351,11 @@ program
   )
   .argument(
     "[user-model]",
-    "label recorded into each output JSON's `user` field (the user model that originally produced the transcripts; no model is invoked)",
-    "deepseek-v3.2"
+    "override the profile's user role with a models.json slug; only recorded into each output JSON's `user` field (no user model is invoked)"
   )
   .option(
     "--judges <models>",
-    "comma-separated judge models",
-    "gpt-5.2:medium:limited"
+    "override the profile's judges role with comma-separated models.json slugs (odd count)"
   )
   .option(
     "-i, --input <path>",
@@ -390,8 +391,7 @@ program
     return reassessCommand(
       program,
       modelsJsonPath,
-      opts.judges.split(",").map(s => s.trim()),
-      userModel,
+      {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
       opts.input,
       opts.output,
       {
@@ -415,13 +415,11 @@ program
   )
   .argument(
     "[user-model]",
-    "model to use for user message generation during the continuation",
-    "deepseek-v3.2-temp-1.3"
+    "override the profile's continueUser role with a models.json slug"
   )
   .option(
     "--judges <models>",
-    "comma-separated judge models",
-    "gpt-5.2:medium:limited"
+    "override the profile's judges role with comma-separated models.json slugs (odd count)"
   )
   .option(
     "-i, --input <path>",
@@ -462,8 +460,7 @@ program
     return continueCommand(
       program,
       modelsJsonPath,
-      opts.judges.split(",").map(s => s.trim()),
-      userModel,
+      {judges: optionalCsv(opts.judges), continueUser: optionalCsv(userModel)},
       opts.input,
       opts.output,
       {
@@ -543,7 +540,7 @@ program
   )
   .option(
     "--packs-only",
-    "print the active taxonomy and behavior pack, then stop without reading the input"
+    "print the active profile, taxonomy and behavior pack, then stop without reading the input"
   )
   .action(opts => {
     const kind = opts.kind as InputKind | undefined;
@@ -552,10 +549,30 @@ program
         `--kind must be one of: seeds, scenarios, reassess (got: ${opts.kind})`
       );
     }
-    return validateCommand(program, opts.input, {
+    return validateCommand(program, modelsJsonPath, opts.input, {
       kind,
       packsOnly: opts.packsOnly === true,
     });
   });
+
+program
+  .command("profile")
+  .description(
+    "print the active evaluation profile (every role with its full model config, prompts fingerprint, packs, code revision)"
+  )
+  .option(
+    "--check",
+    "send a one-word prompt to every model in the profile and report the served model id, latency and pass/fail (needs AI_GATEWAY_API_KEY)"
+  )
+  .option(
+    "--print-hash",
+    "print only the profile's recomputed content hash (paste it into the file after bumping its version)"
+  )
+  .action(opts =>
+    profileCommand(program, modelsJsonPath, program.opts().profile, {
+      check: opts.check === true,
+      printHash: opts.printHash === true,
+    })
+  );
 
 program.parseAsync();

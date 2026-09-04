@@ -55,6 +55,8 @@ import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessa
 import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+import {RunStamp} from "./stamp/runStamp.js";
+import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
 const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
@@ -69,6 +71,12 @@ function clampAgeToBand(age: number, band: AgeRange): number {
   if (rounded < lo) return lo;
   if (rounded > hi) return hi;
   return rounded;
+}
+
+/** The active run stamp as a spreadable field: present only when configured. */
+function stampField(): {stamp?: RunStamp} {
+  const stamp = Stamp.current();
+  return stamp ? {stamp} : {};
 }
 
 /**
@@ -151,6 +159,7 @@ export async function runJudges(
     mechanismAssessment,
     judgeAssessments,
     packs: Packs.fingerprint(),
+    ...stampField(),
   };
 }
 
@@ -331,6 +340,7 @@ export const kora = Benchmark.new({
             ...s,
             taxonomyId: taxonomy.id,
             taxonomyVersion: taxonomy.version,
+            ...stampField(),
             id: uuid(),
             riskCategoryId: riskCategory.id,
             riskId: risk.id,
@@ -404,6 +414,7 @@ export const kora = Benchmark.new({
         seed,
         firstUserMessage: "",
         ...modelScenario,
+        ...stampField(),
       };
 
       const validationPrompt = scenarioToValidationPrompt(
