@@ -13,13 +13,37 @@ import * as v from "valibot";
  * else is the configuration the gateway actually uses, so a spec is
  * self-describing: no registry lookup is needed to know what ran.
  */
+/**
+ * Provider options are JSON, typed as such rather than `unknown`: a stamp is
+ * persisted and served to browsers, and serialization-aware frameworks reject
+ * `unknown` where they accept a JSON value.
+ */
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | {readonly [key: string]: JsonValue};
+
+const VJsonValue: v.GenericSchema<JsonValue> = v.lazy(() =>
+  v.union([
+    v.string(),
+    v.number(),
+    v.boolean(),
+    v.null(),
+    v.array(VJsonValue),
+    v.record(v.string(), VJsonValue),
+  ])
+);
+
 const VModelSpec = v.object({
   name: v.pipe(v.string(), v.minLength(1)),
   model: v.string(),
   maxTokens: v.optional(v.number()),
   temperature: v.optional(v.number()),
   providerOptions: v.optional(
-    v.record(v.string(), v.record(v.string(), v.unknown()))
+    v.record(v.string(), v.record(v.string(), VJsonValue))
   ),
 });
 
