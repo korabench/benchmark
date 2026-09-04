@@ -6,6 +6,21 @@ import * as v from "valibot";
 //
 
 /**
+ * Provider options are JSON, typed as such rather than `unknown`: a stamp is
+ * persisted and served to browsers, and serialization-aware frameworks reject
+ * `unknown` where they accept a JSON value. Two levels of nesting cover every
+ * provider option in use (e.g. `deepseek.thinking = {type: "enabled"}`) without
+ * a recursive type, which those same frameworks fail to instantiate.
+ */
+const VJsonLeaf = v.union([v.string(), v.number(), v.boolean(), v.null()]);
+
+const VProviderOption = v.union([
+  VJsonLeaf,
+  v.array(VJsonLeaf),
+  v.record(v.string(), VJsonLeaf),
+]);
+
+/**
  * A fully resolved LLM configuration plus a display `name`.
  *
  * `name` is what the CLI prints and what result headers persist in their
@@ -13,37 +28,13 @@ import * as v from "valibot";
  * else is the configuration the gateway actually uses, so a spec is
  * self-describing: no registry lookup is needed to know what ran.
  */
-/**
- * Provider options are JSON, typed as such rather than `unknown`: a stamp is
- * persisted and served to browsers, and serialization-aware frameworks reject
- * `unknown` where they accept a JSON value.
- */
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | readonly JsonValue[]
-  | {readonly [key: string]: JsonValue};
-
-const VJsonValue: v.GenericSchema<JsonValue> = v.lazy(() =>
-  v.union([
-    v.string(),
-    v.number(),
-    v.boolean(),
-    v.null(),
-    v.array(VJsonValue),
-    v.record(v.string(), VJsonValue),
-  ])
-);
-
 const VModelSpec = v.object({
   name: v.pipe(v.string(), v.minLength(1)),
   model: v.string(),
   maxTokens: v.optional(v.number()),
   temperature: v.optional(v.number()),
   providerOptions: v.optional(
-    v.record(v.string(), v.record(v.string(), VJsonValue))
+    v.record(v.string(), v.record(v.string(), VProviderOption))
   ),
 });
 
