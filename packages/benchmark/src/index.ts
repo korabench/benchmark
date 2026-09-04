@@ -38,6 +38,7 @@ export * from "./packs/packs.js";
 export * from "./packs/packStamp.js";
 export * from "./packs/riskTaxonomy.js";
 export * from "./packs/stableJson.js";
+export * from "./profiles/profile.js";
 export * from "./prompts/conversationToAssessmentPrompt.js";
 export * from "./prompts/conversationToMechanismAssessmentPrompt.js";
 export * from "./prompts/promptsFingerprint.js";

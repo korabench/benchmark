@@ -436,7 +436,7 @@ everything that shaped it:
 | Field     | Description                                                                                                                                                    |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `profile` | `{id, version, hash}` plus `local` and `overrides` when applicable. The hash covers the *effective* roles.                                                     |
-| `models`  | The resolved configuration of every role, and `target` for `run` (a model spec, or `{kind, slug}` for `kora-app-*` / `custom-*` targets)                       |
+| `models`  | The resolved configuration of every role the harness has (the CLI fills all six), and `target` for `run` (a model spec, or `{kind, slug}` for `kora-app-*` / `custom-*` targets) |
 | `prompts` | `{version, hash}` of the prompt templates (`packages/benchmark/src/prompts/promptsFingerprint.ts`, guarded by a test the same way as profiles)                  |
 | `code`    | `@korabench/cli` version, git `commit` and `dirty` flag when run from a checkout                                                                                 |
 | `packs`   | Taxonomy and behavior pack, as in `packs`                                                                                                                       |
@@ -833,6 +833,7 @@ packages/
     data/                            Bundled pack: risks.json, behaviors.json, motivations.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
+      profiles/                      Evaluation profile model (schema, hash)
       stamp/                         Run stamp model and scoping
       prompts/                       Prompt templates for each pipeline stage (+ promptsFingerprint.ts)
       model/                         Domain types (scenario, risk, assessment, etc.)

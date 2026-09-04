@@ -36,13 +36,16 @@ const VTargetRef = v.union([ModelSpec.io, VRunnerTarget]);
 
 const VChain = v.array(ModelSpec.io);
 
+// A harness records the roles it has. The CLI fills every one; the kora-infra
+// worker only simulates the user and judges, so the corpus-building roles are
+// optional. `user` and `judges` are what every evaluation needs.
 const VStampModels = v.object({
-  seeds: VChain,
-  expansion: VChain,
-  expansionUser: VChain,
+  seeds: v.optional(VChain),
+  expansion: v.optional(VChain),
+  expansionUser: v.optional(VChain),
   user: ModelSpec.io,
   judges: VChain,
-  continueUser: ModelSpec.io,
+  continueUser: v.optional(ModelSpec.io),
   /** The evaluated model; only meaningful for `run`. */
   target: v.optional(VTargetRef),
 });
