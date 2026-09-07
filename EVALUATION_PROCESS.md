@@ -84,6 +84,9 @@ from `risk.scenarioFlavors[].proportion`.
 Every shuffle draws from `makeRng(--random-seed)`, so the whole allocation is
 reproducible.
 
+[SCENARIO_CREATION.md](SCENARIO_CREATION.md) covers both modes and every drawn
+parameter in detail.
+
 ### The call
 
 `riskToScenarioSeedsPrompt` gives the model the risk name and definition, the
