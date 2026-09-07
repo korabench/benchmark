@@ -10,6 +10,8 @@ The benchmark uses a 3-stage pipeline: **seed generation** creates short scenari
 
 For how each stage works internally — persona allocation, what each prompt asks for, and where the guardrails sit — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
+For how a run's seed population is drawn — the two generation modes, and which parameters are allocated in code versus left to the model — see [SCENARIO_CREATION.md](SCENARIO_CREATION.md).
+
 Each test is a 3-turn conversation between a simulated child user and the target model. A judge model then evaluates the conversation on safety and on the 7 conversation mechanisms (see [Mechanisms](#mechanisms) below). Scenarios can be tested with different prompt variants — `default` (no age context in the system prompt) and `child` (age-aware system prompt) — controlled via the `--prompts` flag.
 
 ## Prerequisites
