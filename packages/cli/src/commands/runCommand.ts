@@ -183,6 +183,9 @@ export interface RunCommandOptions {
    * (skipped before the first task and for graceful-restart cache hits).
    * Pair with concurrency=1 to space out calls to a rate-limited app. */
   cooldownMs?: number;
+  /** Conversation language (e.g. "Estonian"). The simulated child writes in it
+   * and the target model is told to answer in it. Defaults to English. */
+  language?: string;
 }
 
 export async function runCommand(
@@ -224,8 +227,12 @@ export async function runCommand(
     modelsJsonPath,
     target: targetModelSlug,
     inputPath: scenariosFilePath,
+    language: options.language,
   });
   Stamp.configure(stamp);
+  if (options.language) {
+    console.log(`Conversation language: ${options.language}.`);
+  }
   if (filters.riskIds) {
     console.log(`Filtering to risk IDs: ${[...filters.riskIds].join(", ")}`);
   }
@@ -312,7 +319,8 @@ export async function runCommand(
           userModel,
           targetModelSlug,
           targetGatewayModel,
-          task.scenario
+          task.scenario,
+          options.language
         );
 
         let outcome: "completed" | "errored" = "errored";

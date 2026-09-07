@@ -130,6 +130,7 @@ yarn kora expand-scenarios [model] [user-model]
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
+| `--language <name>`   | Natural language the simulated child writes in, e.g. `Estonian` (default: English). Only the generated first user message is translated; the scenario itself stays English. |
 
 ### `run`
 
@@ -152,6 +153,7 @@ yarn kora run <target-model> [user-model]
 | `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)             |
 | `--reverse`           | Process scenarios in reverse file order (last scenario first); useful for order-effect comparisons                 |
 | `--cooldown <secs>`   | Seconds to sleep between sequential test tasks; pair with `--concurrency 1` to avoid app rate-limiting (default: 0) |
+| `--language <name>`   | Natural language of the conversation, e.g. `Estonian` (default: English): the simulated child writes in it and the target model is told to answer in it |
 
 By default a single judge (`gpt-5.2:medium:limited`, from the `kora` profile) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
@@ -208,6 +210,7 @@ yarn kora continue [user-model]
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
 | `--target-models <ids>`    | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                                       |
 | `--limit-per-risk <count>` | Maximum records per risk, selected deterministically by `id` (sorted lexicographically). Fails fast if any requested risk has fewer records than requested.                                |
+| `--language <name>`        | Natural language of the added turns, e.g. `Estonian` (default: English)                                                                                                                   |
 
 Each record is replayed with its **original** `modelId` as the target model, so 3-turn-vs-longer comparisons stay apples-to-apples per (scenario, model). The turn budget comes from `risk.conversationLength` in `packages/benchmark/data/risks.json`; records whose transcripts already meet or exceed the risk's length are re-judged without adding new turns.
 
@@ -443,9 +446,10 @@ everything that shaped it:
 | `code`    | `@korabench/cli` version, git `commit` and `dirty` flag when run from a checkout                                                                                 |
 | `packs`   | Taxonomy and behavior pack, as in `packs`                                                                                                                       |
 | `input`   | Path and SHA-256 of the input corpus (`run`, `reassess`, `continue`, `expand-scenarios`)                                                                        |
+| `language` | Conversation language when `--language` was passed; absent means English                                                                                       |
 
 Two results are comparable when their stamps hash equal, which covers
-`profile`, `prompts` and `packs`; `code` and `input` are recorded but not part
+`profile`, `prompts`, `packs` and `language`; `code` and `input` are recorded but not part
 of the comparison, so an unrelated commit never blocks a resume. The
 graceful-restart temp directories hold a `stamp.json`, and a command refuses to
 resume one written under a different stamp (delete the directory to start

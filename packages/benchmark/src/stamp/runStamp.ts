@@ -74,6 +74,8 @@ const VRunStamp = v.object({
   code: VCodeRef,
   packs: PackStamp.io,
   input: v.optional(VInputRef),
+  /** Conversation language (e.g. "Estonian"); absent means English. */
+  language: v.optional(v.string()),
 });
 
 //
@@ -82,7 +84,7 @@ const VRunStamp = v.object({
 
 /**
  * Comparability key. Two records are comparable when their profile, prompt
- * templates and packs match. Code revision and input corpus are recorded but
+ * templates, packs and conversation language match. Code revision and input corpus are recorded but
  * excluded: an unrelated commit must not refuse a resume, and prompt changes
  * are caught by `prompts.hash`.
  */
@@ -93,6 +95,7 @@ function hash(stamp: RunStamp): string {
       stamp.prompts.hash,
       stamp.packs.taxonomy.hash,
       stamp.packs.behaviors.hash,
+      stamp.language ?? "",
     ].join("|")
   );
 }
@@ -113,11 +116,13 @@ function describeProfile(ref: ProfileRef): string {
 /** One line, for error messages and logs. */
 function describe(stamp: RunStamp): string {
   const {taxonomy, behaviors} = stamp.packs;
+  const language = stamp.language ? ` | language ${stamp.language}` : "";
   return (
     `profile ${describeProfile(stamp.profile)} | ` +
     `prompts ${stamp.prompts.version} (${stamp.prompts.hash}) | ` +
     `packs ${taxonomy.id}@${taxonomy.version} (${taxonomy.hash}) / ` +
-    `${behaviors.id}@${behaviors.version} (${behaviors.hash})`
+    `${behaviors.id}@${behaviors.version} (${behaviors.hash})` +
+    language
   );
 }
 

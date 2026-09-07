@@ -18,7 +18,8 @@ export async function buildContext(
   userModel: Model,
   targetModelSlug: string,
   targetGatewayModel: Model | undefined,
-  scenario: Scenario
+  scenario: Scenario,
+  language?: string
 ): Promise<BuiltContext> {
   const targetModel = await (async () => {
     if (targetGatewayModel) {
@@ -29,6 +30,7 @@ export async function buildContext(
   })();
 
   const context: TestContext = {
+    language,
     getUserResponse: async request => ({
       output: await userModel.getTextResponse(request),
     }),

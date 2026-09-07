@@ -24,6 +24,8 @@ export interface BuildRunStampArgs {
   target?: string;
   /** Input corpus, fingerprinted so results name what they were computed on. */
   inputPath?: string;
+  /** Conversation language (e.g. "Estonian"); undefined means English. */
+  language?: string;
 }
 
 export function resolveTargetRef(
@@ -39,7 +41,7 @@ export function resolveTargetRef(
 export async function buildRunStamp(
   args: BuildRunStampArgs
 ): Promise<RunStamp> {
-  const {effective, modelsJsonPath, target, inputPath} = args;
+  const {effective, modelsJsonPath, target, inputPath, language} = args;
   const targetRef =
     target === undefined
       ? {}
@@ -56,5 +58,6 @@ export async function buildRunStamp(
     code: {version: readPackageVersion(), ...readGitInfo()},
     packs: Packs.fingerprint(),
     ...input,
+    ...(language === undefined ? {} : {language}),
   };
 }
