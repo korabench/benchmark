@@ -1,7 +1,7 @@
 import {JudgeModel, Scenario, TestContext} from "@korabench/benchmark";
 import * as R from "remeda";
 import {createCustomModel} from "../../models/customModel.js";
-import {createGatewayModel} from "../../models/gatewayModel.js";
+import {createGatewayModel, GatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
 import {isNativeRunnerSlug} from "../../models/nativeRunnerModel.js";
 import {isWebRunnerSlug} from "../../models/webRunnerModel.js";
@@ -61,7 +61,7 @@ export async function buildContext(
 export function resolveTargetGatewayModel(
   modelsJsonPath: string,
   targetModelSlug: string
-): Model | undefined {
+): GatewayModel | undefined {
   if (
     targetModelSlug.startsWith("custom-") ||
     isWebRunnerSlug(targetModelSlug) ||

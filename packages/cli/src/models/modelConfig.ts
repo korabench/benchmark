@@ -1,3 +1,4 @@
+import {ModelSpec} from "@korabench/benchmark";
 import {memoize} from "@korabench/core";
 import * as fs from "node:fs";
 import * as v from "valibot";
@@ -6,14 +7,9 @@ import * as v from "valibot";
 // Runtime model.
 //
 
-const VModelConfig = v.object({
-  model: v.string(),
-  maxTokens: v.optional(v.number()),
-  temperature: v.optional(v.number()),
-  providerOptions: v.optional(
-    v.record(v.string(), v.record(v.string(), v.unknown()))
-  ),
-});
+// A registry entry is a `ModelSpec` minus its name (the slug is the key), so
+// the two shapes cannot drift apart.
+const VModelConfig = v.omit(ModelSpec.io, ["name"]);
 
 const VModelRegistry = v.record(v.string(), VModelConfig);
 

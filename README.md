@@ -47,10 +47,13 @@ These apply to every command and must be given before the command name:
 | -------------------------- | --------------------------------------------------------------------------------------------------- |
 | `--taxonomy <name\|path>`  | Risk taxonomy pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_TAXONOMY`     |
 | `--behaviors <name\|path>` | Behavior pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_BEHAVIORS`         |
+| `--profile <name\|path>`   | Evaluation profile pinning the model for every pipeline role: a name under `profiles/` (`kora`), a local scratch profile (`<name>.local`), or a path to a JSON file. Env: `KORA_PROFILE` (default: `kora`) |
 | `-d, --debug`              | Print full errors and debug information                                                           |
 
-Both default to the bundled KORA pack, so no configuration is needed to run the
-benchmark as published. See [Using a custom taxonomy](#using-a-custom-taxonomy).
+Packs default to the bundled KORA pack and the profile to `profiles/kora.json`,
+so no configuration is needed to run the benchmark as published. See
+[Using a custom taxonomy](#using-a-custom-taxonomy) and
+[Evaluation profiles](#evaluation-profiles).
 
 ## Pipeline stages
 
@@ -66,7 +69,7 @@ yarn kora generate-seeds [model]
 
 | Argument / Option          | Description                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------- |
-| `[model]`                  | Model(s) to use for seed generation (default: `gpt-4o`). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
+| `[model]`                  | Override the profile's `seeds` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
 | `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
 | `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
 | `--total-seeds <count>`    | Total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with `--seeds-per-task`) |
@@ -120,8 +123,8 @@ yarn kora expand-scenarios [model] [user-model]
 
 | Argument / Option     | Description                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------- |
-| `[model]`             | Model(s) for scenario expansion (default: `gpt-5.2:high`). Comma-separated for a per-task fallback chain — escalates on both thrown errors *and* `ScenarioValidationError` (e.g. when the model returns valid JSON but the content is truncated/incoherent). |
-| `[user-model]`        | Model(s) for generating the first user message (default: `deepseek-v3.2`). Comma-separated for a per-call fallback chain (escalates only on thrown errors). |
+| `[model]`             | Override the profile's `expansion` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain — escalates on both thrown errors *and* `ScenarioValidationError` (e.g. when the model returns valid JSON but the content is truncated/incoherent). |
+| `[user-model]`        | Override the profile's `expansionUser` role, used for the first user message (default: from profile). Comma-separated for a per-call fallback chain (escalates only on thrown errors). |
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
@@ -137,8 +140,8 @@ yarn kora run <target-model> [user-model]
 | Argument / Option     | Description                                                                                                        |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `<target-model>`      | Model to benchmark                                                                                                 |
-| `[user-model]`        | Model to use for simulating the child user (default: `deepseek-v3.2`)                                              |
-| `--judges <models>`   | Comma-separated judge models (default: `gpt-5.2:medium:limited`)                                                  |
+| `[user-model]`        | Override the profile's `user` role (child simulator) with a `models.json` slug (default: from profile)             |
+| `--judges <models>`   | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)   |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
@@ -148,9 +151,9 @@ yarn kora run <target-model> [user-model]
 | `--reverse`           | Process scenarios in reverse file order (last scenario first); useful for order-effect comparisons                 |
 | `--cooldown <secs>`   | Seconds to sleep between sequential test tasks; pair with `--concurrency 1` to avoid app rate-limiting (default: 0) |
 
-By default a single judge (`gpt-5.2:medium:limited`) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
+By default a single judge (`gpt-5.2:medium:limited`, from the `kora` profile) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
 
-All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off.
+All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off. A resume is refused when the temp files were produced under a different configuration (other profile, override, prompts or packs); see [Run stamps](#run-stamps).
 
 ### `reassess`
 
@@ -162,8 +165,8 @@ yarn kora reassess [user-model]
 
 | Argument / Option        | Description                                                                                                                                                          |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[user-model]`           | Label recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no model is invoked (default: `deepseek-v3.2`)        |
-| `--judges <models>`      | Comma-separated judge models (default: same as `run`)                                                                                                                |
+| `[user-model]`           | Override the profile's `user` role with a `models.json` slug. Only recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no user model is invoked (default: from profile) |
+| `--judges <models>`      | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                                     |
 | `-i, --input <path>`     | Input JSONL of recorded conversations (default: `data/reassessment-input.jsonl`)                                                                                     |
 | `-o, --output <dir>`     | Output directory — one `{modelId}.json` is written per target model (default: `data/reassessment-results`)                                                           |
 | `--risk-ids <ids>`       | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                             |
@@ -196,8 +199,8 @@ yarn kora continue [user-model]
 
 | Argument / Option          | Description                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[user-model]`             | Model used to generate user messages during the continuation (default: `deepseek-v3.2-temp-1.3`, matching production)                                                                      |
-| `--judges <models>`        | Comma-separated judge models (default: `gpt-5.2:medium:limited` — single judge, held constant across 3-turn vs 8-turn comparisons)                                                          |
+| `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `deepseek-v3.2-temp-1.3` in `kora`, matching production)                                       |
+| `--judges <models>`        | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile — single judge, held constant across 3-turn vs 8-turn comparisons)          |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                   |
@@ -206,7 +209,7 @@ yarn kora continue [user-model]
 
 Each record is replayed with its **original** `modelId` as the target model, so 3-turn-vs-longer comparisons stay apples-to-apples per (scenario, model). The turn budget comes from `risk.conversationLength` in `packages/benchmark/data/risks.json`; records whose transcripts already meet or exceed the risk's length are re-judged without adding new turns.
 
-`continue-meta.json` captures the source file path + SHA-256, the user model, the `--limit-per-risk` value, and the selected record IDs per risk — re-running the same command against the same input picks the same records.
+`continue-meta.json` captures the source file path + SHA-256, the user and judge model names, the `--limit-per-risk` value, and the selected record IDs per risk — re-running the same command against the same input picks the same records.
 
 ### `compare-assessments`
 
@@ -243,7 +246,7 @@ Output columns: `n` (records scored), `%fail` / `%adeq` / `%exem` (grade distrib
 ### `validate`
 
 Checks that every risk reference in an input file resolves against the active
-taxonomy, and prints the active packs. The pipeline commands run this check
+taxonomy, and prints the active profile and packs. The pipeline commands run this check
 themselves before calling any model; this exposes it on its own, which is the
 natural CI hook for an externally-authored scenario set. Exits non-zero on the
 first non-conforming file.
@@ -257,7 +260,25 @@ yarn kora --taxonomy ./packs/my-taxonomy.json validate -i scenarios.jsonl
 | -------------------- | ---------------------------------------------------------------------------------------------- |
 | `-i, --input <path>` | JSONL file of seeds, scenarios, or reassess records (default: `data/scenarios.jsonl`)          |
 | `--kind <kind>`      | `seeds`, `scenarios` or `reassess` (default: inferred from the first record)                   |
-| `--packs-only`       | Print the active taxonomy and behavior pack, then stop without reading the input               |
+| `--packs-only`       | Print the active profile, taxonomy and behavior pack, then stop without reading the input      |
+
+### `profile`
+
+Prints the active evaluation profile — every role with its full model
+configuration, the prompts fingerprint, the packs and the code revision — and
+optionally exercises each model once. This is the tool for testing a model
+configuration before committing to a run.
+
+```bash
+yarn kora profile
+yarn kora --profile judge-test.local profile --check
+yarn kora profile --print-hash
+```
+
+| Option         | Description                                                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `--check`      | Send a one-word prompt to every distinct model of the profile; print the served model id, latency and PASS/FAIL. Exits non-zero on any failure. Needs `AI_GATEWAY_API_KEY`. |
+| `--print-hash` | Print only the profile's recomputed content hash, even when the file's `hash` is stale — paste it into the file after bumping `version`  |
 
 ## Model configuration
 
@@ -334,6 +355,101 @@ Then use the slug on the command line like any other model:
 ```bash
 yarn kora run custom-my-model
 ```
+
+## Evaluation profiles
+
+Every LLM the harness itself uses — not the target under test — is pinned by
+an **evaluation profile**. A profile is a JSON file under `profiles/` (next to
+`models.json`) that spells out the full model configuration for each pipeline
+role, so the file alone is a complete record of what ran:
+
+```json
+{
+  "id": "kora",
+  "version": "1",
+  "hash": "0b7b93d2…",
+  "roles": {
+    "seeds":         [{"name": "gpt-4o", "model": "openai/gpt-4o"}],
+    "expansion":     [{"name": "gpt-5.2:high", "model": "openai/gpt-5.2", "providerOptions": {"openai": {"reasoningEffort": "high"}}}],
+    "expansionUser": [{"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}],
+    "user":           {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3},
+    "judges":        [{"name": "gpt-5.2:medium:limited", "model": "openai/gpt-5.2", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}}],
+    "continueUser":   {"name": "deepseek-v3.2-temp-1.3", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}
+  }
+}
+```
+
+| Role            | Used by                          | Shape                                                |
+| --------------- | -------------------------------- | ---------------------------------------------------- |
+| `seeds`         | `generate-seeds`                 | Fallback chain (first model tried first)             |
+| `expansion`     | `expand-scenarios`               | Fallback chain; also produces the validation verdict |
+| `expansionUser` | `expand-scenarios`               | Fallback chain, first user message                   |
+| `user`          | `run` (and the `reassess` label) | Single model, child simulator                        |
+| `judges`        | `run`, `reassess`, `continue`    | Concurrent judges, odd count                         |
+| `continueUser`  | `continue`                       | Single model; optional, falls back to `user`         |
+
+Each entry is a `models.json` entry plus a `name`, which is what logs and the
+`judges` / `user` fields of result files print. The bundled `profiles/kora.json`
+reproduces the defaults the CLI used before profiles existed; a test asserts
+every role matches the `models.json` entry of the same name.
+
+Select a profile with the global `--profile` option or `KORA_PROFILE`. Nothing
+in `models.json` is consulted for a profile role: the registry only serves the
+target model and the command-line overrides below.
+
+### Testing a model configuration (local profiles)
+
+To try a different judge, user simulator or expansion model, copy the example
+into a **local profile**. Files matching `profiles/*.local.json` are gitignored,
+their `hash` is not checked, and their stamp is marked `local`:
+
+```bash
+cp profiles/example.local.json.example profiles/judge-test.local.json
+# edit the judges role …
+yarn kora --profile judge-test.local profile --check   # one call per model
+yarn kora --profile judge-test.local run gpt-4o --limit 3 -o data/judge-test/results.json
+```
+
+### Overrides
+
+The per-role arguments (`[model]`, `[user-model]`, `--judges`) still work and
+resolve slugs through `models.json`, but they are **overrides**: the CLI prints
+a warning, the effective profile hash changes, and the stamp lists the
+overridden roles (`"overrides": ["judges"]`). Results from an overridden run are
+therefore never mistaken for results from the named profile. For anything
+beyond a quick experiment, prefer a local profile.
+
+### Committed profiles and the hash guard
+
+A committed profile's `hash` is the fingerprint of its content, and results are
+keyed on it. `yarn test` recomputes it for every file under `profiles/` and
+fails when it drifts, printing the value to paste. To change a committed
+profile: edit it, bump `version`, run `yarn kora --profile <name> profile
+--print-hash`, and set `hash`. Profile ids must match their file name and
+`id@version` must be unique.
+
+### Run stamps
+
+Every seed, scenario, per-test result and result file carries a `stamp` with
+everything that shaped it:
+
+| Field     | Description                                                                                                                                                    |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile` | `{id, version, hash}` plus `local` and `overrides` when applicable. The hash covers the *effective* roles.                                                     |
+| `models`  | The resolved configuration of every role the harness has (the CLI fills all six), and `target` for `run` (a model spec, or `{kind, slug}` for `kora-app-*` / `custom-*` targets) |
+| `prompts` | `{version, hash}` of the prompt templates (`packages/benchmark/src/prompts/promptsFingerprint.ts`, guarded by a test the same way as profiles)                  |
+| `code`    | `@korabench/cli` version, git `commit` and `dirty` flag when run from a checkout                                                                                 |
+| `packs`   | Taxonomy and behavior pack, as in `packs`                                                                                                                       |
+| `input`   | Path and SHA-256 of the input corpus (`run`, `reassess`, `continue`, `expand-scenarios`)                                                                        |
+
+Two results are comparable when their stamps hash equal, which covers
+`profile`, `prompts` and `packs`; `code` and `input` are recorded but not part
+of the comparison, so an unrelated commit never blocks a resume. The
+graceful-restart temp directories hold a `stamp.json`, and a command refuses to
+resume one written under a different stamp (delete the directory to start
+over; there is no bypass flag). Result files also record `served`: the model
+ids the provider reported for the user, judge and target calls, the only
+evidence of which snapshot actually answered.
 
 ## Running against real apps (web-runner / native-runner)
 
@@ -636,6 +752,19 @@ The `run` command produces a result object with this structure:
     "taxonomy": {"id": "kora", "version": "2", "hash": "498ec8d2…"},
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
+  "stamp": {
+    "profile": {"id": "kora", "version": "1", "hash": "0b7b93d2…"},
+    "models": {"user": {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
+    "prompts": {"version": "1", "hash": "7eacbd51…"},
+    "code": {"version": "1.0.0", "commit": "b73b4731…", "dirty": false},
+    "packs": {"…": "…"},
+    "input": {"path": "data/scenarios.jsonl", "sha256": "eeb1a21b…"}
+  },
+  "served": {
+    "user": ["deepseek/deepseek-v3.2"],
+    "judges": {"gpt-5.2:medium:limited": ["openai/gpt-5.2"]},
+    "target": ["openai/gpt-4o"]
+  },
   "scores": [
     {
       "riskCategoryId": "...",
@@ -663,9 +792,11 @@ The `run` command produces a result object with this structure:
 | Field             | Description                                                                                                                                                       |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `target`          | Target model slug                                                                                                                                                 |
-| `judges`          | Judge model slugs                                                                                                                                                 |
-| `user`            | User model slug                                                                                                                                                   |
+| `judges`          | Judge model names (from the profile, or the override slugs)                                                                                                       |
+| `user`            | User model name                                                                                                                                                   |
 | `packs`           | Taxonomy and behavior pack this run was produced under (id, version, content hash). Results from different packs must not be aggregated.                          |
+| `stamp`           | Full provenance: effective profile, resolved model configs, prompts fingerprint, code revision, packs, input corpus hash. See [Run stamps](#run-stamps). Results whose stamps hash differently must not be aggregated. |
+| `served`          | Model ids the provider reported serving, per role (sorted, deduplicated)                                                                                          |
 | `prompts`         | Prompt variants that were tested                                                                                                                                  |
 | `sums.al`         | Total test count                                                                                                                                                  |
 | `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                   |
@@ -694,6 +825,7 @@ All commands run with a concurrency of 10 parallel tasks.
 .env.example                         Environment variable template
 EVALUATION_PROCESS.md                How the pipeline works internally (+ known dead code)
 models.json                          Model registry configuration
+profiles/                            Evaluation profiles (kora.json; *.local.json are gitignored scratch profiles)
 data/                                Scenario pipeline output (seeds, scenarios, results)
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
@@ -701,7 +833,9 @@ packages/
     data/                            Bundled pack: risks.json, behaviors.json, motivations.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
-      prompts/                       Prompt templates for each pipeline stage
+      profiles/                      Evaluation profile model (schema, hash)
+      stamp/                         Run stamp model and scoping
+      prompts/                       Prompt templates for each pipeline stage (+ promptsFingerprint.ts)
       model/                         Domain types (scenario, risk, assessment, etc.)
       __tests__/                     Test suites
       benchmark.ts                   Core benchmark interface
@@ -709,6 +843,8 @@ packages/
       kora.ts                        KORA benchmark implementation
   cli/src/                           CLI package
     packs/                           --taxonomy / --behaviors resolution
+    profiles/                        --profile loading, overrides, role models
+    stamp/                           Run stamp construction (git info, input hash)
     commands/                        CLI command implementations
     __tests__/                       CLI test suites
     models/                          Model-related modules

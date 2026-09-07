@@ -10,9 +10,14 @@
  * The transcript store (RUN_DIR/manual-reruns.json) is seeded by the operator,
  * one entry per scenario: {scenario, messages:[{role:"user",content:first}]}.
  *
+ * The user simulator comes from the evaluation profile's `user` role
+ * (KORA_PROFILE, default "kora"), exactly as in `kora run`; USER_MODEL is an
+ * override, warned like the CLI's [user-model]. The spec actually used is
+ * recorded on each store entry (`userModel`) for provenance.
+ *
  * Prereqts: packages are built (`yarn build`/`tsbuild`); models.json present.
  * Usage:
- *   RUN_DIR=data/<run> [USER_MODEL=deepseek-v3.2] \
+ *   RUN_DIR=data/<run> [KORA_PROFILE=kora] [USER_MODEL=<slug>] \
  *     node --env-file=.env scripts/manual-rerun.mjs <idx> [assistantFile]
  *     <idx>           1-based scenario index into RUN_DIR/manual-reruns.json
  *     [assistantFile] file with the pasted app reply for the current turn;
@@ -24,12 +29,20 @@ import {
   generateNextUserMessage,
   RiskCategory,
 } from "../packages/benchmark/build/src/index.js";
-import {createGatewayModel} from "../packages/cli/build/src/models/gatewayModel.js";
+import {
+  describeProfileRef,
+  resolveEffectiveProfile,
+} from "../packages/cli/build/src/profiles/effectiveProfile.js";
+import {
+  loadProfile,
+  profilesDir,
+} from "../packages/cli/build/src/profiles/loadProfile.js";
+import {Profiles} from "../packages/cli/build/src/profiles/profiles.js";
+import {createSpecModel} from "../packages/cli/build/src/profiles/roleModels.js";
 
 const RUN_DIR = process.env.RUN_DIR ?? "data/2026-06-10-gemini-104";
 const STORE = `${RUN_DIR}/manual-reruns.json`;
 const MD = `${RUN_DIR}/manual-reruns.md`;
-const USER_MODEL = process.env.USER_MODEL ?? "deepseek-v3.2";
 
 const idx = Number(process.argv[2]);
 const assistantFile = process.argv[3];
@@ -44,7 +57,16 @@ const risk = RiskCategory.findRisk(category, entry.scenario.seed.riskId);
 const conversationLength = risk.conversationLength;
 
 const modelsJsonPath = path.resolve("models.json");
-const userModel = createGatewayModel(modelsJsonPath, USER_MODEL);
+Profiles.configure(
+  loadProfile(process.env.KORA_PROFILE ?? "kora", profilesDir(modelsJsonPath))
+);
+const effective = resolveEffectiveProfile(modelsJsonPath, {
+  user: process.env.USER_MODEL ? [process.env.USER_MODEL] : undefined,
+});
+console.log(`Profile: ${describeProfileRef(effective.ref)}`);
+const userSpec = effective.roles.user;
+const userModel = createSpecModel(userSpec);
+entry.userModel = userSpec;
 const ctx = {
   getUserResponse: async request => ({
     output: await userModel.getTextResponse(request),

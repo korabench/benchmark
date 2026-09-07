@@ -6,6 +6,7 @@ import {
   Scenario,
   ScenarioSeed,
   ScenarioValidationError,
+  Stamp,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
@@ -15,9 +16,21 @@ import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
 import {
-  createGatewayModel,
-  createGatewayModelChain,
-} from "../models/gatewayModel.js";
+  describeProfileRef,
+  resolveEffectiveProfile,
+  RoleOverrides,
+} from "../profiles/effectiveProfile.js";
+import {
+  chainLabel,
+  createChainModel,
+  createSpecModel,
+} from "../profiles/roleModels.js";
+import {buildRunStamp} from "../stamp/buildRunStamp.js";
+import {
+  assertResumable,
+  hasCachedFiles,
+  listCachedFiles,
+} from "./shared/cacheStamp.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
 
@@ -48,34 +61,31 @@ async function countSeeds(
   return count;
 }
 
-async function hasTempFiles(tempDir: string): Promise<boolean> {
-  try {
-    const files = await fs.readdir(tempDir);
-    return files.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function expandScenariosCommand(
   _program: Program,
   modelsJsonPath: string,
-  modelSlugs: readonly string[],
-  userModelSlugs: readonly string[],
+  overrides: RoleOverrides,
   seedsFilePath: string,
   outputFilePath: string,
   riskIds?: readonly string[]
 ) {
-  const fmtChain = (slugs: readonly string[]) =>
-    slugs.length === 1 ? slugs[0] : slugs.join(" → ");
+  const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
+  const {roles} = effective;
+  console.log(`Profile: ${describeProfileRef(effective.ref)}`);
   console.log(
-    `Expanding scenarios using ${fmtChain(modelSlugs)} (user: ${fmtChain(userModelSlugs)})...`
+    `Expanding scenarios using ${chainLabel(roles.expansion)} (user: ${chainLabel(roles.expansionUser)})...`
   );
   const riskIdFilter = resolveRiskIdFilter(riskIds);
   const seedCount = await assertInputConforms(seedsFilePath, "seeds");
   console.log(
     `Validated ${seedCount} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
   );
+  const stamp = await buildRunStamp({
+    effective,
+    modelsJsonPath,
+    inputPath: seedsFilePath,
+  });
+  Stamp.configure(stamp);
   if (riskIdFilter) {
     console.log(`Filtering to risk IDs: ${[...riskIdFilter].join(", ")}`);
   }
@@ -87,22 +97,23 @@ export async function expandScenariosCommand(
   // The per-call retry/fallback inside createGatewayModelChain only catches
   // thrown errors, so validation failures slip past it; rotating at the task
   // level fixes that.
-  const expansionModels = modelSlugs.map(slug => ({
-    label: slug,
-    model: createGatewayModel(modelsJsonPath, slug),
+  const expansionModels = roles.expansion.map(spec => ({
+    label: spec.name,
+    model: createSpecModel(spec),
   }));
-  const userModel = createGatewayModelChain(modelsJsonPath, userModelSlugs);
+  const userModel = createChainModel(roles.expansionUser).model;
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
 
   // Clear output file if no process in progress (no temp files)
-  if (!(await hasTempFiles(tempDir))) {
+  if (!(await hasCachedFiles(tempDir))) {
     await fs.mkdir(outputDir, {recursive: true});
     await fs.writeFile(outputFilePath, "");
   }
 
   await fs.mkdir(tempDir, {recursive: true});
+  await assertResumable(tempDir, stamp);
 
   const totalSeeds = await countSeeds(seedsFilePath, riskIdFilter);
   const progress = Script.progress(totalSeeds, text =>
@@ -187,7 +198,7 @@ export async function expandScenariosCommand(
 
   // Build final output from temp files.
   await fs.mkdir(outputDir, {recursive: true});
-  const tempFiles = await fs.readdir(tempDir);
+  const tempFiles = await listCachedFiles(tempDir);
   let scenarioCount = 0;
 
   await fs.writeFile(outputFilePath, "");

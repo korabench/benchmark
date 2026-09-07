@@ -4,29 +4,42 @@ import {
   RiskTaxonomy,
   ScenarioKey,
   ScenarioPrompt,
+  Stamp,
   TestResult,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import archiver from "archiver";
-import {createHash} from "node:crypto";
 import {createWriteStream} from "node:fs";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
-import {Model} from "../models/model.js";
+import {GatewayModel} from "../models/gatewayModel.js";
+import {
+  describeProfileRef,
+  resolveEffectiveProfile,
+  RoleOverrides,
+} from "../profiles/effectiveProfile.js";
+import {
+  collectServed,
+  createJudgeModels,
+  createSpecModel,
+} from "../profiles/roleModels.js";
+import {sha256File} from "../shared/sha256File.js";
+import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {
   buildContext,
   BuiltContext,
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
+import {assertResumable} from "./shared/cacheStamp.js";
 import {
   readReassessInputsFromJsonl,
   ReassessInput,
 } from "./shared/reassessInput.js";
 import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
+import {buildResultHeader} from "./shared/resultHeader.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
 
@@ -73,11 +86,6 @@ interface SelectionMeta {
   completedAt?: string;
 }
 
-async function sha256File(filePath: string): Promise<string> {
-  const buf = await fs.readFile(filePath);
-  return createHash("sha256").update(buf).digest("hex");
-}
-
 async function archiveResults(
   sourceDir: string,
   files: readonly string[],
@@ -108,25 +116,30 @@ export interface ContinueCommandOptions {
 export async function continueCommand(
   _program: Program,
   modelsJsonPath: string,
-  judgeModelSlugs: readonly string[],
-  userModelSlug: string,
+  overrides: RoleOverrides,
   inputFilePath: string,
   outputDirPath: string,
   options: ContinueCommandOptions = {}
 ) {
+  const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
+  const {roles} = effective;
+  const judgeModelSlugs = roles.judges.map(spec => spec.name);
+  const userModelSlug = roles.continueUser.name;
+  console.log(`Profile: ${describeProfileRef(effective.ref)}`);
   console.log(
     `Continuing transcripts: judges=${judgeModelSlugs.join(",")}, user=${userModelSlug}`
   );
-
-  if (judgeModelSlugs.length % 2 === 0)
-    throw new Error(
-      "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
-    );
 
   const recordCount = await assertInputConforms(inputFilePath, "reassess");
   console.log(
     `Validated ${recordCount} record(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
   );
+  const stamp = await buildRunStamp({
+    effective,
+    modelsJsonPath,
+    inputPath: inputFilePath,
+  });
+  Stamp.configure(stamp);
 
   const riskIdsFilter = resolveRiskIdFilter(options.riskIds);
   const targetModelsFilter = options.targetModels?.length
@@ -194,17 +207,12 @@ export async function continueCommand(
     selectedRecords.push(...picked);
   }
 
-  const judgeModels: Record<string, Model> = Object.fromEntries(
-    judgeModelSlugs.map(slug => [
-      slug,
-      createGatewayModel(modelsJsonPath, slug),
-    ])
-  );
-  const userModel = createGatewayModel(modelsJsonPath, userModelSlug);
+  const judgeModels = createJudgeModels(roles.judges);
+  const userModel = createSpecModel(roles.continueUser);
 
   // Per-record target model resolution: cache by modelId across records.
-  const targetGatewayCache = new Map<string, Model | undefined>();
-  const getTargetGateway = (modelId: string): Model | undefined => {
+  const targetGatewayCache = new Map<string, GatewayModel | undefined>();
+  const getTargetGateway = (modelId: string): GatewayModel | undefined => {
     if (!targetGatewayCache.has(modelId)) {
       targetGatewayCache.set(
         modelId,
@@ -217,6 +225,7 @@ export async function continueCommand(
   const tempDir = path.join(outputDirPath, ".kora-continue-tmp");
   await fs.mkdir(outputDirPath, {recursive: true});
   await fs.mkdir(tempDir, {recursive: true});
+  await assertResumable(tempDir, stamp);
 
   const meta: SelectionMeta = {
     sourceInputPath: inputFilePath,
@@ -372,11 +381,18 @@ export async function continueCommand(
   for (const [modelId, runResult] of runResultsByTarget) {
     const prompts = [...(promptsByTarget.get(modelId) ?? new Set())];
     const result = {
-      target: modelId,
-      judges: judgeModelSlugs,
-      packs: Packs.fingerprint(),
-      user: userModelSlug,
-      prompts,
+      ...buildResultHeader({
+        target: modelId,
+        effective,
+        prompts,
+        stamp,
+        userName: roles.continueUser.name,
+        served: collectServed({
+          user: userModel,
+          judges: judgeModels,
+          target: targetGatewayCache.get(modelId),
+        }),
+      }),
       ...runResult,
     };
     const filePath = path.join(outputDirPath, `${modelId}.json`);

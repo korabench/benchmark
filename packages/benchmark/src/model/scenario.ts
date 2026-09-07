@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import {RunStamp} from "../stamp/runStamp.js";
 import {ScenarioKey} from "./scenarioKey.js";
 import {ScenarioPrompt} from "./scenarioPrompt.js";
 import {ScenarioSeed} from "./scenarioSeed.js";
@@ -79,6 +80,8 @@ const VScenario = v.strictObject({
   ...VModelScenario.entries,
   seed: ScenarioSeed.io,
   firstUserMessage: v.string(),
+  /** Provenance of the expanding run. Optional: older corpora carry none. */
+  stamp: v.optional(RunStamp.io),
 });
 
 //

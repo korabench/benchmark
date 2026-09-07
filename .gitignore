@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Claude
 */settings.local.json
+
+# Local evaluation profiles (see README "Evaluation profiles")
+profiles/*.local.json

@@ -6,6 +6,7 @@ import {
   runJudges,
   ScenarioKey,
   ScenarioPrompt,
+  Stamp,
   TestResult,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
@@ -17,12 +18,20 @@ import * as R from "remeda";
 import {flatTransform, pipeline, reduce} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
-import {createGatewayModel} from "../models/gatewayModel.js";
 import {Model} from "../models/model.js";
+import {
+  describeProfileRef,
+  resolveEffectiveProfile,
+  RoleOverrides,
+} from "../profiles/effectiveProfile.js";
+import {collectServed, createJudgeModels} from "../profiles/roleModels.js";
+import {buildRunStamp} from "../stamp/buildRunStamp.js";
+import {assertResumable} from "./shared/cacheStamp.js";
 import {
   readReassessInputsFromJsonl,
   ReassessInput,
 } from "./shared/reassessInput.js";
+import {buildResultHeader} from "./shared/resultHeader.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
 
@@ -136,25 +145,30 @@ export interface ReassessCommandOptions {
 export async function reassessCommand(
   _program: Program,
   modelsJsonPath: string,
-  judgeModelSlugs: readonly string[],
-  userModelSlug: string,
+  overrides: RoleOverrides,
   inputFilePath: string,
   outputDirPath: string,
   options: ReassessCommandOptions = {}
 ) {
+  const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
+  const {roles} = effective;
+  const judgeModelSlugs = roles.judges.map(spec => spec.name);
+  const userModelSlug = roles.user.name;
+  console.log(`Profile: ${describeProfileRef(effective.ref)}`);
   console.log(
     `Reassessing transcripts: judges=${judgeModelSlugs.join(",")}, user-label=${userModelSlug}`
   );
-
-  if (judgeModelSlugs.length % 2 === 0)
-    throw new Error(
-      "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference."
-    );
 
   const recordCount = await assertInputConforms(inputFilePath, "reassess");
   console.log(
     `Validated ${recordCount} record(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
   );
+  const stamp = await buildRunStamp({
+    effective,
+    modelsJsonPath,
+    inputPath: inputFilePath,
+  });
+  Stamp.configure(stamp);
 
   const filters: ReassessFilters = {
     riskIds: resolveRiskIdFilter(options.riskIds),
@@ -175,18 +189,14 @@ export async function reassessCommand(
     console.log(`Limiting to first ${filters.limit} record(s).`);
   }
 
-  const judgeModels: Record<string, Model> = Object.fromEntries(
-    judgeModelSlugs.map(slug => [
-      slug,
-      createGatewayModel(modelsJsonPath, slug),
-    ])
-  );
+  const judgeModels = createJudgeModels(roles.judges);
   const judgeContext = buildJudgeContext(judgeModels);
 
   const tempDir = path.join(outputDirPath, ".kora-reassess-tmp");
 
   await fs.mkdir(outputDirPath, {recursive: true});
   await fs.mkdir(tempDir, {recursive: true});
+  await assertResumable(tempDir, stamp);
 
   const totalTests = await countReassessTasks(inputFilePath, filters);
 
@@ -316,11 +326,13 @@ export async function reassessCommand(
   for (const [modelId, runResult] of runResultsByTarget) {
     const prompts = [...(promptsByTarget.get(modelId) ?? new Set())];
     const result = {
-      target: modelId,
-      judges: judgeModelSlugs,
-      packs: Packs.fingerprint(),
-      user: userModelSlug,
-      prompts,
+      ...buildResultHeader({
+        target: modelId,
+        effective,
+        prompts,
+        stamp,
+        served: collectServed({judges: judgeModels}),
+      }),
       ...runResult,
     };
     const filePath = path.join(outputDirPath, `${modelId}.json`);

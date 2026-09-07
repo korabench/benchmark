@@ -1,6 +1,7 @@
-import {Mechanism, Packs, RiskTaxonomy} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import {Program} from "../cli.js";
+import {resolveEffectiveProfile} from "../profiles/effectiveProfile.js";
+import {printProfile} from "../profiles/printProfile.js";
 import {assertInputConforms, InputKind} from "./shared/validateInputFile.js";
 
 //
@@ -38,28 +39,6 @@ async function detectKind(filePath: string): Promise<InputKind> {
 }
 
 //
-// Reporting.
-//
-
-function printPacks(): void {
-  const {taxonomy, behaviors} = Packs.current();
-  const stamp = Packs.fingerprint();
-
-  console.log(
-    `Taxonomy:  ${RiskTaxonomy.label(taxonomy)} (${stamp.taxonomy.hash})`
-  );
-  console.log(
-    `           ${taxonomy.categories.length} categories, ${RiskTaxonomy.allRisks(taxonomy).length} risks`
-  );
-  console.log(
-    `Behaviors: ${behaviors.id}@${behaviors.version} (${stamp.behaviors.hash})`
-  );
-  console.log(
-    `           ${behaviors.behaviors.map(Mechanism.codeOf).join(", ")}`
-  );
-}
-
-//
 // Command.
 //
 
@@ -70,10 +49,11 @@ export interface ValidateCommandOptions {
 
 export async function validateCommand(
   _program: Program,
+  modelsJsonPath: string,
   inputFilePath: string,
   options: ValidateCommandOptions = {}
 ) {
-  printPacks();
+  printProfile(resolveEffectiveProfile(modelsJsonPath));
 
   if (options.packsOnly) {
     return;

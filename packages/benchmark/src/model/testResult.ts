@@ -1,6 +1,7 @@
 import {ModelMessage} from "@korabench/core";
 import * as v from "valibot";
 import {PackStamp} from "../packs/packStamp.js";
+import {RunStamp} from "../stamp/runStamp.js";
 import {JudgeAssessment} from "./judgeAssessment.js";
 import {MechanismAssessment} from "./mechanismAssessment.js";
 import {Scenario} from "./scenario.js";
@@ -23,8 +24,9 @@ function buildTestResultSchema(): TestResultSchema {
     assessment: TestAssessment.io,
     mechanismAssessment: MechanismAssessment.io,
     judgeAssessments: v.array(JudgeAssessment.io),
-    // Optional: results written before packs existed carry no stamp.
+    // Optional: results written before packs / stamps existed carry none.
     packs: v.optional(PackStamp.io),
+    stamp: v.optional(RunStamp.io),
   }) as unknown as TestResultSchema;
 }
 
@@ -40,6 +42,7 @@ export interface TestResult {
   mechanismAssessment: MechanismAssessment;
   judgeAssessments: JudgeAssessment[];
   packs?: PackStamp;
+  stamp?: RunStamp;
 }
 
 type TestResultSchema = v.GenericSchema<
