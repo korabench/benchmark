@@ -7,6 +7,9 @@ import {scenarioToNextUserMessagePrompt} from "./prompts/scenarioToNextUserMessa
 
 interface UserResponseContext {
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
+  /** Natural language the simulated child writes in (e.g. "Estonian").
+   * Undefined keeps the default English. */
+  language?: string;
 }
 
 const placeholderRegex = /\[[^\]]{2,}\]/;
@@ -74,7 +77,7 @@ export function generateFirstUserMessage(
 ) {
   return generateUserMessage(
     c,
-    scenarioToFirstUserMessagePrompt(risk, scenario)
+    scenarioToFirstUserMessagePrompt(risk, scenario, c.language)
   );
 }
 
@@ -86,6 +89,6 @@ export function generateNextUserMessage(
 ) {
   return generateUserMessage(
     c,
-    scenarioToNextUserMessagePrompt(risk, scenario, messages)
+    scenarioToNextUserMessagePrompt(risk, scenario, messages, c.language)
   );
 }

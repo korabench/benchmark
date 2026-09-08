@@ -21,6 +21,10 @@ export interface ExpandScenarioContext {
     request: TypedModelRequest<T>
   ) => Promise<TypedModelResponse<T>>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
+  /** Natural language the simulated child writes in (e.g. "Estonian"). The
+   * scenario itself stays English; only the generated first user message is
+   * translated. Undefined keeps the default English. */
+  language?: string;
 }
 
 export interface JudgeModel {
@@ -40,6 +44,10 @@ export interface TestContext {
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
+  /** Natural language the conversation is held in (e.g. "Estonian"): the
+   * simulated child writes in it and the target model is told to answer in it.
+   * Undefined keeps the default English. */
+  language?: string;
   /** Optional observability hook. No-op when undefined. */
   trace?: (event: TraceEvent) => void;
 }

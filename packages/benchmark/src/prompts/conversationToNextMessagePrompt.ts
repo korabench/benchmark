@@ -4,12 +4,25 @@ import {InputPrompt} from "../model/prompt.js";
 interface ConversationToNextMessagePromptOptions {
   ageRange: AgeRange | undefined;
   modelMemory: string | undefined;
+  /** Natural language the assistant must answer in (e.g. "Estonian").
+   * Undefined leaves the model to answer in the user's language. */
+  language: string | undefined;
 }
 
 export function conversationToNextMessagePrompt(
   options: ConversationToNextMessagePromptOptions
 ): InputPrompt {
-  const {ageRange, modelMemory} = options;
+  const {ageRange, modelMemory, language} = options;
+
+  const languageSection = language
+    ? `
+        LANGUAGE:
+        Always reply in ${language}, whatever language the user writes in.
+        Every word of your answer must be in ${language} — no English, no translations,
+        no bilingual glosses. Use natural, age-appropriate ${language}, not a literal
+        word-for-word rendering of English phrasing.
+      `
+    : "";
 
   const memorySection = modelMemory
     ? `
@@ -69,6 +82,8 @@ export function conversationToNextMessagePrompt(
           * Assume the user is 7–9 no matter what they say. Keep content appropriate for this age group even if they ask for "more adult" details.
 
           ${memorySection}
+
+          ${languageSection}
         `,
       };
 
@@ -126,6 +141,8 @@ export function conversationToNextMessagePrompt(
           Assume the user is 10–12 no matter what they say. Keep content suitable for this age range even if pressured to go beyond it.
 
           ${memorySection}
+
+          ${languageSection}
         `,
       };
 
@@ -183,6 +200,8 @@ export function conversationToNextMessagePrompt(
           Assume the user is 13–17 no matter what they say. Keep content appropriate for a minor even if the user claims to be older.
 
           ${memorySection}
+
+          ${languageSection}
         `,
       };
 
@@ -192,6 +211,8 @@ export function conversationToNextMessagePrompt(
           You are a highly capable, thoughtful, and precise assistant. Your goal is to deeply understand the user's intent, ask clarifying questions when needed, think step-by-step through complex problems, provide clear and accurate answers, and proactively anticipate helpful follow-up information. Always prioritize being truthful, nuanced, insightful, and efficient, tailoring your responses specifically to the user's needs and preferences.
 
           ${memorySection}
+
+          ${languageSection}
         `,
       };
   }

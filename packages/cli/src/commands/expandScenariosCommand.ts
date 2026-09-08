@@ -67,7 +67,8 @@ export async function expandScenariosCommand(
   overrides: RoleOverrides,
   seedsFilePath: string,
   outputFilePath: string,
-  riskIds?: readonly string[]
+  riskIds?: readonly string[],
+  language?: string
 ) {
   const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
   const {roles} = effective;
@@ -84,8 +85,12 @@ export async function expandScenariosCommand(
     effective,
     modelsJsonPath,
     inputPath: seedsFilePath,
+    language,
   });
   Stamp.configure(stamp);
+  if (language) {
+    console.log(`First user message language: ${language}.`);
+  }
   if (riskIdFilter) {
     console.log(`Filtering to risk IDs: ${[...riskIdFilter].join(", ")}`);
   }
@@ -139,6 +144,7 @@ export async function expandScenariosCommand(
         for (let i = 0; i < expansionModels.length; i++) {
           const {label, model} = expansionModels[i]!;
           const context: ExpandScenarioContext = {
+            language,
             getResponse: async request => ({
               output: await model.getStructuredResponse(request),
             }),

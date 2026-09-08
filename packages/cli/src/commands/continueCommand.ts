@@ -111,6 +111,9 @@ export interface ContinueCommandOptions {
   riskIds?: readonly string[];
   targetModels?: readonly string[];
   limitPerRisk?: number;
+  /** Conversation language (e.g. "Estonian") for the added turns. Defaults to
+   * English. */
+  language?: string;
 }
 
 export async function continueCommand(
@@ -138,6 +141,7 @@ export async function continueCommand(
     effective,
     modelsJsonPath,
     inputPath: inputFilePath,
+    language: options.language,
   });
   Stamp.configure(stamp);
 
@@ -290,7 +294,8 @@ export async function continueCommand(
           userModel,
           task.input.modelId,
           getTargetGateway(task.input.modelId),
-          task.input.scenario
+          task.input.scenario,
+          options.language
         );
         const testResult = await kora.runTest(
           built.context,

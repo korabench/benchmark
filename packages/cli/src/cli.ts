@@ -243,6 +243,10 @@ program
     "--risk-ids <ids>",
     "comma-separated risk IDs to restrict expansion to (defaults to all seeds in the input file)"
   )
+  .option(
+    "--language <name>",
+    'natural language the simulated child writes in, e.g. "Estonian" (default: English)'
+  )
   .action((model, userModel, opts) =>
     expandScenariosCommand(
       program,
@@ -253,7 +257,8 @@ program
       opts.riskIds
         ?.split(",")
         .map(id => id.trim())
-        .filter(id => id.length > 0)
+        .filter(id => id.length > 0),
+      opts.language
     )
   );
 
@@ -302,6 +307,10 @@ program
     "seconds to sleep between sequential test tasks; use with --concurrency 1 to avoid app rate-limiting (default 0)",
     "0"
   )
+  .option(
+    "--language <name>",
+    'natural language of the conversation, e.g. "Estonian": the simulated child writes in it and the target model is told to answer in it (default: English)'
+  )
   .action((targetModel, userModel, opts) => {
     const limit =
       opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
@@ -340,6 +349,7 @@ program
         concurrency,
         reverse: opts.reverse === true,
         cooldownMs: cooldownSeconds * 1000,
+        language: opts.language,
       }
     );
   });
@@ -443,6 +453,10 @@ program
     "--limit-per-risk <count>",
     "maximum number of records per risk (deterministic by record id; fails fast if any requested risk has fewer records than requested)"
   )
+  .option(
+    "--language <name>",
+    'natural language of the added turns, e.g. "Estonian" (default: English)'
+  )
   .action((userModel, opts) => {
     const limitPerRisk =
       opts.limitPerRisk !== undefined
@@ -473,6 +487,7 @@ program
           .map(id => id.trim())
           .filter(id => id.length > 0),
         limitPerRisk,
+        language: opts.language,
       }
     );
   });
