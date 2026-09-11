@@ -90,6 +90,15 @@
       }
     }
   },
+  "gpt-6-astra:high": {
+    "model": "openai/gpt-6-astra",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "high"
+      }
+    }
+  },
   "claude-sonnet-4.6:limited": {
     "model": "anthropic/claude-sonnet-4.6",
     "maxTokens": 16000
@@ -162,6 +171,10 @@
   },
   "claude-fable-5:limited": {
     "model": "anthropic/claude-fable-5",
+    "maxTokens": 16000
+  },
+  "claude-fable-5.1:limited": {
+    "model": "anthropic/claude-fable-5.1",
     "maxTokens": 16000
   },
   "llama-4-maverick:limited": {
