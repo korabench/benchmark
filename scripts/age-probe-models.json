@@ -1,0 +1,47 @@
+{
+  "_comment": [
+    "Model roster for scripts/age-probe-run.mjs. Kept out of the repo-root",
+    "models.json on purpose: these are analysis models for one study, not part",
+    "of the published benchmark registry. Same shape as a models.json entry, so",
+    "an entry can be moved into the registry unchanged if it ever belongs there.",
+    "Slugs are AI Gateway ids; `served` in the artifact records what actually",
+    "answered, which is the only evidence of the snapshot behind a pinned id.",
+    "Reasoning models get a raised maxTokens for the same reason the registry's",
+    "`:limited` variants do — a reasoning budget spent on thinking leaves no",
+    "room for the answer, and an empty completion is indistinguishable from a",
+    "model that declined to guess."
+  ],
+
+  "child": {
+    "deepseek-v3.2": {"model": "deepseek/deepseek-v3.2"},
+    "gemini-3.8-flash": {"model": "google/gemini-3.8-flash"},
+    "gpt-4.1-mini": {"model": "openai/gpt-4.1-mini"}
+  },
+
+  "target": {
+    "gpt-4o-mini": {"model": "openai/gpt-4o-mini"},
+    "claude-sonnet-4.6": {"model": "anthropic/claude-sonnet-4.6", "maxTokens": 4000},
+    "gemini-2.5-flash": {"model": "google/gemini-2.5-flash", "maxTokens": 8000},
+    "gpt-5.2": {"model": "openai/gpt-5.2", "maxTokens": 16000}
+  },
+
+  "probe": {
+    "claude-opus-4.8": {"model": "anthropic/claude-opus-4.8", "maxTokens": 4000},
+    "claude-sonnet-4.6": {"model": "anthropic/claude-sonnet-4.6", "maxTokens": 4000},
+    "claude-haiku-4.5": {"model": "anthropic/claude-haiku-4.5"},
+    "gpt-5.5": {"model": "openai/gpt-5.5", "maxTokens": 16000},
+    "gpt-5.2": {"model": "openai/gpt-5.2", "maxTokens": 16000},
+    "gpt-4o-mini": {"model": "openai/gpt-4o-mini"},
+    "gpt-4.1-mini": {"model": "openai/gpt-4.1-mini"},
+    "gemini-2.5-pro": {"model": "google/gemini-2.5-pro", "maxTokens": 16000},
+    "gemini-2.5-flash": {"model": "google/gemini-2.5-flash", "maxTokens": 8000},
+    "gemini-3.8-flash": {"model": "google/gemini-3.8-flash", "maxTokens": 8000},
+    "deepseek-v4-pro": {"model": "deepseek/deepseek-v4-pro", "maxTokens": 8000},
+    "deepseek-v3.2": {"model": "deepseek/deepseek-v3.2"},
+    "llama-4-maverick": {"model": "meta/llama-4-maverick"},
+    "kimi-k3": {"model": "moonshotai/kimi-k3", "maxTokens": 8000},
+    "glm-5": {"model": "zai/glm-5", "maxTokens": 8000},
+    "mistral-medium-3.5": {"model": "mistral/mistral-medium-3.5"},
+    "grok-4.1-fast-non-reasoning": {"model": "xai/grok-4.1-fast-non-reasoning"}
+  }
+}
