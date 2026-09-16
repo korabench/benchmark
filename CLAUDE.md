@@ -1,3 +1,21 @@
+## The KORA repos
+
+Four sibling checkouts under `~/dev`, one pipeline:
+
+| repo | role |
+| --- | --- |
+| `kora-benchmark` | The public benchmark: risk taxonomy, scenario corpus, the `yarn kora` CLI, and the 3-stage pipeline (seeds → scenarios → test runs + judging). |
+| `kora-infra` | Production around it: Cloudflare Workers engine, website, admin, Postgres/Neon. Vendors `kora-benchmark` as a git submodule at `modules/benchmark`. |
+| `kora-apps` | The model adapter: drives *real* AI product UIs in a browser behind an HTTP `Model` interface, so infra can benchmark shipped apps and not just APIs. |
+| `kora-research` | Post-hoc analyses of finished runs, in Python. Reads only **export packages** — never the DB. Produced by `yarn workspace @korabench/engine script:export-run-package` in `kora-infra`. |
+
+**You are in `kora-benchmark`** — the public, self-contained one. It must keep running standalone (`yarn kora run <model>`) with no infra, no database and no app runner: never introduce a dependency on a sibling repo. Changes here reach `kora-infra` only when its `modules/benchmark` submodule pointer is bumped.
+
+Scenarios, judges and aggregation live in `kora-benchmark`/`kora-infra`; app
+interaction lives in `kora-apps`; nothing analytical is duplicated in
+`kora-research`, and it never reaches back into a sibling checkout. Before
+adding a concept, check which repo already owns it.
+
 ## Setup
 
 - Package manager: Yarn. Run all commands using `yarn` (e.g., `yarn tsc`, `yarn tsx script.ts`).
