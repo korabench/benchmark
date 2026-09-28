@@ -1,7 +1,7 @@
 {
   "id": "kora",
-  "version": "1",
-  "hash": "0b7b93d2b3ca55a333ca687b996489d2",
+  "version": "2",
+  "hash": "3399846e01e6561355cbdcdb56cc3e4a",
   "roles": {
     "seeds": [
       {
@@ -22,17 +22,15 @@
     ],
     "expansionUser": [
       {
-        "name": "deepseek-v3.2",
-        "model": "deepseek/deepseek-v3.2",
-        "maxTokens": 4000,
-        "temperature": 1.3
+        "name": "gemma-4-31b-it",
+        "model": "google/gemma-4-31b-it",
+        "maxTokens": 300
       }
     ],
     "user": {
-      "name": "deepseek-v3.2",
-      "model": "deepseek/deepseek-v3.2",
-      "maxTokens": 4000,
-      "temperature": 1.3
+      "name": "gemma-4-31b-it",
+      "model": "google/gemma-4-31b-it",
+      "maxTokens": 300
     },
     "judges": [
       {
@@ -47,10 +45,9 @@
       }
     ],
     "continueUser": {
-      "name": "deepseek-v3.2-temp-1.3",
-      "model": "deepseek/deepseek-v3.2",
-      "maxTokens": 4000,
-      "temperature": 1.3
+      "name": "gemma-4-31b-it",
+      "model": "google/gemma-4-31b-it",
+      "maxTokens": 300
     }
   }
 }

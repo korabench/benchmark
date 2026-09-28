@@ -203,7 +203,7 @@ yarn kora continue [user-model]
 
 | Argument / Option          | Description                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `deepseek-v3.2-temp-1.3` in `kora`, matching production)                                       |
+| `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `gemma-4-31b-it` in `kora`)                                       |
 | `--judges <models>`        | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile — single judge, held constant across 3-turn vs 8-turn comparisons)          |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
@@ -371,15 +371,15 @@ role, so the file alone is a complete record of what ran:
 ```json
 {
   "id": "kora",
-  "version": "1",
-  "hash": "0b7b93d2…",
+  "version": "2",
+  "hash": "3399846e…",
   "roles": {
     "seeds":         [{"name": "gpt-4o", "model": "openai/gpt-4o"}],
     "expansion":     [{"name": "gpt-5.2:high", "model": "openai/gpt-5.2", "providerOptions": {"openai": {"reasoningEffort": "high"}}}],
-    "expansionUser": [{"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}],
-    "user":           {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3},
+    "expansionUser": [{"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}],
+    "user":           {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300},
     "judges":        [{"name": "gpt-5.2:medium:limited", "model": "openai/gpt-5.2", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}}],
-    "continueUser":   {"name": "deepseek-v3.2-temp-1.3", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}
+    "continueUser":   {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}
   }
 }
 ```
@@ -395,12 +395,32 @@ role, so the file alone is a complete record of what ran:
 
 Each entry is a `models.json` entry plus a `name`, which is what logs and the
 `judges` / `user` fields of result files print. The bundled `profiles/kora.json`
-reproduces the defaults the CLI used before profiles existed; a test asserts
+pins Gemma 4 31B for all child roles; a test asserts
 every role matches the `models.json` entry of the same name.
 
 Select a profile with the global `--profile` option or `KORA_PROFILE`. Nothing
 in `models.json` is consulted for a profile role: the registry only serves the
 target model and the command-line overrides below.
+
+### Gemma child model (kora@2)
+
+The `expansionUser`, `user`, and `continueUser` roles use
+`google/gemma-4-31b-it` through AI Gateway, with a 300-token cap and **no
+explicit temperature or reasoning options**, matching Thibaut's
+[refusal battery](https://github.com/korabench/research/tree/main/refusal_battery).
+That study observed Novita as the upstream; the model slug is not a provider
+pin. Check the gateway's resolved provider before a production rollout.
+The seed, scenario-expansion and judge models and all prompts are unchanged.
+DeepSeek entries remain in `models.json` for explicit overrides and old profiles.
+
+**Existing corpora do not change.** `run` still uses each scenario's stored
+`firstUserMessage`. Selecting this profile with an old corpus produces a mixed
+run (old opener, Gemma continuations); do not label it entirely Gemma-generated.
+`expand-scenarios` generates Gemma openers for new scenarios. This change does
+not regenerate any existing first messages or historical results. Use separate
+output paths for new runs; resume stamps reject a changed profile. When
+reassessing old transcripts, explicitly select the original child model/profile:
+`reassess` labels the source child but does not regenerate it.
 
 ### Testing a model configuration (local profiles)
 
@@ -752,22 +772,22 @@ The `run` command produces a result object with this structure:
 {
   "target": "gpt-4o",
   "judges": ["gpt-5.2:medium:limited"],
-  "user": "deepseek-v3.2",
+  "user": "gemma-4-31b-it",
   "prompts": ["default"],
   "packs": {
     "taxonomy": {"id": "kora", "version": "2", "hash": "498ec8d2…"},
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
   "stamp": {
-    "profile": {"id": "kora", "version": "1", "hash": "0b7b93d2…"},
-    "models": {"user": {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
+    "profile": {"id": "kora", "version": "2", "hash": "3399846e…"},
+    "models": {"user": {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
     "prompts": {"version": "1", "hash": "7eacbd51…"},
     "code": {"version": "1.0.0", "commit": "b73b4731…", "dirty": false},
     "packs": {"…": "…"},
     "input": {"path": "data/scenarios.jsonl", "sha256": "eeb1a21b…"}
   },
   "served": {
-    "user": ["deepseek/deepseek-v3.2"],
+    "user": ["google/gemma-4-31b-it"],
     "judges": {"gpt-5.2:medium:limited": ["openai/gpt-5.2"]},
     "target": ["openai/gpt-4o"]
   },
