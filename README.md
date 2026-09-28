@@ -406,10 +406,9 @@ target model and the command-line overrides below.
 
 The `expansionUser`, `user`, and `continueUser` roles use
 `google/gemma-4-31b-it` through AI Gateway, with a 300-token cap and **no
-explicit temperature or reasoning options**, matching Thibaut's
-[refusal battery](https://github.com/korabench/research/tree/main/refusal_battery).
-That study observed Novita as the upstream; the model slug is not a provider
-pin. Check the gateway's resolved provider before a production rollout.
+explicit temperature or reasoning options**. The upstream provider is selected
+by AI Gateway and is not pinned by this profile. Check the gateway's resolved
+provider before a production rollout.
 The seed, scenario-expansion and judge models and all prompts are unchanged.
 DeepSeek entries remain in `models.json` for explicit overrides and old profiles.
 
@@ -551,7 +550,7 @@ yarn workspace @korabench/apps-web-runner smoke \
 The default input is `data/scenarios.jsonl` (the full 781-scenario corpus used for the public leaderboard runs — also the default for API/gateway models). Web targets can take this directly:
 
 ```bash
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-gemini \
   --concurrency 1 \
   -o data/gemini-run.json
@@ -572,7 +571,7 @@ yarn web-runner:dev
 cd ../kora-apps
 yarn workspace @korabench/apps-web-runner smoke --app gemini --message "What's 2+2?"
 
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-gemini \
   --concurrency 1 \
   --limit 2 \
@@ -624,7 +623,7 @@ yarn dev   # tsx watch --env-file=../../.env src/server.ts on :7200
 Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file exists only to keep scenarios short enough for the on-device app's input window (e.g. Tako's). Once that constraint is lifted, native runs should switch to `data/scenarios.jsonl` like the web targets.
 
 ```bash
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-tiktok-android \
   --concurrency 1 \
   --cooldown 60 \
