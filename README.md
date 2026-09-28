@@ -402,7 +402,7 @@ Select a profile with the global `--profile` option or `KORA_PROFILE`. Nothing
 in `models.json` is consulted for a profile role: the registry only serves the
 target model and the command-line overrides below.
 
-### Gemma child model (kora@2)
+### Gemma child model
 
 The `expansionUser`, `user`, and `continueUser` roles use
 `google/gemma-4-31b-it` through AI Gateway, with a 300-token cap and **no
