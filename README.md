@@ -402,25 +402,6 @@ Select a profile with the global `--profile` option or `KORA_PROFILE`. Nothing
 in `models.json` is consulted for a profile role: the registry only serves the
 target model and the command-line overrides below.
 
-### Gemma child model
-
-The `expansionUser`, `user`, and `continueUser` roles use
-`google/gemma-4-31b-it` through AI Gateway, with a 300-token cap and **no
-explicit temperature or reasoning options**. The upstream provider is selected
-by AI Gateway and is not pinned by this profile. Check the gateway's resolved
-provider before a production rollout.
-The seed, scenario-expansion and judge models and all prompts are unchanged.
-DeepSeek entries remain in `models.json` for explicit overrides and old profiles.
-
-**Existing corpora do not change.** `run` still uses each scenario's stored
-`firstUserMessage`. Selecting this profile with an old corpus produces a mixed
-run (old opener, Gemma continuations); do not label it entirely Gemma-generated.
-`expand-scenarios` generates Gemma openers for new scenarios. This change does
-not regenerate any existing first messages or historical results. Use separate
-output paths for new runs; resume stamps reject a changed profile. When
-reassessing old transcripts, explicitly select the original child model/profile:
-`reassess` labels the source child but does not regenerate it.
-
 ### Testing a model configuration (local profiles)
 
 To try a different judge, user simulator or expansion model, copy the example
