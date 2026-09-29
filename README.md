@@ -203,7 +203,7 @@ yarn kora continue [user-model]
 
 | Argument / Option          | Description                                                                                                                                                                                |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `deepseek-v3.2-temp-1.3` in `kora`, matching production)                                       |
+| `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `gemma-4-31b-it` in `kora`)                                       |
 | `--judges <models>`        | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile — single judge, held constant across 3-turn vs 8-turn comparisons)          |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                                 |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                              |
@@ -371,15 +371,15 @@ role, so the file alone is a complete record of what ran:
 ```json
 {
   "id": "kora",
-  "version": "1",
-  "hash": "0b7b93d2…",
+  "version": "2",
+  "hash": "aa2b45f1…",
   "roles": {
     "seeds":         [{"name": "gpt-4o", "model": "openai/gpt-4o"}],
     "expansion":     [{"name": "gpt-5.2:high", "model": "openai/gpt-5.2", "providerOptions": {"openai": {"reasoningEffort": "high"}}}],
-    "expansionUser": [{"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}],
-    "user":           {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3},
+    "expansionUser": [{"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}],
+    "user":           {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000},
     "judges":        [{"name": "gpt-5.2:medium:limited", "model": "openai/gpt-5.2", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}}],
-    "continueUser":   {"name": "deepseek-v3.2-temp-1.3", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}
+    "continueUser":   {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}
   }
 }
 ```
@@ -395,7 +395,7 @@ role, so the file alone is a complete record of what ran:
 
 Each entry is a `models.json` entry plus a `name`, which is what logs and the
 `judges` / `user` fields of result files print. The bundled `profiles/kora.json`
-reproduces the defaults the CLI used before profiles existed; a test asserts
+pins Gemma 4 31B for all child roles; a test asserts
 every role matches the `models.json` entry of the same name.
 
 Select a profile with the global `--profile` option or `KORA_PROFILE`. Nothing
@@ -531,7 +531,7 @@ yarn workspace @korabench/apps-web-runner smoke \
 The default input is `data/scenarios.jsonl` (the full 781-scenario corpus used for the public leaderboard runs — also the default for API/gateway models). Web targets can take this directly:
 
 ```bash
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-gemini \
   --concurrency 1 \
   -o data/gemini-run.json
@@ -552,7 +552,7 @@ yarn web-runner:dev
 cd ../kora-apps
 yarn workspace @korabench/apps-web-runner smoke --app gemini --message "What's 2+2?"
 
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-gemini \
   --concurrency 1 \
   --limit 2 \
@@ -604,7 +604,7 @@ yarn dev   # tsx watch --env-file=../../.env src/server.ts on :7200
 Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file exists only to keep scenarios short enough for the on-device app's input window (e.g. Tako's). Once that constraint is lifted, native runs should switch to `data/scenarios.jsonl` like the web targets.
 
 ```bash
-cd /Users/thibaut/dev/kora-benchmark
+cd /path/to/kora-benchmark
 yarn kora run kora-app-tiktok-android \
   --concurrency 1 \
   --cooldown 60 \
@@ -752,22 +752,22 @@ The `run` command produces a result object with this structure:
 {
   "target": "gpt-4o",
   "judges": ["gpt-5.2:medium:limited"],
-  "user": "deepseek-v3.2",
+  "user": "gemma-4-31b-it",
   "prompts": ["default"],
   "packs": {
     "taxonomy": {"id": "kora", "version": "2", "hash": "498ec8d2…"},
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
   "stamp": {
-    "profile": {"id": "kora", "version": "1", "hash": "0b7b93d2…"},
-    "models": {"user": {"name": "deepseek-v3.2", "model": "deepseek/deepseek-v3.2", "maxTokens": 4000, "temperature": 1.3}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
+    "profile": {"id": "kora", "version": "2", "hash": "aa2b45f1…"},
+    "models": {"user": {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
     "prompts": {"version": "1", "hash": "7eacbd51…"},
     "code": {"version": "1.0.0", "commit": "b73b4731…", "dirty": false},
     "packs": {"…": "…"},
     "input": {"path": "data/scenarios.jsonl", "sha256": "eeb1a21b…"}
   },
   "served": {
-    "user": ["deepseek/deepseek-v3.2"],
+    "user": ["google/gemma-4-31b-it"],
     "judges": {"gpt-5.2:medium:limited": ["openai/gpt-5.2"]},
     "target": ["openai/gpt-4o"]
   },

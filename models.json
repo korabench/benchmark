@@ -204,5 +204,9 @@
   "kimi-k3:limited": {
     "model": "moonshotai/kimi-k3",
     "maxTokens": 16000
+  },
+  "gemma-4-31b-it": {
+    "model": "google/gemma-4-31b-it",
+    "maxTokens": 4000
   }
 }

@@ -116,6 +116,24 @@ export function createGatewayModelFromConfig(
               | Record<string, Record<string, never>>
               | undefined,
             maxRetries: 0,
+          }).then(result => {
+            if (config.model === "google/gemma-4-31b-it") {
+              if (result.finishReason === "length") {
+                throw new Error(
+                  "Response truncated: max output tokens reached."
+                );
+              }
+              if (
+                result.finishReason === "content-filter" ||
+                result.finishReason === "error" ||
+                !result.text.trim()
+              ) {
+                throw new Error(
+                  `Gemma generation failed (${result.finishReason}): no usable child message.`
+                );
+              }
+            }
+            return result;
           }),
         retryOptions
       );
