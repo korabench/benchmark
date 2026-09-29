@@ -169,6 +169,16 @@
     "model": "anthropic/claude-opus-4.8",
     "maxTokens": 16000
   },
+  "claude-opus-5.5:high": {
+    "model": "anthropic/claude-opus-5.5",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "anthropic": {
+        "thinking": {"type": "adaptive"},
+        "effort": "high"
+      }
+    }
+  },
   "claude-fable-5:limited": {
     "model": "anthropic/claude-fable-5",
     "maxTokens": 16000
