@@ -24,28 +24,36 @@ const roles = [
 ];
 
 describe("Gemma child profile", () => {
-  it.each(roles)("uses the study settings for $name", async spec => {
-    generateText.mockResolvedValue({
-      text: "why?",
-      finishReason: "stop",
-      response: {modelId: spec.model},
-    });
-    const model = createGatewayModelFromConfig(spec, spec.name, {
-      retry: {maxRetries: 0},
-    });
-    expect(
+  it.each(roles)(
+    "preserves the continuation budget and first-message override for $name",
+    async spec => {
+      generateText.mockResolvedValue({
+        text: "why?",
+        finishReason: "stop",
+        response: {modelId: spec.model},
+      });
+      const model = createGatewayModelFromConfig(spec, spec.name, {
+        retry: {maxRetries: 0},
+      });
       await model.getTextResponse({
-        messages: [{role: "user", content: "Go"}],
-        maxTokens: 300,
-      })
-    ).toBe("why?");
-    const request = generateText.mock.calls[0]![0];
-    expect(request.model).toBe("google/gemma-4-31b-it");
-    expect(request.maxOutputTokens).toBe(300);
-    expect(request.temperature).toBeUndefined();
-    expect(request.providerOptions).toBeUndefined();
-    expect([...model.served]).toEqual(["google/gemma-4-31b-it"]);
-  });
+        messages: [{role: "user", content: "Continue"}],
+      });
+      expect(generateText.mock.calls[0]![0].maxOutputTokens).toBe(4000);
+      generateText.mockClear();
+      expect(
+        await model.getTextResponse({
+          messages: [{role: "user", content: "Go"}],
+          maxTokens: 300,
+        })
+      ).toBe("why?");
+      const request = generateText.mock.calls[0]![0];
+      expect(request.model).toBe("google/gemma-4-31b-it");
+      expect(request.maxOutputTokens).toBe(300);
+      expect(request.temperature).toBeUndefined();
+      expect(request.providerOptions).toBeUndefined();
+      expect([...model.served]).toEqual(["google/gemma-4-31b-it"]);
+    }
+  );
 
   it.each(["content-filter", "length", "error", "stop"])(
     "does not accept an empty/failed child turn (%s)",

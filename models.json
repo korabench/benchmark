@@ -207,6 +207,6 @@
   },
   "gemma-4-31b-it": {
     "model": "google/gemma-4-31b-it",
-    "maxTokens": 300
+    "maxTokens": 4000
   }
 }

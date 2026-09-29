@@ -1,7 +1,7 @@
 {
   "id": "kora",
   "version": "2",
-  "hash": "3399846e01e6561355cbdcdb56cc3e4a",
+  "hash": "aa2b45f1a02f133002e1b0f3b13d2ccf",
   "roles": {
     "seeds": [
       {
@@ -24,13 +24,13 @@
       {
         "name": "gemma-4-31b-it",
         "model": "google/gemma-4-31b-it",
-        "maxTokens": 300
+        "maxTokens": 4000
       }
     ],
     "user": {
       "name": "gemma-4-31b-it",
       "model": "google/gemma-4-31b-it",
-      "maxTokens": 300
+      "maxTokens": 4000
     },
     "judges": [
       {
@@ -47,7 +47,7 @@
     "continueUser": {
       "name": "gemma-4-31b-it",
       "model": "google/gemma-4-31b-it",
-      "maxTokens": 300
+      "maxTokens": 4000
     }
   }
 }

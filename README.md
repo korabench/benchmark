@@ -372,14 +372,14 @@ role, so the file alone is a complete record of what ran:
 {
   "id": "kora",
   "version": "2",
-  "hash": "3399846e…",
+  "hash": "aa2b45f1…",
   "roles": {
     "seeds":         [{"name": "gpt-4o", "model": "openai/gpt-4o"}],
     "expansion":     [{"name": "gpt-5.2:high", "model": "openai/gpt-5.2", "providerOptions": {"openai": {"reasoningEffort": "high"}}}],
-    "expansionUser": [{"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}],
-    "user":           {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300},
+    "expansionUser": [{"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}],
+    "user":           {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000},
     "judges":        [{"name": "gpt-5.2:medium:limited", "model": "openai/gpt-5.2", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}}],
-    "continueUser":   {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}
+    "continueUser":   {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}
   }
 }
 ```
@@ -759,8 +759,8 @@ The `run` command produces a result object with this structure:
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
   "stamp": {
-    "profile": {"id": "kora", "version": "2", "hash": "3399846e…"},
-    "models": {"user": {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 300}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
+    "profile": {"id": "kora", "version": "2", "hash": "aa2b45f1…"},
+    "models": {"user": {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
     "prompts": {"version": "1", "hash": "7eacbd51…"},
     "code": {"version": "1.0.0", "commit": "b73b4731…", "dirty": false},
     "packs": {"…": "…"},
