@@ -21,7 +21,7 @@ export function allocateFlavors(
   const proportions = Object.fromEntries(
     flavors.map(f => [f.id, f.proportion])
   );
-  const counts = largestRemainderCounts(proportions, total);
+  const counts = largestRemainderCounts(proportions, total, rng);
   const flat = flavors.flatMap(f =>
     Array.from({length: counts[f.id] ?? 0}, () => f.id)
   );

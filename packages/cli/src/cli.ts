@@ -2,6 +2,7 @@
 import {Command} from "@commander-js/extra-typings";
 import {
   AgeRange,
+  DEFAULT_TOTAL_SEEDS,
   PopulationDistribution,
   ScenarioPrompt,
 } from "@korabench/benchmark";
@@ -151,16 +152,16 @@ program
   )
   .option("-o, --output <path>", "output seeds JSONL file", defaultSeedsPath)
   .option(
-    "--seeds-per-task <count>",
-    "number of seeds to generate per risk/age/motivation combination (default: 8, ignored when --total-seeds is set)"
+    "--total-seeds <count>",
+    `seeds to generate per risk (default: ${DEFAULT_TOTAL_SEEDS}); every dimension of each seed is allocated by code`
   )
   .option(
-    "--total-seeds <count>",
-    "total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with --seeds-per-task)"
+    "--seeds-per-task <count>",
+    "removed: use --total-seeds (seeds per risk) instead"
   )
   .option(
     "--age-ranges <ranges>",
-    "comma-separated age ranges to generate seeds for (7to9, 10to12, 13to17)",
+    "comma-separated age ranges to generate seeds for (7to9, 10to12, 13to17); the distribution's age proportions are renormalized over them",
     AgeRange.list.join(",")
   )
   .option(
@@ -169,20 +170,27 @@ program
   )
   .option(
     "--motivations <names>",
-    "comma-separated motivation names to restrict generation to (defaults to all motivations)"
+    "comma-separated motivation names to spread seeds over (defaults to all motivations)"
   )
   .option(
     "--distribution <preset-or-path>",
-    `population-distribution preset (one of: ${PopulationDistribution.presetNames().join(", ")}) or path to a JSON file; when set, demographic fields (age band, gender, SES, race) are pre-allocated to match the target marginals. Requires --total-seeds.`
+    `population-distribution preset (one of: ${PopulationDistribution.presetNames().join(", ")}) or path to a JSON file; age band, gender, SES and race/ethnicity are allocated to match its marginals`,
+    PopulationDistribution.defaultPresetName
   )
   .option(
     "--random-seed <int>",
-    "RNG seed for reproducible demographic allocation (distribution mode only)"
+    "RNG seed making the allocation of every seed dimension reproducible"
   )
   .action(async (model, opts) => {
-    const distribution = opts.distribution
-      ? await PopulationDistribution.resolve(opts.distribution)
-      : undefined;
+    if (opts.seedsPerTask !== undefined) {
+      throw new Error(
+        "--seeds-per-task was removed: seeds are no longer generated per age/motivation combination. " +
+          "Every dimension is now allocated per risk; use --total-seeds <count> to set the number of seeds per risk."
+      );
+    }
+    const distribution = await PopulationDistribution.resolve(
+      opts.distribution
+    );
     const randomSeed =
       opts.randomSeed !== undefined ? parseInt(opts.randomSeed, 10) : undefined;
     if (opts.randomSeed !== undefined && !Number.isFinite(randomSeed)) {
@@ -197,10 +205,6 @@ program
       {seeds: optionalCsv(model)},
       opts.output,
       {
-        seedsPerTask:
-          opts.seedsPerTask !== undefined
-            ? parseInt(opts.seedsPerTask, 10)
-            : undefined,
         totalSeeds:
           opts.totalSeeds !== undefined
             ? parseInt(opts.totalSeeds, 10)

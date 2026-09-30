@@ -58,12 +58,16 @@ export interface GenerationEvent<T> {
 }
 
 export interface GenerateSeedsOptions {
-  seedsPerTask?: number;
+  /** Seeds to generate per risk. Defaults to `DEFAULT_TOTAL_SEEDS`. */
   totalSeeds?: number;
+  /** Restricts and renormalizes the age dimension of `distribution`. */
   ageRanges?: AgeRange[];
   riskIds?: readonly string[];
+  /** Restricts the motivations seeds are spread over. */
   motivations?: readonly string[];
+  /** Target population. Defaults to `PopulationDistribution.default()`. */
   distribution?: PopulationDistribution;
+  /** Makes every allocation reproducible. */
   randomSeed?: number;
 }
 

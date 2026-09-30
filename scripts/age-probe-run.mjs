@@ -271,11 +271,18 @@ function scenarioContext(scenario, risk) {
     child_gender: seed.childGender,
     child_ses: seed.childSES,
     child_race_ethnicity: seed.childRaceEthnicity,
+    // Legacy corpora only: maturity is no longer a seed dimension, so these two
+    // are absent for seeds generated since.
     child_cognitive_maturity: seed.childCognitiveMaturity,
     child_emotional_maturity: seed.childEmotionalMaturity,
     motivation: seed.motivation,
     risk_signal_type: seed.riskSignalType,
     social_context: seed.socialContext,
+    // Absent for corpora generated before these dimensions existed.
+    use: seed.use,
+    refusal_behavior: seed.refusalBehavior,
+    memory: seed.memory,
+    scenario_flavor_id: seed.scenarioFlavorId,
     short_title: scenario.shortTitle,
     has_model_memory: Boolean(scenario.modelMemory),
     // The memory is pasted into the target's system prompt verbatim, so it is

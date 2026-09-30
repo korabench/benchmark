@@ -16,9 +16,20 @@ export const ageRangeDescriptions: Record<AgeRange, string> = {
   "13to17": "Teenager (13-17 years old)",
 };
 
+const ageRangeYears: Record<AgeRange, readonly number[]> = {
+  "7to9": [7, 8, 9],
+  "10to12": [10, 11, 12],
+  "13to17": [13, 14, 15, 16, 17],
+};
+
 //
 // API.
 //
+
+/** The individual ages a band covers, in ascending order. */
+function years(ageRange: AgeRange): readonly number[] {
+  return ageRangeYears[ageRange];
+}
 
 function toSortable(ageRange: AgeRange): string {
   switch (ageRange) {
@@ -38,5 +49,6 @@ export type AgeRange = v.InferOutput<typeof VAgeRange>;
 export const AgeRange = {
   io: VAgeRange,
   list: VAgeRange.options,
+  years,
   toSortable,
 };

@@ -5,6 +5,22 @@ import {makeRng} from "../rng.js";
 
 const census = populationDistributionPresets["us-census-2020"]!;
 
+/**
+ * Each count must be floor(total * p) or one more, and the counts sum to
+ * `total`. Which values get the +1 is random by design.
+ */
+function expectWithinRounding(
+  counts: Record<string, number>,
+  proportions: Record<string, number>,
+  total: number
+): void {
+  expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(total);
+  for (const [key, p] of Object.entries(proportions)) {
+    const floor = Math.floor(p * total);
+    expect([floor, floor + 1]).toContain(counts[key] ?? 0);
+  }
+}
+
 function histogram<K extends keyof PinnedDemographics>(
   personas: readonly PinnedDemographics[],
   field: K
@@ -20,24 +36,28 @@ describe("allocatePersonas", () => {
   it("produces exactly `total` personas with matching marginals (US census @ 60)", () => {
     const personas = allocatePersonas(census, 60, makeRng(42));
     expect(personas).toHaveLength(60);
-    expect(histogram(personas, "ageRange")).toEqual({
-      "7to9": 16,
-      "10to12": 16,
-      "13to17": 28,
-    });
+    expectWithinRounding(histogram(personas, "ageRange"), census.ageRange, 60);
     expect(histogram(personas, "gender")).toEqual({girl: 30, boy: 30});
-    expect(histogram(personas, "ses")).toEqual({
-      low: 17,
-      middle: 28,
-      high: 15,
-    });
-    expect(histogram(personas, "raceEthnicity")).toEqual({
-      white: 31,
-      hispanic: 15,
-      black: 8,
-      asian: 3,
-      other: 3,
-    });
+    expectWithinRounding(histogram(personas, "ses"), census.ses, 60);
+    expectWithinRounding(
+      histogram(personas, "raceEthnicity"),
+      census.raceEthnicity,
+      60
+    );
+  });
+
+  it("does not always hand the rounding remainder to the same value", () => {
+    // 28/46/26 over 40 leaves 11.2/18.4/10.4: the +1 must move around.
+    const sesCounts = Array.from({length: 50}, (_, i) =>
+      histogram(allocatePersonas(census, 40, makeRng(i)), "ses")
+    );
+    const floors: Record<string, number> = {low: 11, middle: 18, high: 10};
+    const winners = new Set(
+      sesCounts.flatMap(c =>
+        Object.keys(floors).filter(key => c[key] === floors[key]! + 1)
+      )
+    );
+    expect(winners.size).toBeGreaterThan(1);
   });
 
   it("is reproducible given the same seed", () => {
@@ -46,13 +66,16 @@ describe("allocatePersonas", () => {
     expect(a).toEqual(b);
   });
 
-  it("produces different joint assignments for different seeds but identical marginals", () => {
+  it("produces different joint assignments for different seeds, both within rounding", () => {
     const a = allocatePersonas(census, 60, makeRng(1));
     const b = allocatePersonas(census, 60, makeRng(2));
     expect(a).not.toEqual(b);
-    expect(histogram(a, "ses")).toEqual(histogram(b, "ses"));
-    expect(histogram(a, "raceEthnicity")).toEqual(
-      histogram(b, "raceEthnicity")
+    expectWithinRounding(histogram(a, "ses"), census.ses, 60);
+    expectWithinRounding(histogram(b, "ses"), census.ses, 60);
+    expectWithinRounding(
+      histogram(a, "raceEthnicity"),
+      census.raceEthnicity,
+      60
     );
   });
 

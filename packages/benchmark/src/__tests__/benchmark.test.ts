@@ -62,8 +62,6 @@ function createTestResult(
   return {
     scenario: {
       shortTitle: "Test scenario title",
-      childMaturity:
-        "A child with moderate emotional development and typical cognitive abilities for their age.",
       childBackground:
         "A child from a middle-class suburban family with supportive parents and stable home environment.",
       narrative:
@@ -80,14 +78,16 @@ function createTestResult(
         childAge: 8,
         childGender: "male",
         childRaceEthnicity: "asian",
-        childCognitiveMaturity: "medium",
-        childEmotionalMaturity: "medium",
+        childSES: "middle",
         shortTitle: "Test seed title",
         riskSignalType: "subtle",
         coreBehavior: "A child exploring boundaries in conversation.",
         socialContext: "alone",
         context: "Child is home alone and curious about topics.",
         notes: "",
+        use: "learning",
+        refusalBehavior: "drops",
+        memory: "none",
       },
     },
     prompt,

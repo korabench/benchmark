@@ -1,9 +1,16 @@
 import {
+  AgeRange,
+  DEFAULT_TOTAL_SEEDS,
   GenerateSeedsContext,
   GenerateSeedsOptions,
   kora,
-  largestRemainderCounts,
+  Motivation,
+  PopulationDistribution,
+  RefusalBehavior,
   RiskCategory,
+  RiskSignalType,
+  SeedUse,
+  SocialContext,
   Stamp,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
@@ -18,10 +25,27 @@ import {
 import {chainLabel, createChainModel} from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
 
-function formatCounts(counts: Record<string, number>): string {
-  return Object.entries(counts)
-    .map(([k, v]) => `${k}:${v}`)
+/**
+ * Per-value count of a proportional dimension: "20" when exact, "18-19" when
+ * the rounding remainder lands on a random value in each risk.
+ */
+function formatProportional(
+  proportions: Record<string, number>,
+  total: number
+): string {
+  return Object.entries(proportions)
+    .map(([k, p]) => {
+      const exact = p * total;
+      const floor = Math.floor(exact);
+      return `${k}:${exact === floor ? floor : `${floor}-${floor + 1}`}`;
+    })
     .join("/");
+}
+
+/** Per-value count of an evenly allocated dimension: "10" or "4-5". */
+function formatEven(total: number, valueCount: number): string {
+  const base = Math.floor(total / valueCount);
+  return total % valueCount === 0 ? `${base}` : `${base}-${base + 1}`;
 }
 
 export async function generateSeeds(
@@ -46,34 +70,50 @@ export async function generateSeeds(
   if (options?.motivations?.length) {
     console.log(`Filtering to motivations: ${options.motivations.join(", ")}`);
   }
-  if (options?.distribution && options.totalSeeds !== undefined) {
-    const d = options.distribution;
-    const n = options.totalSeeds;
-    console.log(`Population distribution: ${d.name}`);
-    console.log(
-      `  Per-risk allocation at totalSeeds=${n}: ` +
-        `age=${formatCounts(largestRemainderCounts(d.ageRange, n))} | ` +
-        `gender=${formatCounts(largestRemainderCounts(d.gender, n))} | ` +
-        `ses=${formatCounts(largestRemainderCounts(d.ses, n))} | ` +
-        `race=${formatCounts(largestRemainderCounts(d.raceEthnicity, n))}`
-    );
-    if (options.randomSeed !== undefined) {
-      console.log(`  Random seed: ${options.randomSeed}`);
-    }
+  // Mirror of what `kora.generateScenarioSeeds` allocates, printed up front so
+  // the shape of the run is visible before any model call is made.
+  const d = options?.distribution ?? PopulationDistribution.default();
+  const n = options?.totalSeeds ?? DEFAULT_TOTAL_SEEDS;
+  const motivationCount =
+    options?.motivations?.length ?? Motivation.listAll().length;
+  const ageRanges = options?.ageRanges ?? AgeRange.list;
+  console.log(`Population distribution: ${d.name}`);
+  console.log(
+    `  Per-risk allocation at totalSeeds=${n}: ` +
+      (ageRanges.length === AgeRange.list.length
+        ? `age=${formatProportional(d.ageRange, n)}`
+        : `age=renormalized over ${ageRanges.join(",")}`) +
+      ` | gender=${formatProportional(d.gender, n)}` +
+      ` | ses=${formatProportional(d.ses, n)}` +
+      ` | race=${formatProportional(d.raceEthnicity, n)}`
+  );
+  console.log(
+    `  Evenly allocated per risk (seeds per value): ` +
+      `motivation=${formatEven(n, motivationCount)}` +
+      ` | socialContext=${formatEven(n, SocialContext.list.length)}` +
+      ` | riskSignalType=${formatEven(n, RiskSignalType.list.length)}` +
+      ` | use=${formatEven(n, SeedUse.list.length)}` +
+      ` | refusalBehavior=${formatEven(n, RefusalBehavior.list.length)}`
+  );
+  console.log(
+    "  Exact age: even within each band. Memory: from the risk definition."
+  );
+  if (options?.randomSeed !== undefined) {
+    console.log(`  Random seed: ${options.randomSeed}`);
+  }
 
-    const riskIdSet = options.riskIds ? new Set(options.riskIds) : undefined;
-    const flavoredRisks = RiskCategory.listAll()
-      .flatMap(c => c.risks)
-      .filter(r => r.scenarioFlavors?.length)
-      .filter(r => !riskIdSet || riskIdSet.has(r.id));
-    for (const risk of flavoredRisks) {
-      const proportions = Object.fromEntries(
-        risk.scenarioFlavors!.map(f => [f.id, f.proportion])
-      );
-      console.log(
-        `  Flavor allocation for ${risk.id}: ${formatCounts(largestRemainderCounts(proportions, n))}`
-      );
-    }
+  const riskIdSet = options?.riskIds ? new Set(options.riskIds) : undefined;
+  const flavoredRisks = RiskCategory.listAll()
+    .flatMap(c => c.risks)
+    .filter(r => r.scenarioFlavors?.length)
+    .filter(r => !riskIdSet || riskIdSet.has(r.id));
+  for (const risk of flavoredRisks) {
+    const proportions = Object.fromEntries(
+      risk.scenarioFlavors!.map(f => [f.id, f.proportion])
+    );
+    console.log(
+      `  Flavor allocation for ${risk.id}: ${formatProportional(proportions, n)}`
+    );
   }
 
   const {model} = createChainModel(roles.seeds);

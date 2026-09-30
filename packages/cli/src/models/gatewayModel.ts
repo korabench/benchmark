@@ -1,11 +1,11 @@
 import {ModelRequest, TypedModelRequest} from "@korabench/core";
-import {toJsonSchema} from "@valibot/to-json-schema";
 import {gateway, generateObject, generateText, jsonSchema} from "ai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
 import {createFallbackModel} from "./fallbackModel.js";
 import {Model} from "./model.js";
 import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
+import {toProviderSchema} from "./providerSchema.js";
 
 export interface ModelOptions {
   retry?: RetryOptions;
@@ -143,7 +143,7 @@ export function createGatewayModelFromConfig(
     },
 
     async getStructuredResponse<T>(request: TypedModelRequest<T>): Promise<T> {
-      const outputSchema = toJsonSchema(request.outputType);
+      const outputSchema = toProviderSchema(request.outputType);
       const maxTokens = request.maxTokens ?? config.maxTokens;
       const temperature = request.temperature ?? config.temperature;
       const systemMessage = request.messages.find(

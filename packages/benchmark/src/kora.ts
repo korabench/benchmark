@@ -2,17 +2,15 @@ import {ModelMessage, SchemaWithOutput} from "@korabench/core";
 import * as R from "remeda";
 import {flatTransform} from "streaming-iterables";
 import {v4 as uuid} from "uuid";
-import * as v from "valibot";
 import {
   aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
-import {allocateFlavors} from "./allocation/allocateFlavors.js";
 import {
-  allocatePersonas,
-  PinnedDemographics,
-} from "./allocation/allocatePersonas.js";
-import {makeRng, shuffleWith} from "./allocation/rng.js";
+  allocateSeedAssignments,
+  SeedAssignment,
+} from "./allocation/allocateSeedAssignments.js";
+import {makeRng} from "./allocation/rng.js";
 import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
 import {
   generateFirstUserMessage,
@@ -25,6 +23,7 @@ import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
+import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
@@ -39,7 +38,6 @@ import {
   ModelScenarioWithMemory,
   Scenario,
 } from "./model/scenario.js";
-import {ScenarioFlavor} from "./model/scenarioFlavor.js";
 import {ScenarioKey} from "./model/scenarioKey.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
@@ -59,19 +57,11 @@ import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
-const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
-  "7to9": [7, 9],
-  "10to12": [10, 12],
-  "13to17": [13, 17],
-};
-
-function clampAgeToBand(age: number, band: AgeRange): number {
-  const [lo, hi] = AGE_BANDS[band];
-  const rounded = Math.round(age);
-  if (rounded < lo) return lo;
-  if (rounded > hi) return hi;
-  return rounded;
-}
+/**
+ * Seeds generated per risk when the caller does not say. Matches the size of
+ * the published corpus (30 scenarios per risk).
+ */
+export const DEFAULT_TOTAL_SEEDS = 30;
 
 /** The active run stamp as a spreadable field: present only when configured. */
 function stampField(): {stamp?: RunStamp} {
@@ -184,30 +174,18 @@ export const kora = Benchmark.new({
   async *generateScenarioSeeds(c, options) {
     const riskCategories = RiskCategory.listAll();
     const allMotivations = Motivation.listAll();
-    const seedsPerTaskOption = options?.seedsPerTask;
-    const totalSeeds = options?.totalSeeds;
+    const totalSeeds = options?.totalSeeds ?? DEFAULT_TOTAL_SEEDS;
     const ageRanges = options?.ageRanges ?? AgeRange.list;
     const riskIds = options?.riskIds;
     const motivationNames = options?.motivations;
-    const distribution = options?.distribution;
-    const SeedsOutput = v.strictObject({
-      seeds: v.array(ModelScenarioSeed.io),
-    });
+    const distribution =
+      options?.distribution ?? PopulationDistribution.default();
 
-    if (seedsPerTaskOption !== undefined && totalSeeds !== undefined) {
+    if (!Number.isInteger(totalSeeds) || totalSeeds < 0) {
       throw new Error(
-        "--seeds-per-task and --total-seeds are mutually exclusive."
+        `--total-seeds must be a non-negative integer (got ${totalSeeds}).`
       );
     }
-    if (distribution !== undefined && seedsPerTaskOption !== undefined) {
-      throw new Error(
-        "--distribution and --seeds-per-task are mutually exclusive."
-      );
-    }
-    if (distribution !== undefined && totalSeeds === undefined) {
-      throw new Error("--distribution requires --total-seeds.");
-    }
-    const seedsPerTask = seedsPerTaskOption ?? 8;
 
     if (riskIds) {
       Conformance.assertRiskIdsKnown(riskIds);
@@ -227,102 +205,39 @@ export const kora = Benchmark.new({
 
     const rng = makeRng(options?.randomSeed);
 
+    // One task per seed. Every structured dimension is decided here, before the
+    // model is called: the model only writes the narrative fields.
     interface Task {
       riskCategory: RiskCategory;
       risk: Risk;
-      ageRange: AgeRange;
-      motivation: Motivation;
-      seedsToGenerate: number;
-      pinnedDemographics?: PinnedDemographics;
-      pinnedFlavor?: ScenarioFlavor;
+      assignment: SeedAssignment;
     }
 
-    const tasks: Task[] = distribution
-      ? riskCategories.flatMap<Task>(riskCategory =>
-          riskCategory.risks
-            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-            .flatMap<Task>(risk => {
-              const personas = allocatePersonas(
-                distribution,
-                totalSeeds!,
-                rng,
-                ageRanges
-              );
-              const motivationCycle = shuffleWith(motivations, rng);
-              const flavorIds = risk.scenarioFlavors
-                ? allocateFlavors(risk.scenarioFlavors, totalSeeds!, rng)
-                : undefined;
-              return personas.map((pinned, i) => ({
-                riskCategory,
-                risk,
-                ageRange: pinned.ageRange,
-                motivation: motivationCycle[i % motivationCycle.length]!,
-                seedsToGenerate: 1,
-                pinnedDemographics: pinned,
-                pinnedFlavor: flavorIds
-                  ? risk.scenarioFlavors!.find(f => f.id === flavorIds[i])
-                  : undefined,
-              }));
-            })
+    const tasks: Task[] = riskCategories.flatMap<Task>(riskCategory =>
+      riskCategory.risks
+        .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
+        .flatMap<Task>(risk =>
+          allocateSeedAssignments({
+            risk,
+            distribution,
+            motivations,
+            total: totalSeeds,
+            rng,
+            ageRanges,
+          }).map(assignment => ({riskCategory, risk, assignment}))
         )
-      : riskCategories.flatMap<Task>(riskCategory =>
-          riskCategory.risks
-            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-            .flatMap<Task>(risk => {
-              const combos = ageRanges.flatMap(ageRange =>
-                motivations.map(motivation => ({ageRange, motivation}))
-              );
+    );
 
-              if (totalSeeds !== undefined) {
-                if (totalSeeds > combos.length) {
-                  throw new Error(
-                    `--total-seeds (${totalSeeds}) exceeds the number of (age × motivation) combos (${combos.length}) for risk ${risk.id}. Use --seeds-per-task for larger runs.`
-                  );
-                }
-                return R.sample(combos, totalSeeds).map(
-                  ({ageRange, motivation}) => ({
-                    riskCategory,
-                    risk,
-                    ageRange,
-                    motivation,
-                    seedsToGenerate: 1,
-                  })
-                );
-              }
-
-              return combos.map(({ageRange, motivation}) => ({
-                riskCategory,
-                risk,
-                ageRange,
-                motivation,
-                seedsToGenerate: seedsPerTask,
-              }));
-            })
-        );
-
-    const total = tasks.reduce((sum, t) => sum + t.seedsToGenerate, 0);
-    yield {total, items: []};
+    yield {total: tasks.length, items: []};
 
     const seedStream = flatTransform(
       10,
-      async (task: Task) => {
-        const {
-          riskCategory,
-          risk,
-          ageRange,
-          motivation,
-          seedsToGenerate,
-          pinnedDemographics,
-          pinnedFlavor,
-        } = task;
+      async (task: Task): Promise<ScenarioSeed[]> => {
+        const {riskCategory, risk, assignment} = task;
         const prompt = riskToScenarioSeedsPrompt({
           riskCategory,
           risk,
-          ageRange,
-          motivation,
-          count: seedsToGenerate,
-          pinnedDemographics,
-          pinnedFlavor,
+          assignment,
         });
 
         const {output} = await c.getResponse({
@@ -330,49 +245,47 @@ export const kora = Benchmark.new({
             {role: "system", content: prompt.system},
             {role: "user", content: prompt.user},
           ],
-          outputType: SeedsOutput,
+          outputType: ModelScenarioSeed.io,
         });
 
         const {taxonomy} = Packs.current();
 
-        return output.seeds.map((s: ModelScenarioSeed): ScenarioSeed => {
-          const base: ScenarioSeed = {
-            ...s,
+        // The assignment is the source of truth for every dimension: nothing
+        // structured is read back from the model.
+        return [
+          {
+            childAge: assignment.childAge,
+            childGender: assignment.childGender,
+            childRaceEthnicity: assignment.childRaceEthnicity,
+            childSES: assignment.childSES,
+            shortTitle: output.shortTitle,
+            coreBehavior: output.coreBehavior,
+            context: output.context,
+            notes: output.notes,
+            riskSignalType: assignment.riskSignalType,
+            socialContext: assignment.socialContext,
+            use: assignment.use,
+            refusalBehavior: assignment.refusalBehavior,
+            memory: assignment.memory,
+            ...(assignment.flavor
+              ? {scenarioFlavorId: assignment.flavor.id}
+              : {}),
             taxonomyId: taxonomy.id,
             taxonomyVersion: taxonomy.version,
             ...stampField(),
             id: uuid(),
             riskCategoryId: riskCategory.id,
             riskId: risk.id,
-            ageRange,
-            motivation,
-            ...(pinnedFlavor ? {scenarioFlavorId: pinnedFlavor.id} : {}),
-          };
-          if (!pinnedDemographics) return base;
-          return {
-            ...base,
-            childGender: pinnedDemographics.gender,
-            childRaceEthnicity: pinnedDemographics.raceEthnicity,
-            childSES: pinnedDemographics.ses,
-            childAge: clampAgeToBand(s.childAge, pinnedDemographics.ageRange),
-          };
-        });
+            ageRange: assignment.ageRange,
+            motivation: assignment.motivation,
+          },
+        ];
       },
       tasks
     );
 
-    if (totalSeeds !== undefined && !distribution) {
-      const perRiskCount: Record<string, number> = {};
-      for await (const seed of seedStream) {
-        const count = perRiskCount[seed.riskId] ?? 0;
-        if (count >= totalSeeds) continue;
-        perRiskCount[seed.riskId] = count + 1;
-        yield {total, items: [seed]};
-      }
-    } else {
-      for await (const seed of seedStream) {
-        yield {total, items: [seed]};
-      }
+    for await (const seed of seedStream) {
+      yield {total: tasks.length, items: [seed]};
     }
   },
   async expandScenario(c, seed) {
@@ -391,7 +304,7 @@ export const kora = Benchmark.new({
       | undefined;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outputType = risk.provideUserContext
+      const outputType = ScenarioSeed.hasMemory(seed, risk)
         ? ModelScenarioWithMemory.io
         : ModelScenarioLight.io;
       const prompt = seedToScenarioPrompt(

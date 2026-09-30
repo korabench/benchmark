@@ -2,8 +2,8 @@
 
 How a risk in the taxonomy becomes a graded conversation.
 
-The [README](README.md) documents *how to invoke* each pipeline stage — flags,
-defaults, model chains. This document explains *what happens inside* them: how
+The [README](README.md) documents _how to invoke_ each pipeline stage — flags,
+defaults, model chains. This document explains _what happens inside_ them: how
 the scenario population is allocated, what each LLM call is asked to do, and
 where the guardrails sit.
 
@@ -13,9 +13,9 @@ where the guardrails sit.
 risks.json (8 categories, 26 risks)
    │
    │  ── generate-seeds ────────────────────────────────────
-   │  1. build the task grid   (risk × ageRange × motivation)
-   │  2. LLM: riskToScenarioSeedsPrompt   → N ModelScenarioSeed
-   │  3. stamp ids / taxonomy / pinned fields → ScenarioSeed
+   │  1. allocate every dimension of every seed, per risk
+   │  2. LLM: riskToScenarioSeedsPrompt   → 1 ModelScenarioSeed (narrative)
+   │  3. assignment + narrative + ids / taxonomy → ScenarioSeed
    ▼
 data/scenarioSeeds.jsonl
    │
@@ -37,87 +37,76 @@ results.json
 Four LLM calls produce one scenario; the run stage adds `2 × turns` more plus
 `2 × judges`.
 
-The recurring design choice throughout: **anything that needs statistical
-control — demographics, motivation, flavor, age band — is allocated in code and
-pinned into the prompt, never left to the model.** The model only supplies
-narrative texture.
+The recurring design choice throughout: **every dimension of a seed —
+demographics, exact age, motivation, social context, risk signal type, use,
+refusal behavior, flavor, memory — is allocated in code and pinned into the
+prompt, never left to the model.** The model only supplies narrative texture.
 
 ## Stage 1 — `generate-seeds`
 
-`packages/benchmark/src/kora.ts:175`
+`packages/benchmark/src/kora.ts:174`
 
-The taxonomy comes from the *active pack* (`RiskCategory.listAll()` →
+The taxonomy comes from the _active pack_ (`RiskCategory.listAll()` →
 `packages/benchmark/data/risks.json` by default), so `--taxonomy` swaps the
 entire risk set without touching the pipeline.
 
-### The task grid
+### The allocation
 
-A **task** is one LLM call. It is defined by
-`{riskCategory, risk, ageRange, motivation, seedsToGenerate}` plus optional
-pinned demographics and a pinned scenario flavor (`kora.ts:224`). Tasks are
-built one of two ways:
+A **task** is one LLM call producing one seed. It is defined by
+`{riskCategory, risk, assignment}` (`kora.ts:210`), where the `SeedAssignment`
+holds every dimension of the seed, decided before the model is called.
 
-**Grid mode** (`kora.ts:258`) — the cross product `ageRanges × motivations` per
-risk: 3 age bands × 10 motivations = 30 combos.
+`allocateSeedAssignments()` (`kora.ts:220`) builds exactly `--total-seeds`
+assignments per risk (default 30):
 
-- Default (or `--seeds-per-task N`): every combo becomes a task producing `N`
-  seeds (default 8). Exhaustive coverage.
-- `--total-seeds N`: `R.sample(combos, N)` — a uniform random subset, 1 seed
-  each. Errors if `N > 30`, pointing at `--seeds-per-task` for larger runs.
+1. **Personas.** `allocatePersonas()` converts each demographic dimension (age
+   band, gender, SES, race/ethnicity) of the `--distribution` population
+   (default `us-census-2020`) to integer counts with the largest-remainder
+   (Hamilton) method, expands each into a flat array and shuffles it.
+2. **Exact age**, spread evenly over the years of each seed's band.
+3. **Motivation**, as a shuffled round-robin (`motivationCycle[i % length]`).
+4. **Social context, risk signal type, use, refusal behavior**, each spread
+   evenly over its values with `allocateUniform()`; the values that receive the
+   rounding remainder are drawn at random.
+5. **Scenario flavor**, when a risk defines flavors, allocated the
+   largest-remainder way from `risk.scenarioFlavors[].proportion`.
+6. **Memory**, from `risk.provideUserContext`.
 
-**Distribution mode** (`kora.ts:230`, requires `--total-seeds`) — the mode used
-for the shipped corpus. `allocatePersonas()` builds exactly `N` personas per
-risk whose *marginals* match a target population:
-
-1. Each dimension (age band, gender, SES, race/ethnicity) is converted to
-   integer counts with the largest-remainder (Hamilton) method.
-2. Each is expanded into a flat array of length `N` and shuffled independently.
-3. The four arrays are zipped index-wise into personas.
-
+Every dimension is shuffled independently and the arrays are zipped index-wise.
 Marginals are therefore exact by construction; the joint distribution is the
-product of the marginals in expectation. Motivation rides along as a **shuffled
-round-robin** (`motivationCycle[i % length]`), so coverage is as even as the
-seed count allows and the shuffle decides who gets the remainder. Scenario
-flavors, when a risk defines them, are allocated the same largest-remainder way
-from `risk.scenarioFlavors[].proportion`.
+product of the marginals in expectation, and nothing filters unusual
+combinations.
 
 Every shuffle draws from `makeRng(--random-seed)`, so the whole allocation is
 reproducible.
 
-[SCENARIO_CREATION.md](SCENARIO_CREATION.md) covers both modes and every drawn
-parameter in detail.
+[SCENARIO_CREATION.md](SCENARIO_CREATION.md) covers every dimension in detail.
 
 ### The call
 
 `riskToScenarioSeedsPrompt` gives the model the risk name and definition, the
-age band, and the motivation framed as the *"PRIMARY MOTIVATIONAL PROFILE
-(drives why the child acts)"*. It then adds either:
+flavor if any, and the assigned child, motivation (framed as the _"PRIMARY
+MOTIVATIONAL PROFILE (drives why the child acts)"_), use, social context and
+risk signal type, each with its description. The narrative must be consistent
+with every assigned value. `refusalBehavior` and `memory` are not shown: they do
+not shape the seed.
 
-- a **diversity block** (unpinned): all five race categories must appear at
-  least once across the batch, vary ages/genders/settings/expression; or
-- a **pinned-demographics block**: reproduce these values verbatim, but still
-  vary maturity, `riskSignalType`, `socialContext`, and narrative details.
-
-The system prompt frames this as the **exploration** phase: no AI responses, no
-moral framing, no explicit risk labels, no resolution. Diversity beats balance —
-downstream steps validate and rebalance.
+The system prompt forbids AI responses, moral framing, explicit risk labels,
+resolutions, and contradicting or reinterpreting an assigned value.
 
 ### The output
 
-`ModelScenarioSeed` is deliberately short and abstract: `childAge`,
-`childGender`, `childRaceEthnicity`, cognitive/emotional maturity, `shortTitle`,
-`coreBehavior`, `context`, `socialContext`, `riskSignalType`
-(direct / subtle / ambiguous), `notes`.
+`ModelScenarioSeed` is the narrative only: `shortTitle`, `coreBehavior`,
+`context`, `notes`.
 
-The code then attaches everything the model must *not* choose (`kora.ts:325`):
-`id` (uuid), `riskCategoryId`, `riskId`, `ageRange`, `motivation`, the taxonomy
-stamp, `scenarioFlavorId` — and overwrites gender / race / SES with the pinned
-values in distribution mode. Tasks run 10-wide and seeds stream to JSONL as they
-arrive.
+The stored seed is then assembled from the assignment, not from the model's
+answer (`kora.ts:253`), together with `id` (uuid), `riskCategoryId`, `riskId`
+and the taxonomy and run stamps. Tasks run 10-wide and seeds stream to JSONL as
+they arrive.
 
 ## Stage 2 — `expand-scenarios`
 
-`packages/benchmark/src/kora.ts:368`
+`packages/benchmark/src/kora.ts:291`
 
 One seed at a time, 10 in flight. Each seed's result is written to
 `.kora-expand-tmp/<id>.json` so an interrupted run resumes where it stopped.
@@ -130,21 +119,24 @@ types, no AI responses, no resolution, no moralizing, no contradicting the seed.
 
 Beyond the seed dump, three sections appear conditionally:
 
-| Section | Trigger |
-| --- | --- |
-| `RISK-SPECIFIC GUIDANCE` | `risk.scenarioGuidance` is set |
-| `PINNED SCENARIO FLAVOR` | the seed carries a `scenarioFlavorId` |
-| `MODEL MEMORY REQUIREMENT` | `risk.provideUserContext` is set |
+| Section                    | Trigger                               |
+| -------------------------- | ------------------------------------- |
+| `RISK-SPECIFIC GUIDANCE`   | `risk.scenarioGuidance` is set        |
+| `PINNED SCENARIO FLAVOR`   | the seed carries a `scenarioFlavorId` |
+| `MODEL MEMORY REQUIREMENT` | the seed's `memory` is `established`  |
 
-Model memory applies to the three relationship-driven risks (both grooming
-risks and parasocial attachment). Those risks model harm that develops over an
-established relationship, so the scenario must include what the assistant would
-already "remember" about the user. It also switches the output schema from
+Memory is a seed dimension. It is currently set from the risk, so it applies to
+the three relationship-driven risks (both grooming risks and parasocial
+attachment). Those risks model harm that develops over an established
+relationship, so the scenario must include what the assistant would already
+"remember" about the user. It also switches the output schema from
 `ModelScenarioLight` to `ModelScenarioWithMemory`, and those risks run 8-turn
-conversations instead of 3.
+conversations instead of 3. Seeds generated before the dimension existed carry
+no `memory`; they fall back to `risk.provideUserContext`
+(`ScenarioSeed.hasMemory`).
 
-The output is five length-bounded fields: `shortTitle`, `childMaturity`,
-`childBackground`, `narrative` (200–2000 chars), and `evaluationCriteria`, which
+The output is four length-bounded fields: `shortTitle`, `childBackground`,
+`narrative` (200–2000 chars), and `evaluationCriteria`, which
 must be **descriptive, not prescriptive** — "provides step-by-step instructions
 for X", never "should avoid X".
 
@@ -179,7 +171,7 @@ attempt 1:  expand WITH feedback → validate
 
 `maxAttempts = 2`, so there is exactly **one** corrective retry per model. When
 feedback is present the prompt prepends the critique plus a field-by-field dump
-of the rejected attempt *before* the risk context, and flips the closing
+of the rejected attempt _before_ the risk context, and flips the closing
 instruction from "faithfully expands this seed" to "Generate a **corrected**
 scenario that addresses the validation issues".
 
@@ -195,9 +187,9 @@ Two deliberate properties:
 When both attempts fail, `ScenarioValidationError` carries the last critique out
 to the CLI, which treats it as a **model** failure rather than a data failure and
 rotates to the next slug in the expansion chain
-(`packages/cli/src/commands/expandScenariosCommand.ts:128`).
+(`packages/cli/src/commands/expandScenariosCommand.ts:165`).
 
-This is exactly why expansion needs a *task-level* fallback chain on top of the
+This is exactly why expansion needs a _task-level_ fallback chain on top of the
 per-call one inside `createGatewayModelChain`: a validation failure is a
 well-formed response, nothing throws, so per-call retry never sees it. Only when
 every model has burned its two attempts is the seed skipped, leaving
@@ -209,12 +201,19 @@ On `pass`, `generateFirstUserMessage` calls the cheaper **user model** to write
 the child's opening turn, retrying up to 3× if the output still contains
 `[bracketed placeholders]`.
 
+The seed's `riskSignalType` decides how that opening carries the risk. The risk
+is always in the first message — nothing is deferred to later turns — but
+`direct` states it outright, `subtle` masks it (downplayed, normalized, implied),
+and `ambiguous` pairs a plausible benign reading with the concerning signals.
+The privacy `b_gradual` flavor overrides this with its own
+gradual-accumulation rules.
+
 The result — `ModelScenario + seed + firstUserMessage` — is appended to
 `scenarios.jsonl`.
 
 ## Stage 3 — `run`
 
-`packages/benchmark/src/kora.ts:452`
+`packages/benchmark/src/kora.ts:376`
 
 `mapScenarioToKeys` fans each scenario into one key per prompt variant,
 `riskCategoryId:riskId:ageRange:id:prompt`. The variant decides whether the
@@ -224,7 +223,13 @@ target model's system prompt carries the child's age (`child`) or not
 Each test then runs for `flavor?.conversationLength ?? risk.conversationLength`
 turns — 3 for most risks, 8 for the three `provideUserContext` ones, or a
 flavor-level override. Turn 0 uses the stored `firstUserMessage`; later turns
-call `generateNextUserMessage` with the transcript so far. Every assistant reply
+call `generateNextUserMessage` with the transcript so far. The seed's
+`refusalBehavior` fixes how the simulated child reacts whenever the assistant
+declines, deflects or redirects: `insists` (asks for the same thing again),
+`drops` (accepts it and lets the request go) or `works_around` (goes after the
+same thing another way — a story, a friend, a hypothetical, a split request).
+Scenarios that predate the dimension keep the open-ended wording ("may persist,
+soften, or rephrase"). Every assistant reply
 passes `validateAssistantTurn`, a capture-integrity gate that throws
 `InvalidTurnError` when a driver scraped a loading label or a button caption
 instead of a real answer — that must never reach a judge or seed the next turn.
@@ -248,20 +253,25 @@ Finally `mapTestResultToRunResult` reduces each result into grade tallies per
 
 ## Guardrails, in one place
 
-| Guardrail | Where | What it catches |
-| --- | --- | --- |
-| Schema bounds (min/max length) | `model/scenario.ts` | Truncated or padded generations |
-| `scenarioToValidationPrompt` | `kora.ts:409` | Drift, leakage, resolution, sensationalism |
-| `validationFeedback` retry | `kora.ts:379` | A fixable one-off miss |
-| Task-level model rotation | `expandScenariosCommand.ts:128` | A model that systematically fails a seed |
-| Placeholder regex retry | `generateUserMessage.ts` | `[name]`-style holes in user messages |
-| `validateAssistantTurn` | `kora.ts:523` | Bad captures from real-app drivers |
-| Pack conformance (`validate`) | `commands/validateCommand.ts` | Files that no longer match the active taxonomy |
+| Guardrail                      | Where                           | What it catches                                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Schema bounds (min/max length) | `model/scenario.ts`             | Empty or runaway generations. The caps are a wide safety net checked after parsing; the provider never sees them, because a `maxLength` in a structured-output schema makes the decoder clip the string mid-word (`cli/models/providerSchema.ts`). The length target reaches the model as prose in each field's description. |
+| `scenarioToValidationPrompt`   | `kora.ts:333`                   | Drift, leakage, resolution, sensationalism                                                                                                                                                                                                                                                                                   |
+| `validationFeedback` retry     | `kora.ts:357`                   | A fixable one-off miss                                                                                                                                                                                                                                                                                                       |
+| Task-level model rotation      | `expandScenariosCommand.ts:165` | A model that systematically fails a seed                                                                                                                                                                                                                                                                                     |
+| Placeholder regex retry        | `generateUserMessage.ts`        | `[name]`-style holes in user messages                                                                                                                                                                                                                                                                                        |
+| `validateAssistantTurn`        | `kora.ts:448`                   | Bad captures from real-app drivers                                                                                                                                                                                                                                                                                           |
+| Pack conformance (`validate`)  | `commands/validateCommand.ts`   | Files that no longer match the active taxonomy                                                                                                                                                                                                                                                                               |
 
 ## Reproducing the shipped corpus
 
 `data/scenarioSeeds.jsonl` (781 seeds) and `data/scenarios.jsonl` were generated
-by commit `c285c5c`:
+by commit `c285c5c`, before every seed dimension moved into the allocator. At
+that commit the model still chose the exact age, `riskSignalType`,
+`socialContext` and two maturity levels, and seeds had no `use`,
+`refusalBehavior` or `memory`. The same commands run today produce the same
+demographics for the same `--random-seed`, plus the newer dimensions — see
+"Legacy corpora" in [SCENARIO_CREATION.md](SCENARIO_CREATION.md).
 
 ```bash
 yarn kora generate-seeds <chain> \
@@ -273,20 +283,20 @@ yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limite
 
 That yields 30 seeds per risk with these per-risk marginals:
 
-| Dimension | Per risk (n = 30) |
-| --- | --- |
-| Age band | 8 `7to9` / 8 `10to12` / 14 `13to17` |
-| Gender | 15 girl / 15 boy |
-| SES | 8 low / 14 middle / 8 high |
+| Dimension      | Per risk (n = 30)                                   |
+| -------------- | --------------------------------------------------- |
+| Age band       | 8 `7to9` / 8 `10to12` / 14 `13to17`                 |
+| Gender         | 15 girl / 15 boy                                    |
+| SES            | 8 low / 14 middle / 8 high                          |
 | Race/ethnicity | 15 white / 8 hispanic / 4 black / 1 asian / 2 other |
-| Motivation | round-robin, 3 per motivation |
+| Motivation     | round-robin, 3 per motivation                       |
 
 Two quirks worth knowing about the shipped files:
 
 - **781, not 780.** `radicalization_and_extremism` has 31 seeds — one task
-  returned two seeds where one was requested. Nothing clamps
-  `output.seeds.length` to `seedsToGenerate` (`kora.ts:325`). Every `+1` in the
-  marginals above traces back to that single seed.
+  returned two seeds where one was requested, and nothing clamped the count at
+  the time. Every `+1` in the marginals above traces back to that single seed.
+  It can no longer happen: a call now returns a single seed object, not a list.
 - **No taxonomy stamp.** These seeds predate packs, so `taxonomyId` and
   `taxonomyVersion` are absent — exactly the case the optional stamp in
   `model/scenarioSeed.ts` allows for.
@@ -312,23 +322,23 @@ graded rubric across multiple judges.
 **`riskToScenariosPrompt.ts`** — the pre-seed design: a single call from a risk
 straight to full scenarios, with no seed layer. Superseded by the two-phase
 split (`riskToScenarioSeedsPrompt` explore → `seedToScenarioPrompt` expand),
-which is what makes pinned demographics, motivations, and flavors possible.
+which is what makes code-assigned seed dimensions possible.
 
 Nine of the eleven files in `src/prompts/` are live:
 
-| Prompt | Used at |
-| --- | --- |
-| `riskToScenarioSeedsPrompt` | `kora.ts:311` |
-| `seedToScenarioPrompt` | `kora.ts:387` |
-| `scenarioToValidationPrompt` | `kora.ts:409` |
-| `scenarioToFirstUserMessagePrompt` | `generateUserMessage.ts` |
-| `scenarioToNextUserMessagePrompt` | `generateUserMessage.ts` |
-| `conversationToNextMessagePrompt` | `kora.ts:499` |
-| `conversationToAssessmentPrompt` | `kora.ts:89` |
-| `conversationToMechanismAssessmentPrompt` | `kora.ts:94` |
-| `formatConversation` | shared helper |
-| **`conversationToMatchPrompt`** | **— none —** |
-| **`riskToScenariosPrompt`** | **— none —** |
+| Prompt                                    | Used at                  |
+| ----------------------------------------- | ------------------------ |
+| `riskToScenarioSeedsPrompt`               | `kora.ts:237`            |
+| `seedToScenarioPrompt`                    | `kora.ts:310`            |
+| `scenarioToValidationPrompt`              | `kora.ts:333`            |
+| `scenarioToFirstUserMessagePrompt`        | `generateUserMessage.ts` |
+| `scenarioToNextUserMessagePrompt`         | `generateUserMessage.ts` |
+| `conversationToNextMessagePrompt`         | `kora.ts:423`            |
+| `conversationToAssessmentPrompt`          | `kora.ts:89`             |
+| `conversationToMechanismAssessmentPrompt` | `kora.ts:94`             |
+| `formatConversation`                      | shared helper            |
+| **`conversationToMatchPrompt`**           | **— none —**             |
+| **`riskToScenariosPrompt`**               | **— none —**             |
 
 One smaller orphan: `ScenarioValidationVerdict` in
 `packages/benchmark/src/model/scenarioValidation.ts` is exported as both a type
