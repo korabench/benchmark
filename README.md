@@ -341,18 +341,18 @@ Each target turn is sent as a standard request, and the answer is read from `cho
 ```json
 {
   "model": "<CUSTOM_HTTP_MODEL, or the full slug when unset>",
-  "messages": [ ... ],
-  "temperature": 0.7,
-  "max_tokens": 1024
+  "messages": [ ... ]
 }
 ```
 
-| Environment variable  | Description                                                                                             |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `CUSTOM_HTTP_MODEL`   | Value of the request's `model` field. Required by servers that host several models; optional otherwise. |
-| `CUSTOM_HTTP_API_KEY` | Sent as `Authorization: Bearer <key>`. Leave unset for unauthenticated endpoints.                       |
+KORA sends no sampling parameters to targets, so the server's defaults apply. Set temperature and output length on the server (e.g. vLLM `--generation-config`, an Ollama `Modelfile`), and make sure its context window fits a full conversation.
 
-Rate-limit (429) and server errors are retried with the same backoff as gateway models. A leading `<think>…</think>` block (reasoning models served without a reasoning parser) is stripped so the judges grade only the answer, as with gateway targets.
+| Environment variable  | Description                                                                                                                                     |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CUSTOM_HTTP_MODEL`   | Value of the request's `model` field, also recorded in the run stamp. Required by servers that host several models.                             |
+| `CUSTOM_HTTP_API_KEY` | Sent as `Authorization: Bearer <key>`. Leave unset for unauthenticated endpoints. Keep keys here rather than in the URL, which is logged and stamped. |
+
+Rate limits (429), timeouts (408), server errors (5xx) and dropped connections are retried with the same backoff as gateway models; other 4xx responses (bad key, unknown model, context overflow) fail immediately. Reasoning that a model returns inline, as a `<think>…</think>` block or just its closing tag when the chat template opens the block, is stripped so the judges grade only the answer, as with gateway targets. A reply that is still inside `<think>` when it ends has no answer and fails the turn.
 
 `custom-http` is target-only: judges and the user model stay gateway models, since they need structured output.
 
