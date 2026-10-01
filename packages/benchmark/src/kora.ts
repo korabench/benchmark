@@ -11,6 +11,8 @@ import {
   SeedAssignment,
 } from "./allocation/allocateSeedAssignments.js";
 import {makeRng} from "./allocation/rng.js";
+import {selectPrivateIndices} from "./allocation/selectPrivateIndices.js";
+import {selectPrivateIndicesByGroup} from "./allocation/selectPrivateIndicesByGroup.js";
 import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
 import {
   generateFirstUserMessage,
@@ -23,6 +25,7 @@ import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
+import {MotivationUseLikelihood} from "./model/motivationUseLikelihood.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
@@ -43,6 +46,7 @@ import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
+import {SituationTypes} from "./model/situationTypes.js";
 import {TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
 import {Conformance} from "./packs/conformance.js";
@@ -62,6 +66,12 @@ import {validateAssistantTurn} from "./validateAssistantTurn.js";
  * number of scenarios per risk once every seed is expanded.
  */
 export const DEFAULT_TOTAL_SEEDS = 75;
+
+/**
+ * Share of each risk's seeds held out as private when the caller does not say.
+ * Private seeds, and the scenarios expanded from them, are never published.
+ */
+export const DEFAULT_PRIVATE_RATIO = 0.3;
 
 /** The active run stamp as a spreadable field: present only when configured. */
 function stampField(): {stamp?: RunStamp} {
@@ -180,6 +190,17 @@ export const kora = Benchmark.new({
     const motivationNames = options?.motivations;
     const distribution =
       options?.distribution ?? PopulationDistribution.default();
+    const privateRatio = options?.privateRatio ?? DEFAULT_PRIVATE_RATIO;
+
+    if (
+      !Number.isFinite(privateRatio) ||
+      privateRatio < 0 ||
+      privateRatio > 1
+    ) {
+      throw new Error(
+        `--private-ratio must be a number between 0 and 1 (got ${privateRatio}).`
+      );
+    }
 
     if (!Number.isInteger(totalSeeds) || totalSeeds < 0) {
       throw new Error(
@@ -204,6 +225,8 @@ export const kora = Benchmark.new({
       : allMotivations;
 
     const rng = makeRng(options?.randomSeed);
+    const useLikelihood = MotivationUseLikelihood.bundled();
+    const situationTypes = SituationTypes.bundled();
 
     // One task per seed. Every structured dimension is decided here, before the
     // model is called: the model only writes the narrative fields.
@@ -211,29 +234,61 @@ export const kora = Benchmark.new({
       riskCategory: RiskCategory;
       risk: Risk;
       assignment: SeedAssignment;
+      isPrivate: boolean;
     }
 
-    const tasks: Task[] = riskCategories.flatMap<Task>(riskCategory =>
+    const allocations = riskCategories.flatMap(riskCategory =>
       riskCategory.risks
         .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-        .flatMap<Task>(risk =>
-          allocateSeedAssignments({
+        .map(risk => ({
+          riskCategory,
+          risk,
+          assignments: allocateSeedAssignments({
             risk,
             distribution,
             motivations,
             total: totalSeeds,
             rng,
             ageRanges,
-          }).map(assignment => ({riskCategory, risk, assignment}))
-        )
+            useLikelihood,
+            situationTypes,
+          }),
+        }))
+    );
+
+    // The private split draws only once every risk is allocated, so that it
+    // never changes which assignments a given random seed produces.
+    const tasks: Task[] = allocations.flatMap<Task>(
+      ({riskCategory, risk, assignments}) => {
+        // With situation types, the risk's private seeds are spread evenly
+        // over the situation types of its gold standards.
+        const privateIndices = assignments.every(a => a.situation)
+          ? selectPrivateIndicesByGroup(
+              assignments.map(
+                a =>
+                  `${a.situation!.goldStandardId}|${a.situation!.situationType}`
+              ),
+              privateRatio,
+              rng
+            )
+          : selectPrivateIndices(assignments.length, privateRatio, rng);
+        return assignments.map((assignment, i) => ({
+          riskCategory,
+          risk,
+          assignment,
+          isPrivate: privateIndices.has(i),
+        }));
+      }
     );
 
     yield {total: tasks.length, items: []};
 
     const seedStream = flatTransform(
       10,
-      async (task: Task): Promise<ScenarioSeed[]> => {
-        const {riskCategory, risk, assignment} = task;
+      async (
+        task: Task
+      ): Promise<{seed: ScenarioSeed; isPrivate: boolean}[]> => {
+        const {riskCategory, risk, assignment, isPrivate} = task;
         const prompt = riskToScenarioSeedsPrompt({
           riskCategory,
           risk,
@@ -252,40 +307,49 @@ export const kora = Benchmark.new({
 
         // The assignment is the source of truth for every dimension: nothing
         // structured is read back from the model.
-        return [
-          {
-            childAge: assignment.childAge,
-            childGender: assignment.childGender,
-            childRaceEthnicity: assignment.childRaceEthnicity,
-            childSES: assignment.childSES,
-            shortTitle: output.shortTitle,
-            coreBehavior: output.coreBehavior,
-            context: output.context,
-            notes: output.notes,
-            riskSignalType: assignment.riskSignalType,
-            socialContext: assignment.socialContext,
-            use: assignment.use,
-            refusalBehavior: assignment.refusalBehavior,
-            memory: assignment.memory,
-            ...(assignment.flavor
-              ? {scenarioFlavorId: assignment.flavor.id}
-              : {}),
-            taxonomyId: taxonomy.id,
-            taxonomyVersion: taxonomy.version,
-            ...stampField(),
-            id: uuid(),
-            riskCategoryId: riskCategory.id,
-            riskId: risk.id,
-            ageRange: assignment.ageRange,
-            motivation: assignment.motivation,
-          },
-        ];
+        const seed: ScenarioSeed = {
+          childAge: assignment.childAge,
+          childGender: assignment.childGender,
+          childRaceEthnicity: assignment.childRaceEthnicity,
+          childSES: assignment.childSES,
+          shortTitle: output.shortTitle,
+          coreBehavior: output.coreBehavior,
+          context: output.context,
+          notes: output.notes,
+          riskSignalType: assignment.riskSignalType,
+          socialContext: assignment.socialContext,
+          use: assignment.use,
+          refusalBehavior: assignment.refusalBehavior,
+          memory: assignment.memory,
+          ...(assignment.flavor
+            ? {scenarioFlavorId: assignment.flavor.id}
+            : {}),
+          ...(assignment.situation
+            ? {
+                goldStandardId: assignment.situation.goldStandardId,
+                situationType: assignment.situation.situationType,
+              }
+            : {}),
+          taxonomyId: taxonomy.id,
+          taxonomyVersion: taxonomy.version,
+          ...stampField(),
+          id: uuid(),
+          riskCategoryId: riskCategory.id,
+          riskId: risk.id,
+          ageRange: assignment.ageRange,
+          motivation: assignment.motivation,
+        };
+        return [{seed, isPrivate}];
       },
       tasks
     );
 
-    for await (const seed of seedStream) {
-      yield {total: tasks.length, items: [seed]};
+    for await (const {seed, isPrivate} of seedStream) {
+      yield {
+        total: tasks.length,
+        items: [seed],
+        ...(isPrivate ? {private: true} : {}),
+      };
     }
   },
   async expandScenario(c, seed) {

@@ -1,11 +1,13 @@
 import {
   AgeRange,
+  DEFAULT_PRIVATE_RATIO,
   DEFAULT_TOTAL_SEEDS,
   GenerateSeedsContext,
   GenerateSeedsOptions,
   kora,
   Motivation,
   PopulationDistribution,
+  privateCount as privateCountFor,
   RefusalBehavior,
   RiskCategory,
   RiskSignalType,
@@ -24,6 +26,7 @@ import {
 } from "../profiles/effectiveProfile.js";
 import {chainLabel, createChainModel} from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
+import {privatePathFor} from "./shared/privatePath.js";
 
 /**
  * Per-value count of a proportional dimension: "20" when exact, "18-19" when
@@ -46,6 +49,13 @@ function formatProportional(
 function formatEven(total: number, valueCount: number): string {
   const base = Math.floor(total / valueCount);
   return total % valueCount === 0 ? `${base}` : `${base}-${base + 1}`;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return fs.access(filePath).then(
+    () => true,
+    () => false
+  );
 }
 
 export async function generateSeeds(
@@ -101,6 +111,16 @@ export async function generateSeeds(
   if (options?.randomSeed !== undefined) {
     console.log(`  Random seed: ${options.randomSeed}`);
   }
+  const privateRatio = options?.privateRatio ?? DEFAULT_PRIVATE_RATIO;
+  const privateFilePath = privatePathFor(outputFilePath);
+  console.log(
+    "  Situation type: even across each gold standard's types within each age band (drift types excluded)."
+  );
+  console.log(
+    privateRatio > 0
+      ? `  Private split: ${privateCountFor(n, privateRatio)} of ${n} seeds per risk, spread over its situation types → ${privateFilePath} (git-ignored)`
+      : "  Private split: none, every seed is public."
+  );
 
   const riskIdSet = options?.riskIds ? new Set(options.riskIds) : undefined;
   const flavoredRisks = RiskCategory.listAll()
@@ -126,6 +146,13 @@ export async function generateSeeds(
 
   await fs.mkdir(path.dirname(outputFilePath), {recursive: true});
   await fs.writeFile(outputFilePath, ""); // Clear file before starting
+  if (privateRatio > 0) {
+    await fs.writeFile(privateFilePath, "");
+  } else if (await fileExists(privateFilePath)) {
+    console.warn(
+      `Warning: ${privateFilePath} is left over from an earlier generation and no longer matches ${outputFilePath}; expand-scenarios would still pick it up. Delete it if it is stale.`
+    );
+  }
 
   const generator = kora.generateScenarioSeeds(context, options);
   const first = await generator.next();
@@ -137,16 +164,27 @@ export async function generateSeeds(
   const progress = Script.progress(first.value.total, text =>
     process.stdout.write(text)
   );
-  let seedCount = 0;
+  let publicCount = 0;
+  let privateCount = 0;
 
   for await (const event of generator) {
+    const filePath = event.private ? privateFilePath : outputFilePath;
     for (const seed of event.items) {
-      await fs.appendFile(outputFilePath, JSON.stringify(seed) + "\n");
-      seedCount++;
+      await fs.appendFile(filePath, JSON.stringify(seed) + "\n");
+      if (event.private) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
       progress.increment(true);
     }
   }
 
   progress.finish();
-  console.log(`\nGenerated ${seedCount} seeds → ${outputFilePath}`);
+  console.log(
+    privateFilePath === outputFilePath || privateCount === 0
+      ? `\nGenerated ${publicCount + privateCount} seeds → ${outputFilePath}`
+      : `\nGenerated ${publicCount} public seeds → ${outputFilePath}\n` +
+          `Generated ${privateCount} private seeds → ${privateFilePath}`
+  );
 }

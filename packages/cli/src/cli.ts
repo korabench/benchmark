@@ -2,6 +2,7 @@
 import {Command} from "@commander-js/extra-typings";
 import {
   AgeRange,
+  DEFAULT_PRIVATE_RATIO,
   DEFAULT_TOTAL_SEEDS,
   PopulationDistribution,
   ScenarioPrompt,
@@ -181,6 +182,11 @@ program
     "--random-seed <int>",
     "RNG seed making the allocation of every seed dimension reproducible"
   )
+  .option(
+    "--private-ratio <fraction>",
+    "share of each risk's seeds held out as private, between 0 and 1; they are written to <output>.private.<ext>, which git ignores (0 keeps every seed public)",
+    String(DEFAULT_PRIVATE_RATIO)
+  )
   .action(async (model, opts) => {
     if (opts.seedsPerTask !== undefined) {
       throw new Error(
@@ -196,6 +202,16 @@ program
     if (opts.randomSeed !== undefined && !Number.isFinite(randomSeed)) {
       throw new Error(
         `--random-seed must be an integer (got: ${opts.randomSeed})`
+      );
+    }
+    const privateRatio = Number(opts.privateRatio);
+    if (
+      !Number.isFinite(privateRatio) ||
+      privateRatio < 0 ||
+      privateRatio > 1
+    ) {
+      throw new Error(
+        `--private-ratio must be a number between 0 and 1 (got: ${opts.privateRatio})`
       );
     }
 
@@ -222,6 +238,7 @@ program
           .filter(name => name.length > 0),
         distribution,
         randomSeed,
+        privateRatio,
       }
     );
   });

@@ -79,6 +79,7 @@ yarn kora generate-seeds [model]
 | `--motivations <names>`           | Comma-separated motivation names to spread seeds over (default: all motivations)                                                                                                                                                                                                           |
 | `--distribution <preset-or-path>` | Target population for age band, gender, SES and race/ethnicity. Preset name or path to a JSON distribution file (default: `us-census-2023`).                                                                                                                                               |
 | `--random-seed <int>`             | RNG seed making the allocation of every seed dimension reproducible                                                                                                                                                                                                                        |
+| `--private-ratio <fraction>`      | Share of each risk's seeds held out as private, between 0 and 1 (default: `0.3`). See [Private seeds](#private-seeds). `0` keeps every seed public.                                                                                                                                        |
 
 `--seeds-per-task` was removed along with the age × motivation grid it belonged to; passing it fails with a pointer to `--total-seeds`.
 
@@ -112,11 +113,31 @@ yarn kora generate-seeds gpt-4o \
   --output /tmp/preview.jsonl
 ```
 
-At `--total-seeds 60`, the `us-census-2023` preset produces per-risk marginals of 16–17/16–17/27–28 (age bands), 29–30/30–31 (girl/boy), 21/17–18/21–22 (SES low/middle/high), and 28–29/15–16/7–8/3–4/5–6 (race/ethnicity: white/hispanic/black/asian/other), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. Where a range is shown, the rounding remainder is drawn at random per risk, so each risk sums to exactly 60 and the corpus averages to the target. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+At `--total-seeds 60`, the `us-census-2023` preset produces per-risk marginals of 16/16/28 (age bands), 29–30/30–31 (girl/boy), 21/17–18/21–22 (SES low/middle/high), and 28–29/15–16/7–8/3–4/5–6 (race/ethnicity: white/hispanic/black/asian/other), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. Where a range is shown, the rounding remainder is drawn at random per risk, so each risk sums to exactly 60 and the corpus averages to the target. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+
+Each seed is also assigned a **situation type**: one of the ways its risk shows up in a conversation ("Direct request", "Reframed request", "Disclosure of harm", ...), as listed by the risk's gold standard in `packages/benchmark/data/situationTypes.json`. Within each age band, a risk's seeds are split evenly across its situation types (multi-turn drift types excepted, which receive none); self-harm, an umbrella over three gold standards (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), first splits its seeds evenly across the three. The seed stores `goldStandardId` and `situationType`, and both prompts pin the situation type. At the default 75 seeds per risk the counts are those of the V3.0 allocation workbook.
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
-Dimensions are assigned independently of one another, so some combinations are unusual; nothing filters them today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
+Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that pairings follow the 0–5 likelihood scores in `packages/benchmark/data/motivationUseLikelihood.json` (0 = never paired when avoidable), which leaves the per-risk counts of every use and every motivation unchanged. Nothing filters the other combinations today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
+
+#### Private seeds
+
+By default 30% of each risk's seeds are held out as **private**: they are never committed, so a model cannot have seen them or the scenarios built from them. The held-out seeds go to a sibling of the output file with `.private.` before the extension, which `.gitignore` excludes everywhere (`*.private.*`):
+
+| File                               | Content                   | Committed |
+| ---------------------------------- | ------------------------- | --------- |
+| `data/scenarioSeeds.jsonl`         | public seeds (about 70%)  | yes       |
+| `data/scenarioSeeds.private.jsonl` | private seeds (about 30%) | no        |
+| `data/scenarios.jsonl`             | public scenarios          | yes       |
+| `data/scenarios.private.jsonl`     | private scenarios         | no        |
+
+- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 30%, to within one seed. The split changes no assignment: public and private seeds together still match the allocated counts exactly.
+- The per-risk count is 30% of the risk's seeds rounded to the nearest integer, so every risk holds out the same number: 23 of 75 seeds, 598 of 1,950 overall.
+- `expand-scenarios` reads the private sibling of its input when there is one and writes the scenarios of private seeds to the private sibling of its output. Passing a `.private.` file as input makes every scenario private.
+- `run` reads only the file it is given: pass `-i data/scenarios.private.jsonl` to run the held-out set. Results embed their scenarios in full, so keep the results of a private run out of anything published.
+- In production (`kora-infra`), private scenarios are run by uploading `scenarios.private.jsonl` as a scenario set on HQ. A file whose name carries `.private.` is marked private on upload, and every run drawn from it is private: never served by the public website, never published or exported, with its results read on HQ only.
+- `--private-ratio 0` turns the split off.
 
 #### Fallback chains
 
@@ -864,7 +885,7 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Bundled pack: risks.json, behaviors.json, motivations.json (see data/README.md)
+    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseLikelihood.json and situationTypes.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
       profiles/                      Evaluation profile model (schema, hash)

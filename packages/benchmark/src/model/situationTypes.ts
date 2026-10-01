@@ -1,0 +1,97 @@
+import * as v from "valibot";
+import bundledData from "../../data/situationTypes.json" with {type: "json"};
+
+//
+// Runtime model.
+//
+// The situation types of each risk's gold standards: the distinct ways the risk
+// shows up in a conversation ("Direct request", "Reframed request", ...), as
+// listed in Section 1 of each gold standard. A risk has one gold standard,
+// except where it is an umbrella over several (self-harm: 1.2a, 1.2b, 1.2c).
+//
+// Seed allocation spreads each risk's seeds evenly over its gold standards,
+// then over their situation types (see `allocation/allocateSituations.ts`).
+// Like the motivation × use matrix, this is seed-generation input, not part of
+// the pack: editing it does not change the pack stamp on results.
+//
+
+const VSituationType = v.strictObject({
+  name: v.string(),
+  /**
+   * Multi-turn drift types stay listed but receive no seeds: whether a
+   * conversation drifts is left to the generator, not controlled here.
+   */
+  drift: v.optional(v.boolean()),
+});
+
+const VGoldStandard = v.strictObject({
+  /** The gold standard's number in the taxonomy, e.g. "1.2b". */
+  id: v.string(),
+  name: v.string(),
+  situationTypes: v.array(VSituationType),
+});
+
+const VSituationTypes = v.array(
+  v.strictObject({
+    riskId: v.string(),
+    goldStandards: v.pipe(v.array(VGoldStandard), v.minLength(1)),
+  })
+);
+
+//
+// API.
+//
+
+let cached: SituationTypes | undefined;
+
+function bundled(): SituationTypes {
+  return (cached ??= v.parse(VSituationTypes, bundledData));
+}
+
+/** The gold standards of `riskId`, or undefined when none are listed for it. */
+function forRisk(
+  situationTypes: SituationTypes,
+  riskId: string
+): readonly GoldStandard[] | undefined {
+  return situationTypes.find(entry => entry.riskId === riskId)?.goldStandards;
+}
+
+/**
+ * One line naming a seed's situation type and gold standard, for prompts.
+ * The gold standard's name is looked up in the bundled list and left out when
+ * the id is not found there.
+ */
+function describe(seed: {
+  goldStandardId?: string;
+  situationType?: string;
+}): string | undefined {
+  if (!seed.situationType) return undefined;
+  const goldStandard = bundled()
+    .flatMap(entry => entry.goldStandards)
+    .find(gs => gs.id === seed.goldStandardId);
+  const within = goldStandard
+    ? ` (within ${goldStandard.id}, ${goldStandard.name})`
+    : "";
+  return `${seed.situationType}${within}`;
+}
+
+/** The situation types of a gold standard that receive seeds, in list order. */
+function allocated(goldStandard: GoldStandard): readonly SituationType[] {
+  return goldStandard.situationTypes.filter(type => !type.drift);
+}
+
+//
+// Exports.
+//
+
+export interface SituationType extends v.InferOutput<typeof VSituationType> {}
+export interface GoldStandard extends v.InferOutput<typeof VGoldStandard> {}
+export type SituationTypes = v.InferOutput<typeof VSituationTypes>;
+
+export const SituationTypes = {
+  io: VSituationTypes,
+  bundled,
+  forRisk,
+  describe,
+  allocated,
+};

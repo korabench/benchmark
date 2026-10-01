@@ -311,6 +311,30 @@ const VScenarioSeed = v.strictObject({
       })
     )
   ),
+  /**
+   * `goldStandardId` and `situationType` are set together, when situation
+   * types are listed for the seed's risk (see `model/situationTypes.ts`).
+   */
+  goldStandardId: v.optional(
+    v.pipe(
+      v.string(),
+      v.metadata({
+        description:
+          "Number of the gold standard the seed belongs to (e.g. 1.2b). Narrower than the risk when the risk is an umbrella over several gold standards.",
+      })
+    )
+  ),
+  situationType: v.optional(
+    v.pipe(
+      v.string(),
+      v.metadata({
+        description:
+          "The situation type of the gold standard this seed is an instance of (e.g. Reframed request).",
+        usage:
+          "Spreads each risk's seeds evenly over the ways the risk shows up in a conversation.",
+      })
+    )
+  ),
 
   /** @deprecated Legacy corpora only; never written or rendered for new seeds. */
   childCognitiveMaturity: v.optional(VCognitiveMaturity),

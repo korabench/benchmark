@@ -47,9 +47,10 @@ function expandCounts<K extends string>(counts: Record<K, number>): K[] {
  * the distribution (within integer rounding, via largest-remainder).
  *
  * Each dimension is independently:
- *   1. Converted to integer counts via largestRemainderCounts(..., total, rng),
- *      so the rounding remainder lands on a random value each time rather
- *      than always on the same one.
+ *   1. Converted to integer counts via largestRemainderCounts. For gender, SES
+ *      and race/ethnicity the rounding remainder lands on a random value each
+ *      time rather than always on the same one; the age bands round
+ *      deterministically (largest remainder first).
  *   2. Expanded into a flat array of length `total`.
  *   3. Shuffled with the provided RNG.
  *
@@ -74,7 +75,9 @@ export function allocatePersonas(
       ? renormalize(distribution.ageRange, allowedAgeRanges)
       : distribution.ageRange;
 
-  const ageCounts = largestRemainderCounts(ageProportions, total, rng);
+  // No rng: the age bands always round the same way, so the band totals that
+  // the situation types are split within are the same for every risk.
+  const ageCounts = largestRemainderCounts(ageProportions, total);
   const genderCounts = largestRemainderCounts(distribution.gender, total, rng);
   const sesCounts = largestRemainderCounts(distribution.ses, total, rng);
   const raceCounts = largestRemainderCounts(

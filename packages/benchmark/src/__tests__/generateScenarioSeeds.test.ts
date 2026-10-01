@@ -414,6 +414,63 @@ describe("generateScenarioSeeds dimension allocation", () => {
     expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 15, boy: 15});
   });
 
+  it("holds out the same 30% of every risk's seeds as private by default", async () => {
+    const events: {riskId: string; isPrivate: boolean}[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+      totalSeeds: 75,
+      randomSeed: 3,
+    })) {
+      events.push(
+        ...event.items.map(seed => ({
+          riskId: seed.riskId,
+          isPrivate: event.private === true,
+        }))
+      );
+    }
+
+    const privateCounts = R.pipe(
+      events,
+      R.groupBy(e => e.riskId),
+      R.mapValues(group => group.filter(e => e.isPrivate).length)
+    );
+    expect(Object.keys(privateCounts)).toHaveLength(riskCount);
+    expect(R.unique(Object.values(privateCounts))).toEqual([23]);
+  });
+
+  it("keeps every seed public at privateRatio 0, with the same assignments", async () => {
+    const collect = async (privateRatio: number) => {
+      const out: {use?: string; childAge: number; isPrivate: boolean}[] = [];
+      for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+        totalSeeds: 12,
+        randomSeed: 9,
+        privateRatio,
+      })) {
+        out.push(
+          ...event.items.map(seed => ({
+            use: seed.use,
+            childAge: seed.childAge,
+            isPrivate: event.private === true,
+          }))
+        );
+      }
+      return out;
+    };
+    const dims = (seeds: Awaited<ReturnType<typeof collect>>) =>
+      seeds.map(s => `${s.use}/${s.childAge}`).sort();
+
+    const allPublic = await collect(0);
+    const split = await collect(0.5);
+    expect(allPublic.some(s => s.isPrivate)).toBe(false);
+    expect(split.filter(s => s.isPrivate)).toHaveLength(split.length / 2);
+    expect(dims(split)).toEqual(dims(allPublic));
+  });
+
+  it("rejects a privateRatio outside [0, 1]", async () => {
+    await expect(
+      collectSeeds(makeContext([]), {privateRatio: 1.5})
+    ).rejects.toThrow(/private-ratio/);
+  });
+
   it("is reproducible across runs with the same randomSeed", async () => {
     const options: Options = {
       distribution: census,

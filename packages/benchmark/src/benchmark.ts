@@ -55,6 +55,11 @@ export interface TestContext {
 export interface GenerationEvent<T> {
   total: number;
   items: readonly T[];
+  /**
+   * True when `items` are held out as private: they must be stored apart from
+   * the public items and never published.
+   */
+  private?: boolean;
 }
 
 export interface GenerateSeedsOptions {
@@ -69,6 +74,11 @@ export interface GenerateSeedsOptions {
   distribution?: PopulationDistribution;
   /** Makes every allocation reproducible. */
   randomSeed?: number;
+  /**
+   * Share of each risk's seeds held out as private, between 0 and 1. Defaults
+   * to `DEFAULT_PRIVATE_RATIO`; 0 keeps every seed public.
+   */
+  privateRatio?: number;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {

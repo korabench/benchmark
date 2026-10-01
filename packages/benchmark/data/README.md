@@ -5,11 +5,28 @@ These files are the **bundled default pack**. They are loaded by
 supplied (no `--taxonomy` / `--behaviors` flag, no `Packs.configure()`, no
 `Packs.run()`).
 
-| File | Contents |
-| --- | --- |
-| `risks.json` | Risk taxonomy — 8 categories, 26 risks. Bare array of categories; `bundled.ts` wraps it in the `RiskTaxonomy` envelope. |
-| `behaviors.json` | Behavior set — the 7 cross-cutting behaviors (V2 mechanisms M1–M7). Full `BehaviorSet` shape. |
-| `motivations.json` | Seed-generation motivations. Bare array. |
+| File               | Contents                                                                                                                |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `risks.json`       | Risk taxonomy — 8 categories, 26 risks. Bare array of categories; `bundled.ts` wraps it in the `RiskTaxonomy` envelope. |
+| `behaviors.json`   | Behavior set — the 7 cross-cutting behaviors (V2 mechanisms M1–M7). Full `BehaviorSet` shape.                           |
+| `motivations.json` | Seed-generation motivations. Bare array.                                                                                |
+
+`motivationUseLikelihood.json` also lives here but is **not part of the pack**:
+it is seed-generation input, loaded by `src/model/motivationUseLikelihood.ts`,
+and editing it does not change the pack stamp on results. It scores how likely
+each bundled motivation is to go with each seed `use`, from 0 (incompatible,
+never paired when avoidable) to 5 (typical); anything unlisted scores a neutral 3. It decides which motivation is paired with which use, never how many seeds
+each receives. Keys are motivation names from `motivations.json` and `use`
+values from `src/model/scenarioSeed.ts`.
+
+`situationTypes.json` is seed-generation input too, loaded by
+`src/model/situationTypes.ts`, and likewise outside the pack. For each bundled
+risk it lists the risk's gold standards (one, or three for the self-harm
+umbrella: 1.2a, 1.2b, 1.2c) and, for each, its situation types in the order of
+Section 1 of the gold standard. Types flagged `drift` receive no seeds. Data
+source: the "Situation types" tab of
+`KORA_Bench_V3.0_GS_Situation_Types_and_Allocation`. The order of the types
+matters: it decides which types take the leftover seeds.
 
 ## behaviors.json
 
@@ -25,7 +42,7 @@ adequate respectively). The V2 "Scenario Generation" column is intentionally not
 stored on the behavior yet — it will be added later when scenarios are linked to
 behaviors.
 
-`precondition`, when present, holds only the *condition* (M3, M5, M6, M7). The
+`precondition`, when present, holds only the _condition_ (M3, M5, M6, M7). The
 surrounding "return adequate / notTriggered when it does not hold" instruction is
 generated uniformly by `prompts/conversationToMechanismAssessmentPrompt.ts`, so
 it must not be restated in `assessmentPrompt`.

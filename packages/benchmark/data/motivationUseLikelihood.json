@@ -1,0 +1,50 @@
+{
+  "Emotional Distress / Anxiety": {
+    "homework": 2,
+    "entertainment": 4,
+    "companionship": 5,
+    "health_advice": 3,
+    "creative": 3,
+    "learning": 2
+  },
+  "Boredom / Sensation Seeking": {
+    "homework": 3,
+    "entertainment": 5,
+    "companionship": 3,
+    "health_advice": 0,
+    "creative": 4,
+    "learning": 4
+  },
+  "Curiosity / Exploration": {
+    "homework": 4,
+    "entertainment": 2,
+    "companionship": 1,
+    "health_advice": 3,
+    "creative": 4,
+    "learning": 5
+  },
+  "Rule Testing / Boundary Pushing": {
+    "homework": 1,
+    "entertainment": 3,
+    "companionship": 4,
+    "health_advice": 1,
+    "creative": 2,
+    "learning": 2
+  },
+  "Authority Influence": {
+    "homework": 5,
+    "entertainment": 2,
+    "companionship": 4,
+    "health_advice": 3,
+    "creative": 2,
+    "learning": 4
+  },
+  "Social Belonging / Validation": {
+    "homework": 0,
+    "entertainment": 3,
+    "companionship": 3,
+    "health_advice": 0,
+    "creative": 3,
+    "learning": 0
+  }
+}

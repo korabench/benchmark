@@ -86,7 +86,9 @@ Consequences worth understanding:
 - **The joint distribution is the product of marginals in expectation.** No
   dimension depends on another, so real-world correlations (e.g. between SES and
   race/ethnicity) are deliberately _not_ reproduced, and some combinations will
-  be unusual. Nothing filters or repairs unlikely combinations today.
+  be unusual. The one exception is motivation × use, paired by likelihood (see
+  [Motivation × use pairing](#motivation--use-pairing)); nothing filters or
+  repairs any other combination today.
 - Balance holds **per risk**, and therefore across the corpus.
 
 ### 1. Personas — age band, gender, SES, race/ethnicity
@@ -110,7 +112,7 @@ The `us-census-2023` preset
 
 | Dimension      | Proportions                                              |
 | -------------- | -------------------------------------------------------- |
-| Age band       | `7to9` .27, `10to12` .27, `13to17` .46                   |
+| Age band       | `7to9` .2648, `10to12` .2691, `13to17` .4661             |
 | Gender         | girl .50, boy .50                                        |
 | SES            | low .28, middle .46, high .26                            |
 | Race/ethnicity | white .51, hispanic .25, black .13, asian .05, other .06 |
@@ -142,6 +144,31 @@ the extra seed are drawn at random**. Always favouring the first values would
 bias the corpus once repeated per risk: 10 seeds over 3 signal types would give
 4/3/3 for every risk, i.e. 40/30/30 overall instead of thirds.
 
+#### Motivation × use pairing
+
+Some motivations do not fit some uses (a child seeking peer validation did not
+open the assistant for health advice). `packages/benchmark/data/motivationUseLikelihood.json`
+scores each pairing from 0 (incompatible) to 5 (typical); a motivation or
+pairing it does not list scores a neutral 3.
+
+`pairUsesWithMotivations()` (`allocation/pairUsesWithMotivations.ts`) applies
+it **after** both dimensions are allocated, by reordering the uses among the
+seeds of the risk:
+
+- **The counts do not move.** The result is a permutation of the allocated
+  uses, so each use and each motivation keeps exactly the number of seeds it
+  had. Only _which_ seed gets which use changes, and `use` stays independent of
+  every dimension other than motivation.
+- Among all permutations, one is drawn with probability proportional to the
+  product of its pairings' scores (a Metropolis walk over swaps of two seeds'
+  uses). Typical pairings become more frequent and unlikely ones rarer.
+- Score-0 pairings are removed whenever the counts allow it. When they do not
+  (very few seeds, or `--motivations` narrowed to one that fits few uses), the
+  counts win and the unavoidable incompatible pairings stay.
+
+With the bundled scores at 75 seeds per risk, the corpus goes from 6%
+incompatible pairings to none, and the mean score from 2.85 to 3.23.
+
 ### 5. Scenario flavor — largest-remainder, when the risk defines one
 
 Some risks declare `scenarioFlavors` in `risks.json` — risk-specific variants
@@ -155,6 +182,62 @@ risk's `conversationLength`. Risks without flavors skip this step.
 
 `established` when the risk sets `provideUserContext`, `none` otherwise.
 
+### 7. Situation type — even across the gold standard's types, per age band
+
+Each risk's gold standard lists the situation types the risk shows up as
+("Direct request", "Reframed request", "Disclosure of harm", ...).
+`packages/benchmark/data/situationTypes.json` holds the lists of the 28 gold
+standards (161 types, of which the 27 multi-turn drift types receive no seeds:
+drift is not controlled in the distribution). It mirrors the "Situation types"
+tab of the V3.0 allocation workbook, and is seed-generation input, not part of
+the pack.
+
+`allocateSituations()` then follows the workbook's rule, risk → age band →
+gold standard → situation type:
+
+1. A risk that is an umbrella over several gold standards splits its seeds
+   evenly across them (self-harm: 75 → 25 each for 1.2a, 1.2b and 1.2c), and
+   each share is allocated on its own, age bands included.
+2. Within a gold standard and an age band, the band's seeds are split evenly
+   across the situation types: the floor to each, then one leftover seed each to
+   consecutive types in list order. The run of leftovers starts one type earlier
+   for each successive band, so the odd seed does not always land on the same
+   type.
+3. Which seed of the band receives which type is drawn at random.
+
+The band totals this split works within are fixed: the age bands round
+deterministically (largest remainder first), giving 20 / 20 / 35 at 75 seeds and
+6 / 7 / 12 at 25. At the default 75 seeds per risk the result is, row for row,
+the `gs_situation_allocation_v3.0` table (1,950 seeds over 134 situation types).
+
+The seed stores `goldStandardId` and `situationType`, and both the seed and the
+expansion prompts pin the situation type. A risk absent from
+`situationTypes.json` (a custom taxonomy) gets no situation type.
+
+### 8. Private split — a random 30% per risk, spread over situation types
+
+Once every risk is allocated, 30% of each risk's seeds are marked private
+(`--private-ratio`, default 0.3). The count is rounded to the nearest
+integer, so every risk holds out the same number: 23 of 75 (22.5 rounded up),
+598 of 1,950 over the corpus.
+
+With situation types, the risk's private seeds are spread over them
+(`selectPrivateIndicesByGroup`): each situation type of each gold standard
+holds out its own 30%, to within one seed (largest remainder, the leftover
+seeds drawn at random), and the seeds are drawn uniformly within the type. A
+risk without situation types falls back to `selectPrivateIndices`: a uniformly
+random subset of the risk's seeds.
+
+The split only labels assignments, it does not change them: the dimensions
+above keep their exact counts over public and private seeds together.
+
+Private seeds are written to `<output>.private.jsonl`, which git ignores, and
+`expand-scenarios` keeps their scenarios in `<output>.private.jsonl` likewise.
+The seed itself carries no privacy field: the file it sits in is what marks it.
+
+The split draws from the RNG after all allocations, so `--private-ratio` never
+changes which assignments a given `--random-seed` produces.
+
 ### Reproducibility
 
 Every shuffle draws from `makeRng(--random-seed)` (mulberry32,
@@ -162,15 +245,16 @@ Every shuffle draws from `makeRng(--random-seed)` (mulberry32,
 one, it falls back to `Math.random`. The allocation is deterministic, the LLM
 output is not.
 
-The persona, motivation and flavor draws come first and in their historical
-order, so a given `--random-seed` still yields the demographics it yielded
-before the other dimensions were allocated.
+The persona, motivation and flavor draws come first, and the use pairing and
+situation types last, so adding a dimension does not disturb the draws before
+it. Seeds generated before the age bands rounded deterministically do not
+reproduce from the same `--random-seed`.
 
 ### Worked example — `--total-seeds 75` (the default), `us-census-2023`
 
 | Dimension        | Counts per risk                                                   |
 | ---------------- | ----------------------------------------------------------------- |
-| Age band         | 20–21 / 20–21 / 34–35 (`7to9` / `10to12` / `13to17`)              |
+| Age band         | 20 / 20 / 35 (`7to9` / `10to12` / `13to17`)                       |
 | Exact age        | 6–7 per year in each band                                         |
 | Gender           | 36–37 girl / 38–39 boy                                            |
 | SES              | 26–27 low / 21–22 middle / 27 high                                |
@@ -180,9 +264,14 @@ before the other dimensions were allocated.
 | Risk signal type | 25 each                                                           |
 | Use              | 12–13 each                                                        |
 | Refusal behavior | 25 each                                                           |
+| Situation type   | 75 ÷ the gold standard's types, per age band (e.g. 15 each of 5)  |
+| Private          | 23, spread over the situation types                               |
 
 Where a range is shown, the rounding remainder is drawn at random per risk (see
 above), so each risk sums to exactly 75 and the corpus averages to the target.
+The age bands are the exception: they always round the same way. Self-harm is
+allocated as three shares of 25 (one per gold standard), so its age bands are
+18 / 21 / 36.
 
 `generate-seeds` prints this allocation before starting, so you can check it
 without generating anything.

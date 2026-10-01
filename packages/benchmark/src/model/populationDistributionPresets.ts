@@ -13,7 +13,7 @@ export const populationDistributionPresets: Record<
 > = {
   "us-census-2023": {
     name: "US Census 2023 (children 7-17)",
-    ageRange: {"7to9": 0.27, "10to12": 0.27, "13to17": 0.46},
+    ageRange: {"7to9": 0.2648, "10to12": 0.2691, "13to17": 0.4661},
     gender: {girl: 0.488, boy: 0.512},
     ses: {low: 0.35, middle: 0.29, high: 0.36},
     raceEthnicity: {
