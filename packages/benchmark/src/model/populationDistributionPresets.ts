@@ -11,17 +11,17 @@ export const populationDistributionPresets: Record<
   string,
   PopulationDistribution
 > = {
-  "us-census-2020": {
-    name: "US Census 2020 (children 7-17)",
+  "us-census-2023": {
+    name: "US Census 2023 (children 7-17)",
     ageRange: {"7to9": 0.27, "10to12": 0.27, "13to17": 0.46},
-    gender: {girl: 0.5, boy: 0.5},
-    ses: {low: 0.28, middle: 0.46, high: 0.26},
+    gender: {girl: 0.488, boy: 0.512},
+    ses: {low: 0.35, middle: 0.29, high: 0.36},
     raceEthnicity: {
-      white: 0.51,
-      hispanic: 0.25,
-      black: 0.13,
-      asian: 0.05,
-      other: 0.06,
+      white: 0.473,
+      hispanic: 0.257,
+      black: 0.132,
+      asian: 0.053,
+      other: 0.085,
     },
   },
 };

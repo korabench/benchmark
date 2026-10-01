@@ -20,21 +20,21 @@ risks had no `direct` seed at all), exact ages landed almost only on 8, 11 and
 
 ## The dimensions of a seed
 
-| Dimension | Values | Allocation per risk |
-| --- | --- | --- |
-| `riskCategoryId`, `riskId` | taxonomy | `--total-seeds` seeds for every risk |
-| `ageRange` | `7to9` / `10to12` / `13to17` | population distribution |
-| `childAge` | 7–17 | even over the years of the assigned band |
-| `childGender` | girl / boy | population distribution |
-| `childSES` | low / middle / high | population distribution |
-| `childRaceEthnicity` | white / hispanic / black / asian / other | population distribution |
-| `motivation` | the taxonomy's motivations (10) | even (shuffled round-robin) |
-| `socialContext` | alone / peer_pressure / authority_influence / online_social | even |
-| `riskSignalType` | direct / subtle / ambiguous | even (1/3 each) |
-| `use` | homework / entertainment / companionship / health_advice / creative / learning | even (1/6 each) |
-| `refusalBehavior` | insists / drops / works_around | even (1/3 each) |
-| `scenarioFlavorId` | the risk's flavors, if it defines any | the flavors' own proportions |
-| `memory` | none / established | from the risk (`provideUserContext`) |
+| Dimension                  | Values                                                                         | Allocation per risk                      |
+| -------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------- |
+| `riskCategoryId`, `riskId` | taxonomy                                                                       | `--total-seeds` seeds for every risk     |
+| `ageRange`                 | `7to9` / `10to12` / `13to17`                                                   | population distribution                  |
+| `childAge`                 | 7–17                                                                           | even over the years of the assigned band |
+| `childGender`              | girl / boy                                                                     | population distribution                  |
+| `childSES`                 | low / middle / high                                                            | population distribution                  |
+| `childRaceEthnicity`       | white / hispanic / black / asian / other                                       | population distribution                  |
+| `motivation`               | the taxonomy's motivations (10)                                                | even (shuffled round-robin)              |
+| `socialContext`            | alone / peer_pressure / authority_influence / online_social                    | even                                     |
+| `riskSignalType`           | direct / subtle / ambiguous                                                    | even (1/3 each)                          |
+| `use`                      | homework / entertainment / companionship / health_advice / creative / learning | even (1/6 each)                          |
+| `refusalBehavior`          | insists / drops / works_around                                                 | even (1/3 each)                          |
+| `scenarioFlavorId`         | the risk's flavors, if it defines any                                          | the flavors' own proportions             |
+| `memory`                   | none / established                                                             | from the risk (`provideUserContext`)     |
 
 What each of the less obvious ones means:
 
@@ -71,7 +71,7 @@ yarn kora generate-seeds gpt-4o --total-seeds 30 --random-seed 42
 ```
 
 produces **exactly `--total-seeds` seeds per risk** (default 30), against the
-`--distribution` population (default `us-census-2020`).
+`--distribution` population (default `us-census-2023`).
 
 ## Allocation
 
@@ -85,7 +85,7 @@ Consequences worth understanding:
 - **Marginals are exact by construction** — not sampled, not approximate.
 - **The joint distribution is the product of marginals in expectation.** No
   dimension depends on another, so real-world correlations (e.g. between SES and
-  race/ethnicity) are deliberately *not* reproduced, and some combinations will
+  race/ethnicity) are deliberately _not_ reproduced, and some combinations will
   be unusual. Nothing filters or repairs unlikely combinations today.
 - Balance holds **per risk**, and therefore across the corpus.
 
@@ -105,14 +105,14 @@ Consequences worth understanding:
 `--age-ranges` restricts the age dimension and **renormalizes** the remaining
 bands so they still sum to 1; the other three dimensions are untouched.
 
-The `us-census-2020` preset
+The `us-census-2023` preset
 (`packages/benchmark/src/model/populationDistributionPresets.ts`):
 
-| Dimension | Proportions |
-| --- | --- |
-| Age band | `7to9` .27, `10to12` .27, `13to17` .46 |
-| Gender | girl .50, boy .50 |
-| SES | low .28, middle .46, high .26 |
+| Dimension      | Proportions                                              |
+| -------------- | -------------------------------------------------------- |
+| Age band       | `7to9` .27, `10to12` .27, `13to17` .46                   |
+| Gender         | girl .50, boy .50                                        |
+| SES            | low .28, middle .46, high .26                            |
 | Race/ethnicity | white .51, hispanic .25, black .13, asian .05, other .06 |
 
 Pass a JSON file path instead of a preset name for a custom distribution; every
@@ -168,18 +168,18 @@ before the other dimensions were allocated.
 
 ### Worked example — `--total-seeds 30`, `us-census-2020`
 
-| Dimension | Counts per risk |
-| --- | --- |
-| Age band | 8 / 8 / 14 (`7to9` / `10to12` / `13to17`) |
-| Exact age | 2–3 per year in each band |
-| Gender | 15 girl / 15 boy |
-| SES | 8 low / 14 middle / 8 high |
-| Race/ethnicity | 15 white / 8 hispanic / 4 black / 1 asian / 2 other |
-| Motivation | 3 each, all 10 |
-| Social context | 7–8 each |
-| Risk signal type | 10 each |
-| Use | 4–5 each |
-| Refusal behavior | 10 each |
+| Dimension        | Counts per risk                                     |
+| ---------------- | --------------------------------------------------- |
+| Age band         | 8 / 8 / 14 (`7to9` / `10to12` / `13to17`)           |
+| Exact age        | 2–3 per year in each band                           |
+| Gender           | 15 girl / 15 boy                                    |
+| SES              | 8 low / 14 middle / 8 high                          |
+| Race/ethnicity   | 15 white / 8 hispanic / 4 black / 1 asian / 2 other |
+| Motivation       | 3 each, all 10                                      |
+| Social context   | 7–8 each                                            |
+| Risk signal type | 10 each                                             |
+| Use              | 4–5 each                                            |
+| Refusal behavior | 10 each                                             |
 
 `generate-seeds` prints this allocation before starting, so you can check it
 without generating anything.
@@ -212,14 +212,14 @@ scenarios is stage 2 — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
 ## Where each dimension takes effect
 
-| Dimension | Seed prompt | Expansion | First message | Later turns |
-| --- | --- | --- | --- | --- |
-| Child, motivation, social context | yes | yes | child only | child's age |
-| `use` | yes | yes | yes | via the narrative |
-| `riskSignalType` | yes | yes | sets how the opening carries the risk | — |
-| `scenarioFlavorId` | yes | yes | `b_gradual` rules | conversation length |
-| `memory` | — | asks for a `modelMemory` | — | in the target's system prompt |
-| `refusalBehavior` | — | — | — | how the child reacts to a refusal |
+| Dimension                         | Seed prompt | Expansion                | First message                         | Later turns                       |
+| --------------------------------- | ----------- | ------------------------ | ------------------------------------- | --------------------------------- |
+| Child, motivation, social context | yes         | yes                      | child only                            | child's age                       |
+| `use`                             | yes         | yes                      | yes                                   | via the narrative                 |
+| `riskSignalType`                  | yes         | yes                      | sets how the opening carries the risk | —                                 |
+| `scenarioFlavorId`                | yes         | yes                      | `b_gradual` rules                     | conversation length               |
+| `memory`                          | —           | asks for a `modelMemory` | —                                     | in the target's system prompt     |
+| `refusalBehavior`                 | —           | —                        | —                                     | how the child reacts to a refusal |
 
 Judges see none of the dimensions beyond the child's age: they grade the
 assistant, and are given the scenario's background and narrative.

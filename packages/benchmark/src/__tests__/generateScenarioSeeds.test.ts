@@ -63,7 +63,7 @@ async function collectSeeds(
   return seeds;
 }
 
-const census = populationDistributionPresets["us-census-2020"]!;
+const census = populationDistributionPresets["us-census-2023"]!;
 const privacy = "privacy_and_personal_data_protection";
 const riskCount = RiskCategory.listAll().flatMap(c => c.risks).length;
 
