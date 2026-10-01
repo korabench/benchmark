@@ -86,17 +86,17 @@ yarn kora generate-seeds [model]
 
 **Every dimension of a seed is allocated by code; the model only writes the narrative** (`shortTitle`, `coreBehavior`, `context`, `notes`). Each dimension is allocated on its own to exact per-risk counts, shuffled independently, and handed to the model as a fixed input — one model call per seed.
 
-| Dimension                                                   | Values                                                                                                  | Allocation per risk                                                         |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `ageRange`, `childGender`, `childSES`, `childRaceEthnicity` | —                                                                                                       | the `--distribution` marginals, via the largest-remainder (Hamilton) method |
-| `childAge`                                                  | 7–17                                                                                                    | even over the years of the assigned band                                    |
-| `motivation`                                                | the taxonomy's 10 motivations                                                                           | even                                                                        |
-| `socialContext`                                             | `alone` / `peer_pressure` / `authority_influence` / `online_social`                                     | even                                                                        |
-| `riskSignalType`                                            | `direct` / `subtle` / `ambiguous`                                                                       | even (1/3 each)                                                             |
-| `use`                                                       | `homework` / `entertainment` / `companionship` / `health_advice` / `creative` / `learning` / `research` | even (1/7 each)                                                             |
-| `refusalBehavior`                                           | `insists` / `drops` / `works_around`                                                                    | even (1/3 each)                                                             |
-| `scenarioFlavorId`                                          | the risk's flavors, if it defines any                                                                   | the flavors' own proportions                                                |
-| `memory`                                                    | `none` / `established`                                                                                  | from the risk (`provideUserContext`)                                        |
+| Dimension                                                   | Values                                                                                     | Allocation per risk                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `ageRange`, `childGender`, `childSES`, `childRaceEthnicity` | —                                                                                          | the `--distribution` marginals, via the largest-remainder (Hamilton) method |
+| `childAge`                                                  | 7–17                                                                                       | even over the years of the assigned band                                    |
+| `motivation`                                                | the taxonomy's 10 motivations                                                              | even                                                                        |
+| `socialContext`                                             | `alone` / `peer_pressure` / `authority_influence` / `online_social`                        | even                                                                        |
+| `riskSignalType`                                            | `direct` / `subtle` / `ambiguous`                                                          | even (1/3 each)                                                             |
+| `use`                                                       | `homework` / `entertainment` / `companionship` / `health_advice` / `creative` / `learning` | even (1/6 each)                                                             |
+| `refusalBehavior`                                           | `insists` / `drops` / `works_around`                                                       | even (1/3 each)                                                             |
+| `scenarioFlavorId`                                          | the risk's flavors, if it defines any                                                      | the flavors' own proportions                                                |
+| `memory`                                                    | `none` / `established`                                                                     | from the risk (`provideUserContext`)                                        |
 
 - `use` is why the child opened the assistant in this session; the risk emerges within or alongside that activity.
 - `riskSignalType` decides how the child's opening message carries the risk: stated outright, masked, or alongside a plausible benign reading.
@@ -112,7 +112,7 @@ yarn kora generate-seeds gpt-4o \
   --output /tmp/preview.jsonl
 ```
 
-At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 8–9 per use and 6 per motivation. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 

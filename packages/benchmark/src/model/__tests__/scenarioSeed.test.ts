@@ -35,7 +35,6 @@ describe("seed dimensions", () => {
       "health_advice",
       "creative",
       "learning",
-      "research",
     ]);
     expect(RefusalBehavior.list).toEqual(["insists", "drops", "works_around"]);
     expect(SeedMemory.list).toEqual(["none", "established"]);

@@ -21,7 +21,7 @@ function seed(riskId: string, riskCategoryId = "online_safety") {
     socialContext: "alone",
     context: "The child is browsing alone after school.",
     notes: "",
-    use: "research",
+    use: "learning",
     refusalBehavior: "insists",
     memory: "none",
     id: `seed-${riskId}`,

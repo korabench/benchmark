@@ -66,7 +66,6 @@ const VSeedUse = v.picklist([
   "health_advice",
   "creative",
   "learning",
-  "research",
 ]);
 
 export const seedUseDescriptions: Record<SeedUse, string> = {
@@ -80,8 +79,6 @@ export const seedUseDescriptions: Record<SeedUse, string> = {
     "Making something: writing, art, music, role-play, or world-building",
   learning:
     "Learning a topic or skill out of personal interest, outside school work",
-  research:
-    "Looking up facts or gathering information to answer a question or make a decision",
 };
 
 //

@@ -286,9 +286,10 @@ describe("generateScenarioSeeds dimension allocation", () => {
     expect(R.countBy(seeds, s => s.refusalBehavior!)).toEqual(
       Object.fromEntries(RefusalBehavior.list.map(value => [value, 20]))
     );
-    // 60 / 7 = 8 remainder 4: four values get 9, three get 8.
-    expect(sortedCounts(seeds, s => s.use!)).toEqual([8, 8, 8, 9, 9, 9, 9]);
-    expect(new Set(seeds.map(s => s.use))).toEqual(new Set(SeedUse.list));
+    // 60 / 6.
+    expect(R.countBy(seeds, s => s.use!)).toEqual(
+      Object.fromEntries(SeedUse.list.map(value => [value, 10]))
+    );
   });
 
   it("does not always hand the rounding remainder to the same value", async () => {

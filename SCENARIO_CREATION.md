@@ -31,7 +31,7 @@ risks had no `direct` seed at all), exact ages landed almost only on 8, 11 and
 | `motivation` | the taxonomy's motivations (10) | even (shuffled round-robin) |
 | `socialContext` | alone / peer_pressure / authority_influence / online_social | even |
 | `riskSignalType` | direct / subtle / ambiguous | even (1/3 each) |
-| `use` | homework / entertainment / companionship / health_advice / creative / learning / research | even (1/7 each) |
+| `use` | homework / entertainment / companionship / health_advice / creative / learning | even (1/6 each) |
 | `refusalBehavior` | insists / drops / works_around | even (1/3 each) |
 | `scenarioFlavorId` | the risk's flavors, if it defines any | the flavors' own proportions |
 | `memory` | none / established | from the risk (`provideUserContext`) |
