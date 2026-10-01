@@ -57,7 +57,7 @@ A **task** is one LLM call producing one seed. It is defined by
 holds every dimension of the seed, decided before the model is called.
 
 `allocateSeedAssignments()` (`kora.ts:220`) builds exactly `--total-seeds`
-assignments per risk (default 30):
+assignments per risk (default 75):
 
 1. **Personas.** `allocatePersonas()` converts each demographic dimension (age
    band, gender, SES, race/ethnicity) of the `--distribution` population

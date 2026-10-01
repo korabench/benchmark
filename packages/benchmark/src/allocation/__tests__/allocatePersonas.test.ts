@@ -37,7 +37,7 @@ describe("allocatePersonas", () => {
     const personas = allocatePersonas(census, 60, makeRng(42));
     expect(personas).toHaveLength(60);
     expectWithinRounding(histogram(personas, "ageRange"), census.ageRange, 60);
-    expect(histogram(personas, "gender")).toEqual({girl: 30, boy: 30});
+    expectWithinRounding(histogram(personas, "gender"), census.gender, 60);
     expectWithinRounding(histogram(personas, "ses"), census.ses, 60);
     expectWithinRounding(
       histogram(personas, "raceEthnicity"),
@@ -47,11 +47,11 @@ describe("allocatePersonas", () => {
   });
 
   it("does not always hand the rounding remainder to the same value", () => {
-    // 28/46/26 over 40 leaves 11.2/18.4/10.4: the +1 must move around.
+    // 35/29/36 over 40 leaves 14/11.6/14.4: the +1 must move around.
     const sesCounts = Array.from({length: 50}, (_, i) =>
       histogram(allocatePersonas(census, 40, makeRng(i)), "ses")
     );
-    const floors: Record<string, number> = {low: 11, middle: 18, high: 10};
+    const floors: Record<string, number> = {low: 14, middle: 11, high: 14};
     const winners = new Set(
       sesCounts.flatMap(c =>
         Object.keys(floors).filter(key => c[key] === floors[key]! + 1)
@@ -93,7 +93,7 @@ describe("allocatePersonas", () => {
     expect(personas).toHaveLength(60);
     expect(histogram(personas, "ageRange")).toEqual({"10to12": 60});
     // Other dimensions should still match the preset marginals.
-    expect(histogram(personas, "gender")).toEqual({girl: 30, boy: 30});
+    expectWithinRounding(histogram(personas, "gender"), census.gender, 60);
   });
 
   it("renormalizes proportions across allowed age ranges", () => {

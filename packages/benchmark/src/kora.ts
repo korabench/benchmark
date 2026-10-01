@@ -58,10 +58,10 @@ import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
 /**
- * Seeds generated per risk when the caller does not say. Matches the size of
- * the published corpus (30 scenarios per risk).
+ * Seeds generated per risk when the caller does not say, and therefore the
+ * number of scenarios per risk once every seed is expanded.
  */
-export const DEFAULT_TOTAL_SEEDS = 30;
+export const DEFAULT_TOTAL_SEEDS = 75;
 
 /** The active run stamp as a spreadable field: present only when configured. */
 function stampField(): {stamp?: RunStamp} {

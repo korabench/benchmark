@@ -173,14 +173,16 @@ describe("generateScenarioSeeds filters", () => {
       randomSeed: 5,
     });
 
-    expect(DEFAULT_TOTAL_SEEDS).toBe(30);
-    expect(seeds).toHaveLength(30);
-    expect(R.countBy(seeds, s => s.ageRange)).toEqual({
-      "7to9": 8,
-      "10to12": 8,
-      "13to17": 14,
-    });
-    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 15, boy: 15});
+    expect(DEFAULT_TOTAL_SEEDS).toBe(75);
+    expect(seeds).toHaveLength(75);
+    // us-census-2023 at 75: each count is floor(75 * p) or one more.
+    const ages = R.countBy(seeds, s => s.ageRange);
+    expect([20, 21]).toContain(ages["7to9"]);
+    expect([20, 21]).toContain(ages["10to12"]);
+    expect([34, 35]).toContain(ages["13to17"]);
+    const genders = R.countBy(seeds, s => s.childGender);
+    expect([36, 37]).toContain(genders.girl);
+    expect([38, 39]).toContain(genders.boy);
   });
 });
 
@@ -230,7 +232,10 @@ describe("generateScenarioSeeds dimension allocation", () => {
       R.countBy(seeds, s => s.ageRange),
       census.ageRange
     );
-    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 30, boy: 30});
+    withinRounding(
+      R.countBy(seeds, s => s.childGender),
+      census.gender
+    );
     withinRounding(
       R.countBy(seeds, s => s.childSES!),
       census.ses
@@ -337,7 +342,8 @@ describe("generateScenarioSeeds dimension allocation", () => {
       subtle: 20,
       ambiguous: 20,
     });
-    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 30, boy: 30});
+    // 48.8/51.2 over 60: 29-30 girls, whatever the model answered.
+    expect([29, 30]).toContain(R.countBy(seeds, s => s.childGender).girl);
     expect(seeds.some(s => s.childAge !== 17)).toBe(true);
     expect(new Set(seeds.map(s => s.socialContext)).size).toBe(4);
     for (const seed of seeds) {

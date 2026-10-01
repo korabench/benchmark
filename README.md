@@ -73,7 +73,7 @@ yarn kora generate-seeds [model]
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `[model]`                         | Override the profile's `seeds` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
 | `-o, --output <path>`             | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                                                                                                                                                                                                                                    |
-| `--total-seeds <count>`           | Seeds to generate per risk (default: `30`)                                                                                                                                                                                                                                                 |
+| `--total-seeds <count>`           | Seeds to generate per risk (default: `75`)                                                                                                                                                                                                                                                 |
 | `--age-ranges <ranges>`           | Comma-separated age ranges to generate seeds for (default: all). The distribution's age proportions are renormalized over them.                                                                                                                                                            |
 | `--risk-ids <ids>`                | Comma-separated risk IDs to restrict generation to (default: all risks)                                                                                                                                                                                                                    |
 | `--motivations <names>`           | Comma-separated motivation names to spread seeds over (default: all motivations)                                                                                                                                                                                                           |
@@ -112,7 +112,7 @@ yarn kora generate-seeds gpt-4o \
   --output /tmp/preview.jsonl
 ```
 
-At `--total-seeds 60`, the `us-census-2023` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+At `--total-seeds 60`, the `us-census-2023` preset produces per-risk marginals of 16–17/16–17/27–28 (age bands), 29–30/30–31 (girl/boy), 21/17–18/21–22 (SES low/middle/high), and 28–29/15–16/7–8/3–4/5–6 (race/ethnicity: white/hispanic/black/asian/other), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. Where a range is shown, the rounding remainder is drawn at random per risk, so each risk sums to exactly 60 and the corpus averages to the target. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
@@ -124,7 +124,7 @@ Both `generate-seeds` and `expand-scenarios` accept a comma-separated list of mo
 
 ```bash
 yarn kora generate-seeds gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited \
-  --total-seeds 30 --random-seed 42
+  --total-seeds 75 --random-seed 42
 
 yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limited" \
   "deepseek-v3.2,gpt-4o:extended,gemini-2.5-flash:limited"
@@ -847,7 +847,7 @@ Use `--prompts default,child` to test both variants.
 
 Each pipeline stage makes the following API calls:
 
-- **Seed generation**: 1 call per seed = 26 risks x `--total-seeds` (30 by default) = **780 calls**, producing 780 seeds.
+- **Seed generation**: 1 call per seed = 26 risks x `--total-seeds` (75 by default) = **1,950 calls**, producing 1,950 seeds.
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
 - **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
 

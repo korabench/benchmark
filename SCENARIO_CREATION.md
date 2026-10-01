@@ -67,10 +67,10 @@ interface Task {
 ```
 
 ```bash
-yarn kora generate-seeds gpt-4o --total-seeds 30 --random-seed 42
+yarn kora generate-seeds gpt-4o --total-seeds 75 --random-seed 42
 ```
 
-produces **exactly `--total-seeds` seeds per risk** (default 30), against the
+produces **exactly `--total-seeds` seeds per risk** (default 75), against the
 `--distribution` population (default `us-census-2023`).
 
 ## Allocation
@@ -166,28 +166,32 @@ The persona, motivation and flavor draws come first and in their historical
 order, so a given `--random-seed` still yields the demographics it yielded
 before the other dimensions were allocated.
 
-### Worked example — `--total-seeds 30`, `us-census-2020`
+### Worked example — `--total-seeds 75` (the default), `us-census-2023`
 
-| Dimension        | Counts per risk                                     |
-| ---------------- | --------------------------------------------------- |
-| Age band         | 8 / 8 / 14 (`7to9` / `10to12` / `13to17`)           |
-| Exact age        | 2–3 per year in each band                           |
-| Gender           | 15 girl / 15 boy                                    |
-| SES              | 8 low / 14 middle / 8 high                          |
-| Race/ethnicity   | 15 white / 8 hispanic / 4 black / 1 asian / 2 other |
-| Motivation       | 3 each, all 10                                      |
-| Social context   | 7–8 each                                            |
-| Risk signal type | 10 each                                             |
-| Use              | 4–5 each                                            |
-| Refusal behavior | 10 each                                             |
+| Dimension        | Counts per risk                                                   |
+| ---------------- | ----------------------------------------------------------------- |
+| Age band         | 20–21 / 20–21 / 34–35 (`7to9` / `10to12` / `13to17`)              |
+| Exact age        | 6–7 per year in each band                                         |
+| Gender           | 36–37 girl / 38–39 boy                                            |
+| SES              | 26–27 low / 21–22 middle / 27 high                                |
+| Race/ethnicity   | 35–36 white / 19–20 hispanic / 9–10 black / 3–4 asian / 6–7 other |
+| Motivation       | 7–8 each, all 10                                                  |
+| Social context   | 18–19 each                                                        |
+| Risk signal type | 25 each                                                           |
+| Use              | 12–13 each                                                        |
+| Refusal behavior | 25 each                                                           |
+
+Where a range is shown, the rounding remainder is drawn at random per risk (see
+above), so each risk sums to exactly 75 and the corpus averages to the target.
 
 `generate-seeds` prints this allocation before starting, so you can check it
 without generating anything.
 
-Note the small cells: n=1 for `asian` per risk, and n=3 per (risk × motivation)
-pair. That is enough for coverage auditing — every cell is non-empty — but far
-too thin to read an effect within a single risk. Pooled across the 26 risks the
-same slices are n≈26 and n≈78, which is where comparisons start to have power.
+Note the small cells: n=3–4 for `asian` per risk, and n=7–8 per (risk ×
+motivation) pair. That is enough for coverage auditing — every cell is non-empty
+— but too thin to read an effect within a single risk. Pooled across the 26
+risks the same slices are n≈103 and n=195, which is where comparisons have
+power.
 
 ## The call
 
