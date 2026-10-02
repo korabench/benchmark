@@ -1,5 +1,7 @@
 # KORA Bench v3 - Validity Matrix (Motivation × Use)
 
+> **Superseded.** Seed generation no longer uses these scores: it applies the V3.0 binary mask in `packages/benchmark/data/motivationUseMask.json`. Kept for reference.
+
 **Scoring scale:** 0 = logically incompatible | 5 = typical/expected pairing
 
 **Created:** 1 October 2026  

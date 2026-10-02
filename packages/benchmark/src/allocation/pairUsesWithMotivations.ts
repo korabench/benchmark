@@ -1,36 +1,36 @@
-import {MotivationUseLikelihood} from "../model/motivationUseLikelihood.js";
+import {MotivationUseMask} from "../model/motivationUseMask.js";
 import {SeedUse} from "../model/scenarioSeed.js";
 
 /** Swap attempts per seed: enough for the pairing to forget its start. */
 const SWEEPS = 200;
 
 /**
- * Weight of an incompatible (score 0) pairing. Not zero, so the walk can always
- * step out of an incompatible starting point, but small enough that it leaves
- * every such pairing it can.
+ * Weight of a forbidden pairing. Not zero, so the walk can always step out of
+ * a forbidden starting point, but small enough that it leaves every such
+ * pairing it can.
  */
-const INCOMPATIBLE_WEIGHT = 1e-9;
+const FORBIDDEN_WEIGHT = 1e-9;
 
 /**
- * Reorder `uses` so that each seed's use suits its motivation, without changing
- * how many seeds receive each use or each motivation.
+ * Reorder `uses` so that no seed's use is forbidden for its motivation, without
+ * changing how many seeds receive each use or each motivation.
  *
  * `motivationNames[i]` and `uses[i]` belong to seed `i`. Only the order of
  * `uses` changes: the result is a permutation of the input, so both marginals
- * are exactly the ones allocated. Among all such permutations, one is drawn
- * with probability proportional to the product of its pairings' likelihood
- * scores: typical pairings become more frequent, unlikely ones rarer, and
- * incompatible ones (score 0) disappear whenever the allocated counts leave a
- * way to avoid them. When they do not (a handful of seeds, a single motivation),
- * the counts win and the fewest possible incompatible pairings remain.
+ * are exactly the ones allocated. The permutation is drawn uniformly among
+ * those the mask allows: every allowed pairing is as likely as the counts
+ * permit, and forbidden ones disappear whenever the allocated counts leave a
+ * way to avoid them. When they do not (a handful of seeds, a single
+ * motivation), the counts win and the fewest possible forbidden pairings
+ * remain.
  *
  * The draw is a Metropolis walk over swaps of two seeds' uses, followed by a
- * deterministic pass that swaps away any incompatible pairing still standing.
+ * deterministic pass that swaps away any forbidden pairing still standing.
  */
 export function pairUsesWithMotivations(
   motivationNames: readonly string[],
   uses: readonly SeedUse[],
-  likelihood: MotivationUseLikelihood,
+  mask: MotivationUseMask,
   rng: () => number
 ): readonly SeedUse[] {
   if (motivationNames.length !== uses.length) {
@@ -42,10 +42,10 @@ export function pairUsesWithMotivations(
   const n = uses.length;
   if (n < 2) return uses;
 
-  const score = (i: number, use: SeedUse) =>
-    MotivationUseLikelihood.score(likelihood, motivationNames[i]!, use);
+  const allowed = (i: number, use: SeedUse) =>
+    MotivationUseMask.allowed(mask, motivationNames[i]!, use);
   const weight = (i: number, use: SeedUse) =>
-    score(i, use) || INCOMPATIBLE_WEIGHT;
+    allowed(i, use) ? 1 : FORBIDDEN_WEIGHT;
 
   const out = [...uses];
   const swap = (i: number, j: number) => {
@@ -65,13 +65,11 @@ export function pairUsesWithMotivations(
     if (accept < ratio) swap(i, j);
   }
 
-  // The walk leaves an avoidable incompatible pairing only with negligible
+  // The walk leaves an avoidable forbidden pairing only with negligible
   // probability; this makes it certain for any pairing one swap can fix.
   for (let i = 0; i < n; i++) {
-    if (score(i, out[i]!) > 0) continue;
-    const j = out.findIndex(
-      (use, k) => score(i, use) > 0 && score(k, out[i]!) > 0
-    );
+    if (allowed(i, out[i]!)) continue;
+    const j = out.findIndex((use, k) => allowed(i, use) && allowed(k, out[i]!));
     if (j >= 0) swap(i, j);
   }
 

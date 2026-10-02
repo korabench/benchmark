@@ -20,7 +20,7 @@ export * from "./model/mechanism.js";
 export * from "./model/mechanismAssessment.js";
 export * from "./model/modelSpec.js";
 export * from "./model/motivation.js";
-export * from "./model/motivationUseLikelihood.js";
+export * from "./model/motivationUseMask.js";
 export * from "./model/populationDistribution.js";
 export * from "./model/prompt.js";
 export * from "./model/risk.js";

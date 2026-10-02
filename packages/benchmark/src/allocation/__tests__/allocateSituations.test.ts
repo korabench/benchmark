@@ -214,6 +214,20 @@ describe("selectPrivateIndicesByGroup", () => {
     expect(selectPrivateIndicesByGroup(keys, 1, makeRng(1)).size).toBe(7);
   });
 
+  it("never holds out the last public seed of a group", () => {
+    // 30% of 1, 1, 2, 21 → 0.3, 0.3, 0.6, 6.3: 8 of 25 in all.
+    const sizes = {a: 1, b: 1, c: 2, d: 21};
+    const keys = keysOf(sizes);
+    for (const seed of R.range(0, 200)) {
+      const picked = selectPrivateIndicesByGroup(keys, 0.3, makeRng(seed));
+      expect(picked.size).toBe(8);
+      const perGroup = R.countBy([...picked], i => keys[i]!);
+      for (const [key, n] of Object.entries(sizes)) {
+        expect(perGroup[key] ?? 0).toBeLessThan(n);
+      }
+    }
+  });
+
   it("holds out 23 of a risk's 75 seeds, spread over its types", () => {
     for (const seed of R.range(0, 20)) {
       const assignments = allocate("bias_and_stereotyping", seed);

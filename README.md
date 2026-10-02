@@ -119,7 +119,7 @@ Each seed is also assigned a **situation type**: one of the ways its risk shows 
 
 Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
-Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that pairings follow the 0–5 likelihood scores in `packages/benchmark/data/motivationUseLikelihood.json` (0 = never paired when avoidable), which leaves the per-risk counts of every use and every motivation unchanged. Nothing filters the other combinations today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
+Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that no seed gets a pairing forbidden by the V3.0 mask in `packages/benchmark/data/motivationUseMask.json` (Identity Exploration × `homework`, Efficiency / Shortcut Seeking × `entertainment` or `companionship`), which leaves the per-risk counts of every use and every motivation unchanged. Nothing filters the other combinations today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
 
 #### Private seeds
 
@@ -132,7 +132,7 @@ By default 30% of each risk's seeds are held out as **private**: they are never 
 | `data/scenarios.jsonl`             | public scenarios          | yes       |
 | `data/scenarios.private.jsonl`     | private scenarios         | no        |
 
-- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 30%, to within one seed. The split changes no assignment: public and private seeds together still match the allocated counts exactly.
+- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 30%, to within one seed. A type never holds out its last public seed, so every situation type stays present in the public seeds. The split changes no assignment: public and private seeds together still match the allocated counts exactly.
 - The per-risk count is 30% of the risk's seeds rounded to the nearest integer, so every risk holds out the same number: 23 of 75 seeds, 598 of 1,950 overall.
 - `expand-scenarios` reads the private sibling of its input when there is one and writes the scenarios of private seeds to the private sibling of its output. Passing a `.private.` file as input makes every scenario private.
 - `run` reads only the file it is given: pass `-i data/scenarios.private.jsonl` to run the held-out set. Results embed their scenarios in full, so keep the results of a private run out of anything published.
@@ -885,7 +885,7 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseLikelihood.json and situationTypes.json (see data/README.md)
+    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseMask.json and situationTypes.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
       profiles/                      Evaluation profile model (schema, hash)

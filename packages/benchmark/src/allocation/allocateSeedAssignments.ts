@@ -1,6 +1,6 @@
 import {AgeRange} from "../model/ageRange.js";
 import {Motivation} from "../model/motivation.js";
-import {MotivationUseLikelihood} from "../model/motivationUseLikelihood.js";
+import {MotivationUseMask} from "../model/motivationUseMask.js";
 import {PopulationDistribution} from "../model/populationDistribution.js";
 import {Risk} from "../model/risk.js";
 import {ScenarioFlavor} from "../model/scenarioFlavor.js";
@@ -61,11 +61,11 @@ interface Args {
   /** Restricts and renormalizes the age dimension of `distribution`. */
   ageRanges?: readonly AgeRange[];
   /**
-   * Motivation × use likelihood scores. When given, each seed's use is paired
-   * with its motivation accordingly; the counts per use and per motivation are
-   * the same either way.
+   * Motivation × use mask. When given, uses are reordered so that no seed gets
+   * a use forbidden for its motivation; the counts per use and per motivation
+   * are the same either way.
    */
-  useLikelihood?: MotivationUseLikelihood;
+  useMask?: MotivationUseMask;
   /**
    * Situation types per risk. When given and the risk is listed, its seeds are
    * split evenly across its gold standards, then across their situation types.
@@ -79,8 +79,8 @@ interface Args {
  * Each dimension is allocated on its own to exact marginals, shuffled
  * independently, then zipped index-wise: the joint distribution is the product
  * of the marginals in expectation, and no dimension depends on another. The one
- * exception is `use`, whose values are then reordered to suit each seed's
- * motivation when `useLikelihood` is given: its marginal is untouched, and it
+ * exception is `use`, whose values are then reordered to avoid the pairings
+ * `useMask` forbids, when it is given: its marginal is untouched, and it
  * stays independent of every dimension other than motivation. The situation
  * type is the other: its counts are fixed per age band, so it depends on the
  * age band and on nothing else.
@@ -109,7 +109,7 @@ function allocateShare(
   goldStandard: GoldStandard | undefined
 ): readonly SeedAssignment[] {
   const {risk, distribution, motivations, rng, ageRanges} = args;
-  const {useLikelihood} = args;
+  const {useMask} = args;
 
   const personas = allocatePersonas(distribution, total, rng, ageRanges);
   const motivationCycle = shuffleWith(motivations, rng);
@@ -130,11 +130,11 @@ function allocateShare(
   const seedMotivations = personas.map(
     (_, i) => motivationCycle[i % motivationCycle.length]!
   );
-  const uses = useLikelihood
+  const uses = useMask
     ? pairUsesWithMotivations(
         seedMotivations.map(m => m.name),
         unpairedUses,
-        useLikelihood,
+        useMask,
         rng
       )
     : unpairedUses;

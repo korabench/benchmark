@@ -25,7 +25,7 @@ import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
-import {MotivationUseLikelihood} from "./model/motivationUseLikelihood.js";
+import {MotivationUseMask} from "./model/motivationUseMask.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
@@ -225,7 +225,7 @@ export const kora = Benchmark.new({
       : allMotivations;
 
     const rng = makeRng(options?.randomSeed);
-    const useLikelihood = MotivationUseLikelihood.bundled();
+    const useMask = MotivationUseMask.bundled();
     const situationTypes = SituationTypes.bundled();
 
     // One task per seed. Every structured dimension is decided here, before the
@@ -250,7 +250,7 @@ export const kora = Benchmark.new({
             total: totalSeeds,
             rng,
             ageRanges,
-            useLikelihood,
+            useMask,
             situationTypes,
           }),
         }))

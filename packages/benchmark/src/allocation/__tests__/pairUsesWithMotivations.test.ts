@@ -1,7 +1,7 @@
 import * as R from "remeda";
 import {describe, expect, it} from "vitest";
 import {Motivation} from "../../model/motivation.js";
-import {MotivationUseLikelihood} from "../../model/motivationUseLikelihood.js";
+import {MotivationUseMask} from "../../model/motivationUseMask.js";
 import {populationDistributionPresets} from "../../model/populationDistributionPresets.js";
 import {RiskCategory} from "../../model/riskCategory.js";
 import {SeedUse} from "../../model/scenarioSeed.js";
@@ -13,7 +13,7 @@ import {allocateUniform} from "../allocateUniform.js";
 import {pairUsesWithMotivations} from "../pairUsesWithMotivations.js";
 import {makeRng} from "../rng.js";
 
-const likelihood = MotivationUseLikelihood.bundled();
+const mask = MotivationUseMask.bundled();
 const motivations = Motivation.listAll();
 const names = motivations.map(m => m.name);
 
@@ -22,77 +22,72 @@ function cycle(total: number): string[] {
   return Array.from({length: total}, (_, i) => names[i % names.length]!);
 }
 
-describe("bundled motivation × use likelihood", () => {
-  it("only names bundled motivations", () => {
-    expect(Object.keys(likelihood).filter(n => !names.includes(n))).toEqual([]);
+/** The pairings of `uses` with `seedNames` that the mask forbids. */
+function forbidden(seedNames: readonly string[], uses: readonly SeedUse[]) {
+  return uses
+    .map((use, i) => [seedNames[i]!, use] as const)
+    .filter(([name, use]) => !MotivationUseMask.allowed(mask, name, use));
+}
+
+describe("bundled motivation × use mask", () => {
+  it("covers every bundled motivation and every use", () => {
+    expect(Object.keys(mask).sort()).toEqual([...names].sort());
+    Object.values(mask).forEach(uses =>
+      expect(Object.keys(uses).sort()).toEqual([...SeedUse.list].sort())
+    );
   });
 
-  it("scores unlisted pairings as neutral", () => {
+  it("forbids exactly the three V3.0 pairings", () => {
+    const pairs = names.flatMap(name =>
+      SeedUse.list
+        .filter(use => !MotivationUseMask.allowed(mask, name, use))
+        .map(use => `${name} × ${use}`)
+    );
+    expect(pairs.sort()).toEqual([
+      "Efficiency / Shortcut Seeking × companionship",
+      "Efficiency / Shortcut Seeking × entertainment",
+      "Identity Exploration × homework",
+    ]);
+  });
+
+  it("allows unlisted pairings", () => {
     expect(
-      MotivationUseLikelihood.score(
-        likelihood,
-        "No such motivation",
-        "creative"
-      )
-    ).toBe(MotivationUseLikelihood.neutralScore);
+      MotivationUseMask.allowed(mask, "No such motivation", "creative")
+    ).toBe(true);
   });
 });
 
 describe("pairUsesWithMotivations", () => {
   it("returns a permutation of the allocated uses", () => {
     const uses = allocateUniform(SeedUse.list, 75, makeRng(1));
-    const paired = pairUsesWithMotivations(
-      cycle(75),
-      uses,
-      likelihood,
-      makeRng(2)
-    );
+    const paired = pairUsesWithMotivations(cycle(75), uses, mask, makeRng(2));
     expect(R.countBy(paired, u => u)).toEqual(R.countBy(uses, u => u));
   });
 
-  it("leaves no incompatible pairing when one can be avoided", () => {
-    const incompatible = R.range(0, 30).flatMap(seed => {
+  it("leaves no forbidden pairing when one can be avoided", () => {
+    const remaining = R.range(0, 30).flatMap(seed => {
       const seedNames = cycle(75);
-      const paired = pairUsesWithMotivations(
+      return forbidden(
         seedNames,
-        allocateUniform(SeedUse.list, 75, makeRng(seed)),
-        likelihood,
-        makeRng(seed + 100)
-      );
-      return paired.filter(
-        (use, i) =>
-          MotivationUseLikelihood.score(likelihood, seedNames[i]!, use) === 0
+        pairUsesWithMotivations(
+          seedNames,
+          allocateUniform(SeedUse.list, 75, makeRng(seed)),
+          mask,
+          makeRng(seed + 100)
+        )
       );
     });
-    expect(incompatible).toEqual([]);
+    expect(remaining).toEqual([]);
   });
 
-  it("raises the mean likelihood of the pairings", () => {
-    const seedNames = cycle(75);
-    const meanScore = (uses: readonly SeedUse[]) =>
-      R.sum(
-        uses.map((use, i) =>
-          MotivationUseLikelihood.score(likelihood, seedNames[i]!, use)
-        )
-      ) / uses.length;
-    const uses = allocateUniform(SeedUse.list, 75, makeRng(5));
+  it("keeps the counts when a forbidden pairing is unavoidable", () => {
     const paired = pairUsesWithMotivations(
-      seedNames,
-      uses,
-      likelihood,
-      makeRng(6)
-    );
-    expect(meanScore(paired)).toBeGreaterThan(meanScore(uses));
-  });
-
-  it("keeps the counts when an incompatible pairing is unavoidable", () => {
-    const paired = pairUsesWithMotivations(
-      ["Social Belonging / Validation", "Social Belonging / Validation"],
-      ["homework", "learning"],
-      likelihood,
+      ["Efficiency / Shortcut Seeking", "Efficiency / Shortcut Seeking"],
+      ["entertainment", "companionship"],
+      mask,
       makeRng(0)
     );
-    expect([...paired].sort()).toEqual(["homework", "learning"]);
+    expect([...paired].sort()).toEqual(["companionship", "entertainment"]);
   });
 
   it("is reproducible given the same seed", () => {
@@ -100,51 +95,48 @@ describe("pairUsesWithMotivations", () => {
       pairUsesWithMotivations(
         cycle(40),
         allocateUniform(SeedUse.list, 40, makeRng(3)),
-        likelihood,
+        mask,
         makeRng(4)
       );
     expect(run()).toEqual(run());
   });
 
   it("rejects mismatched lengths", () => {
-    expect(() =>
-      pairUsesWithMotivations(["a"], [], likelihood, makeRng(0))
-    ).toThrow(/1 motivations for 0 uses/);
+    expect(() => pairUsesWithMotivations(["a"], [], mask, makeRng(0))).toThrow(
+      /1 motivations for 0 uses/
+    );
   });
 });
 
-describe("allocateSeedAssignments with use likelihood", () => {
+describe("allocateSeedAssignments with the use mask", () => {
   const risk = RiskCategory.listAll()[0]!.risks[0]!;
   const distribution = populationDistributionPresets["us-census-2023"]!;
-  const allocate = (useLikelihood?: MotivationUseLikelihood) =>
+  const allocate = (useMask?: MotivationUseMask) =>
     allocateSeedAssignments({
       risk,
       distribution,
       motivations,
       total: 75,
       rng: makeRng(11),
-      useLikelihood,
+      useMask,
     });
 
   it("changes only which seed gets which use", () => {
     const strip = (a: SeedAssignment) => R.omit(a, ["use"]);
     const before = allocate();
-    const after = allocate(likelihood);
+    const after = allocate(mask);
 
     expect(after.map(strip)).toEqual(before.map(strip));
     expect(R.countBy(after, a => a.use)).toEqual(R.countBy(before, a => a.use));
     expect(after.map(a => a.use)).not.toEqual(before.map(a => a.use));
   });
 
-  it("pairs no motivation with an incompatible use", () => {
+  it("pairs no motivation with a forbidden use", () => {
+    const after = allocate(mask);
     expect(
-      allocate(likelihood).filter(
-        a =>
-          MotivationUseLikelihood.score(
-            likelihood,
-            a.motivation.name,
-            a.use
-          ) === 0
+      forbidden(
+        after.map(a => a.motivation.name),
+        after.map(a => a.use)
       )
     ).toEqual([]);
   });

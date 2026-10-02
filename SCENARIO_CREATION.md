@@ -86,7 +86,7 @@ Consequences worth understanding:
 - **The joint distribution is the product of marginals in expectation.** No
   dimension depends on another, so real-world correlations (e.g. between SES and
   race/ethnicity) are deliberately _not_ reproduced, and some combinations will
-  be unusual. The one exception is motivation × use, paired by likelihood (see
+  be unusual. The one exception is motivation × use, constrained by a mask (see
   [Motivation × use pairing](#motivation--use-pairing)); nothing filters or
   repairs any other combination today.
 - Balance holds **per risk**, and therefore across the corpus.
@@ -146,10 +146,16 @@ bias the corpus once repeated per risk: 10 seeds over 3 signal types would give
 
 #### Motivation × use pairing
 
-Some motivations do not fit some uses (a child seeking peer validation did not
-open the assistant for health advice). `packages/benchmark/data/motivationUseLikelihood.json`
-scores each pairing from 0 (incompatible) to 5 (typical); a motivation or
-pairing it does not list scores a neutral 3.
+Some motivations do not fit some uses (a child looking for a shortcut did not
+open the assistant for companionship). `packages/benchmark/data/motivationUseMask.json`
+marks each pairing as allowed (`true`) or forbidden (`false`); a motivation or
+pairing it does not list is allowed. It is the V3.0 mask
+(`motivation_use_mask_v3.0.csv`), which forbids three pairings:
+
+| Motivation                    | Forbidden uses                   |
+| ----------------------------- | -------------------------------- |
+| Identity Exploration          | `homework`                       |
+| Efficiency / Shortcut Seeking | `entertainment`, `companionship` |
 
 `pairUsesWithMotivations()` (`allocation/pairUsesWithMotivations.ts`) applies
 it **after** both dimensions are allocated, by reordering the uses among the
@@ -159,15 +165,17 @@ seeds of the risk:
   uses, so each use and each motivation keeps exactly the number of seeds it
   had. Only _which_ seed gets which use changes, and `use` stays independent of
   every dimension other than motivation.
-- Among all permutations, one is drawn with probability proportional to the
-  product of its pairings' scores (a Metropolis walk over swaps of two seeds'
-  uses). Typical pairings become more frequent and unlikely ones rarer.
-- Score-0 pairings are removed whenever the counts allow it. When they do not
+- Among the permutations with no forbidden pairing, one is drawn uniformly (a
+  Metropolis walk over swaps of two seeds' uses). Allowed pairings are not
+  ranked: none is favoured over another.
+- Forbidden pairings are removed whenever the counts allow it. When they do not
   (very few seeds, or `--motivations` narrowed to one that fits few uses), the
-  counts win and the unavoidable incompatible pairings stay.
+  counts win and the unavoidable forbidden pairings stay.
 
-With the bundled scores at 75 seeds per risk, the corpus goes from 6%
-incompatible pairings to none, and the mean score from 2.85 to 3.23.
+The V3.0 pipeline draws the motivation uniformly among those allowed for the
+seed's use; reordering the uses instead reaches the same pairings while keeping
+the even per-risk counts of both dimensions. At 75 seeds per risk, about 5% of
+pairings would be forbidden without it, and none are with it.
 
 ### 5. Scenario flavor — largest-remainder, when the risk defines one
 
@@ -225,6 +233,8 @@ With situation types, the risk's private seeds are spread over them
 (`selectPrivateIndicesByGroup`): each situation type of each gold standard
 holds out its own 30%, to within one seed (largest remainder, the leftover
 seeds drawn at random), and the seeds are drawn uniformly within the type. A
+type never holds out its last public seed, so that every situation type stays
+present in the public seeds: a type with a single seed keeps it public. A
 risk without situation types falls back to `selectPrivateIndices`: a uniformly
 random subset of the risk's seeds.
 

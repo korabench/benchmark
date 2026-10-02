@@ -11,13 +11,15 @@ supplied (no `--taxonomy` / `--behaviors` flag, no `Packs.configure()`, no
 | `behaviors.json`   | Behavior set — the 7 cross-cutting behaviors (V2 mechanisms M1–M7). Full `BehaviorSet` shape.                           |
 | `motivations.json` | Seed-generation motivations. Bare array.                                                                                |
 
-`motivationUseLikelihood.json` also lives here but is **not part of the pack**:
-it is seed-generation input, loaded by `src/model/motivationUseLikelihood.ts`,
-and editing it does not change the pack stamp on results. It scores how likely
-each bundled motivation is to go with each seed `use`, from 0 (incompatible,
-never paired when avoidable) to 5 (typical); anything unlisted scores a neutral 3. It decides which motivation is paired with which use, never how many seeds
-each receives. Keys are motivation names from `motivations.json` and `use`
-values from `src/model/scenarioSeed.ts`.
+`motivationUseMask.json` also lives here but is **not part of the pack**: it is
+seed-generation input, loaded by `src/model/motivationUseMask.ts`, and editing
+it does not change the pack stamp on results. It says whether each bundled
+motivation can go with each seed `use`: `true` when allowed, `false` when the
+pairing is never made (when avoidable); anything unlisted is allowed. It decides
+which motivation is paired with which use, never how many seeds each receives.
+Keys are motivation names from `motivations.json` and `use` values from
+`src/model/scenarioSeed.ts`. Data source: `motivation_use_mask_v3.0.csv` of the
+V3.0 pipeline inputs.
 
 `situationTypes.json` is seed-generation input too, loaded by
 `src/model/situationTypes.ts`, and likewise outside the pack. For each bundled

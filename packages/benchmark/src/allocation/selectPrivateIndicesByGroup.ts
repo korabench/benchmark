@@ -1,6 +1,37 @@
+import * as R from "remeda";
 import {largestRemainderCounts} from "./largestRemainder.js";
 import {shuffleWith} from "./rng.js";
 import {privateCount} from "./selectPrivateIndices.js";
+
+/**
+ * Keep one public seed in every group: a group whose seeds would all be private
+ * gives one back to the group furthest below its own share that can take it
+ * without emptying its public side either. Nothing moves when no group has
+ * that room (a ratio of 1, say).
+ */
+function keepOnePublic(
+  counts: Readonly<Record<string, number>>,
+  sizes: Readonly<Record<string, number>>,
+  ratio: number
+): Readonly<Record<string, number>> {
+  const keys = Object.keys(counts);
+  const full = keys.find(key => counts[key]! > 0 && counts[key] === sizes[key]);
+  const receiver = keys
+    .filter(key => counts[key]! < sizes[key]! - 1)
+    .reduce<
+      string | undefined
+    >((best, key) => (best === undefined || sizes[key]! * ratio - counts[key]! > sizes[best]! * ratio - counts[best]! ? key : best), undefined);
+  if (full === undefined || receiver === undefined) return counts;
+  return keepOnePublic(
+    {
+      ...counts,
+      [full]: counts[full]! - 1,
+      [receiver]: counts[receiver]! + 1,
+    },
+    sizes,
+    ratio
+  );
+}
 
 /**
  * Pick which seeds are held out as private, spread evenly over groups.
@@ -13,7 +44,8 @@ import {privateCount} from "./selectPrivateIndices.js";
  * seeds are drawn uniformly within it.
  *
  * So the overall count is fixed, and every group holds out its own `ratio`, to
- * within one seed.
+ * within one seed. The one exception keeps every group visible in the public
+ * seeds: a group never holds out its last public seed (see `keepOnePublic`).
  */
 export function selectPrivateIndicesByGroup(
   groupKeys: readonly string[],
@@ -34,12 +66,17 @@ export function selectPrivateIndicesByGroup(
   }, new Map<string, number[]>());
 
   const count = privateCount(total, ratio);
-  const counts = largestRemainderCounts(
-    Object.fromEntries(
-      [...indicesByGroup].map(([key, indices]) => [key, indices.length / total])
+  const sizes = Object.fromEntries(
+    [...indicesByGroup].map(([key, indices]) => [key, indices.length])
+  );
+  const counts = keepOnePublic(
+    largestRemainderCounts(
+      R.mapValues(sizes, size => size / total),
+      count,
+      rng
     ),
-    count,
-    rng
+    sizes,
+    ratio
   );
 
   return new Set(
