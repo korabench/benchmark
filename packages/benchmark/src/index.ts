@@ -5,6 +5,7 @@ export * from "./allocation/allocatePersonas.js";
 export * from "./allocation/allocateSeedAssignments.js";
 export * from "./allocation/allocateSituations.js";
 export * from "./allocation/allocateUniform.js";
+export * from "./allocation/balancePrivateIndices.js";
 export * from "./allocation/largestRemainder.js";
 export * from "./allocation/rng.js";
 export * from "./allocation/selectPrivateIndices.js";

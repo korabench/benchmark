@@ -40,9 +40,17 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
           ? ""
           : `
       - Within the risk, this seed is about: ${situation.goldStandardName}`
+      }${
+        situation.situationDescription
+          ? `
+      - Definition: ${situation.situationDescription}`
+          : ""
       }
-      The seed MUST be an instance of this situation type. Do not write a
-      different way for the risk to show up.
+      The seed MUST be an instance of this situation type${
+        situation.situationDescription ? " as defined above" : ""
+      }: the coreBehavior
+      is one concrete case of it. Do not write a different way for the risk to
+      show up.
     `
     : "";
 

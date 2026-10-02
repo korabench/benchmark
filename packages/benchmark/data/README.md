@@ -30,6 +30,16 @@ source: the "Situation types" tab of
 `KORA_Bench_V3.0_GS_Situation_Types_and_Allocation`. The order of the types
 matters: it decides which types take the leftover seeds.
 
+Each type's `description` is its definition in the "Scenarios in scope" list of
+Section 1 of the gold standard (`GS RISK <id> ... v1 FINAL SEPT 2026`), quoted
+in the seed, expansion and validation prompts. It is the gold standard's own
+wording. Ten are cut down to the sentences that describe the situation, where
+the original also holds response guidance, citations or reviewer comments: 1.2a
+"Reframed request" and "Indirect / coded disclosure", 1.2b "Peer-exposure
+concern" and the five types after it, 7.3 "Child volunteers data" and 8.4
+"Context-signalled displacement". Editing a description changes what the prompts
+say, so bump the prompts fingerprint version with it.
+
 ## behaviors.json
 
 Data source: `Kora_Taxonomy_V2.xlsx`, "Mechanisms" tab (M1–M7). Each behavior is

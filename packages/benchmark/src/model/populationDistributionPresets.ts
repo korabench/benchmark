@@ -11,8 +11,13 @@ export const populationDistributionPresets: Record<
   string,
   PopulationDistribution
 > = {
-  "us-census-2023": {
-    name: "US Census 2023 (children 7-17)",
+  // US children aged 7 to 17. Age band, gender and race/ethnicity: 2020 Census
+  // (race/ethnicity over the population under 18, not the whole population).
+  // SES: family income relative to the federal poverty threshold, children
+  // 0-17, from America's Children 2023, indicator ECON1.B (2021 data): low is
+  // below 200%, middle 200-399%, high 400% and above.
+  "us-children-2020": {
+    name: "US children 7-17 (2020 Census; family income: America's Children 2023)",
     ageRange: {"7to9": 0.2648, "10to12": 0.2691, "13to17": 0.4661},
     gender: {girl: 0.488, boy: 0.512},
     ses: {low: 0.35, middle: 0.29, high: 0.36},

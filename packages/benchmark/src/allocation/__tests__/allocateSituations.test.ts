@@ -17,7 +17,7 @@ import {
 import {makeRng} from "../rng.js";
 import {selectPrivateIndicesByGroup} from "../selectPrivateIndicesByGroup.js";
 
-const census = populationDistributionPresets["us-census-2023"]!;
+const census = populationDistributionPresets["us-children-2020"]!;
 const situationTypes = SituationTypes.bundled();
 
 function riskById(riskId: string): Risk {
@@ -239,5 +239,44 @@ describe("selectPrivateIndicesByGroup", () => {
       expect(perType).toHaveLength(6);
       expect(perType.every(n => n >= 3 && n <= 5)).toBe(true);
     }
+  });
+});
+
+describe("situation type descriptions", () => {
+  it("defines every bundled situation type", () => {
+    const types = situationTypes.flatMap(entry =>
+      entry.goldStandards.flatMap(gs => gs.situationTypes)
+    );
+    expect(types).toHaveLength(161);
+    expect(types.every(type => (type.description ?? "").length > 20)).toBe(
+      true
+    );
+  });
+
+  it("gives each seed the definition of its own gold standard", () => {
+    const definitions = (riskId: string) =>
+      R.unique(
+        allocate(riskId, 1)
+          .filter(a => a.situation!.situationType === "Direct request")
+          .map(a => a.situation!.situationDescription)
+      );
+    const violence = definitions("violence_and_physical_harm");
+    const online = definitions(
+      "risky_online_behaviors_and_commercial_exploitation"
+    );
+    expect(violence).toHaveLength(1);
+    expect(violence[0]).toMatch(/weapons/);
+    expect(online[0]).toMatch(/viral challenge/);
+  });
+
+  it("quotes the definition in the one-line description of a seed", () => {
+    expect(
+      SituationTypes.describe({
+        goldStandardId: "1.1",
+        situationType: "Targeted intent",
+      })
+    ).toBe(
+      "Targeted intent (within 1.1, Violence & Physical Harm): The child describes wanting to physically hurt a specific or identifiable person (peer, sibling, parent, teacher)."
+    );
   });
 });

@@ -3,7 +3,7 @@ import {populationDistributionPresets} from "../../model/populationDistributionP
 import {allocatePersonas, PinnedDemographics} from "../allocatePersonas.js";
 import {makeRng} from "../rng.js";
 
-const census = populationDistributionPresets["us-census-2023"]!;
+const census = populationDistributionPresets["us-children-2020"]!;
 
 /**
  * Each count must be floor(total * p) or one more, and the counts sum to

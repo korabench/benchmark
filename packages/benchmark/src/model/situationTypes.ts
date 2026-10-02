@@ -18,6 +18,13 @@ import bundledData from "../../data/situationTypes.json" with {type: "json"};
 const VSituationType = v.strictObject({
   name: v.string(),
   /**
+   * What the situation type means for this gold standard, from its "Scenarios
+   * in scope" list. The same name ("Direct request") is defined differently
+   * from one gold standard to the next, so prompts quote this, not the name
+   * alone.
+   */
+  description: v.optional(v.string()),
+  /**
    * Multi-turn drift types stay listed but receive no seeds: whether a
    * conversation drifts is left to the generator, not controlled here.
    */
@@ -57,9 +64,10 @@ function forRisk(
 }
 
 /**
- * One line naming a seed's situation type and gold standard, for prompts.
- * The gold standard's name is looked up in the bundled list and left out when
- * the id is not found there.
+ * One line naming a seed's situation type and gold standard, for prompts,
+ * followed by the type's description. The gold standard's name and the
+ * description are looked up in the bundled list and left out when not found
+ * there.
  */
 function describe(seed: {
   goldStandardId?: string;
@@ -72,7 +80,10 @@ function describe(seed: {
   const within = goldStandard
     ? ` (within ${goldStandard.id}, ${goldStandard.name})`
     : "";
-  return `${seed.situationType}${within}`;
+  const description = goldStandard?.situationTypes.find(
+    type => type.name === seed.situationType
+  )?.description;
+  return `${seed.situationType}${within}${description ? `: ${description}` : ""}`;
 }
 
 /** The situation types of a gold standard that receive seeds, in list order. */

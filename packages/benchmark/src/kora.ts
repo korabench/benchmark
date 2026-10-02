@@ -10,6 +10,7 @@ import {
   allocateSeedAssignments,
   SeedAssignment,
 } from "./allocation/allocateSeedAssignments.js";
+import {balancePrivateIndices} from "./allocation/balancePrivateIndices.js";
 import {makeRng} from "./allocation/rng.js";
 import {selectPrivateIndices} from "./allocation/selectPrivateIndices.js";
 import {selectPrivateIndicesByGroup} from "./allocation/selectPrivateIndicesByGroup.js";
@@ -258,27 +259,60 @@ export const kora = Benchmark.new({
 
     // The private split draws only once every risk is allocated, so that it
     // never changes which assignments a given random seed produces.
-    const tasks: Task[] = allocations.flatMap<Task>(
+    const firstPick = allocations.flatMap(
       ({riskCategory, risk, assignments}) => {
         // With situation types, the risk's private seeds are spread evenly
         // over the situation types of its gold standards.
-        const privateIndices = assignments.every(a => a.situation)
-          ? selectPrivateIndicesByGroup(
-              assignments.map(
-                a =>
-                  `${a.situation!.goldStandardId}|${a.situation!.situationType}`
-              ),
-              privateRatio,
-              rng
-            )
+        const hasSituations = assignments.every(a => a.situation);
+        const situationKeys = assignments.map(a =>
+          hasSituations
+            ? `${a.situation!.goldStandardId}|${a.situation!.situationType}`
+            : ""
+        );
+        const privateIndices = hasSituations
+          ? selectPrivateIndicesByGroup(situationKeys, privateRatio, rng)
           : selectPrivateIndices(assignments.length, privateRatio, rng);
         return assignments.map((assignment, i) => ({
           riskCategory,
           risk,
           assignment,
+          swapKey: `${risk.id}|${situationKeys[i]!}`,
           isPrivate: privateIndices.has(i),
         }));
       }
+    );
+
+    // Which seeds are private is then evened out over the whole corpus, so
+    // that public and private seeds follow the same distribution on every
+    // dimension. Seeds only trade places within a risk's situation type (or
+    // within the risk, without situation types), which keeps the counts above.
+    const privateIndices = balancePrivateIndices({
+      privateIndices: new Set(
+        firstPick.flatMap((task, i) => (task.isPrivate ? [i] : []))
+      ),
+      swapKeys: firstPick.map(task => task.swapKey),
+      values: firstPick.map(({assignment: a}) => [
+        `ageRange:${a.ageRange}`,
+        `childAge:${a.childAge}`,
+        `childGender:${a.childGender}`,
+        `childRaceEthnicity:${a.childRaceEthnicity}`,
+        `childSES:${a.childSES}`,
+        `motivation:${a.motivation.name}`,
+        `socialContext:${a.socialContext}`,
+        `riskSignalType:${a.riskSignalType}`,
+        `use:${a.use}`,
+        `refusalBehavior:${a.refusalBehavior}`,
+        ...(a.flavor ? [`flavor:${a.flavor.id}`] : []),
+      ]),
+      rng,
+    });
+    const tasks: Task[] = firstPick.map(
+      ({riskCategory, risk, assignment}, i) => ({
+        riskCategory,
+        risk,
+        assignment,
+        isPrivate: privateIndices.has(i),
+      })
     );
 
     yield {total: tasks.length, items: []};

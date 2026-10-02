@@ -61,7 +61,7 @@ assignments per risk (default 75):
 
 1. **Personas.** `allocatePersonas()` converts each demographic dimension (age
    band, gender, SES, race/ethnicity) of the `--distribution` population
-   (default `us-census-2023`) to integer counts with the largest-remainder
+   (default `us-children-2020`) to integer counts with the largest-remainder
    (Hamilton) method, expands each into a flat array and shuffles it.
 2. **Exact age**, spread evenly over the years of each seed's band.
 3. **Motivation**, as a shuffled round-robin (`motivationCycle[i % length]`).
@@ -275,7 +275,7 @@ demographics for the same `--random-seed`, plus the newer dimensions — see
 
 ```bash
 yarn kora generate-seeds <chain> \
-  --distribution us-census-2023 --total-seeds 30 --random-seed 42
+  --distribution us-children-2020 --total-seeds 30 --random-seed 42
 
 yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limited" \
   "deepseek-v3.2,gpt-4o:extended,gemini-2.5-flash:limited"

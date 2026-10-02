@@ -71,7 +71,7 @@ yarn kora generate-seeds gpt-4o --total-seeds 75 --random-seed 42
 ```
 
 produces **exactly `--total-seeds` seeds per risk** (default 75), against the
-`--distribution` population (default `us-census-2023`).
+`--distribution` population (default `us-children-2020`).
 
 ## Allocation
 
@@ -107,15 +107,19 @@ Consequences worth understanding:
 `--age-ranges` restricts the age dimension and **renormalizes** the remaining
 bands so they still sum to 1; the other three dimensions are untouched.
 
-The `us-census-2023` preset
+The `us-children-2020` preset
 (`packages/benchmark/src/model/populationDistributionPresets.ts`):
 
-| Dimension      | Proportions                                              |
-| -------------- | -------------------------------------------------------- |
-| Age band       | `7to9` .2648, `10to12` .2691, `13to17` .4661             |
-| Gender         | girl .50, boy .50                                        |
-| SES            | low .28, middle .46, high .26                            |
-| Race/ethnicity | white .51, hispanic .25, black .13, asian .05, other .06 |
+| Dimension      | Proportions                                                   | Source                                                                                                                                      |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Age band       | `7to9` .2648, `10to12` .2691, `13to17` .4661                  | 2020 Census, population by 5-year age group, taken as even within each group                                                                |
+| Gender         | girl .488, boy .512                                           | 2020 Census, population under 18                                                                                                            |
+| SES            | low .35, middle .29, high .36                                 | America's Children 2023, indicator ECON1.B (2021 data): family income below 200% of the federal poverty threshold, 200–399%, 400% and above |
+| Race/ethnicity | white .473, hispanic .257, black .132, asian .053, other .085 | 2020 Census, population under 18 (not the whole population)                                                                                 |
+
+The preset describes US children aged 7 to 17. Its name carries the year of the
+census behind age, gender and race/ethnicity; only the SES shares come from a
+later source.
 
 Pass a JSON file path instead of a preset name for a custom distribution; every
 dimension is validated to sum to 1.0 at load time.
@@ -218,11 +222,21 @@ deterministically (largest remainder first), giving 20 / 20 / 35 at 75 seeds and
 6 / 7 / 12 at 25. At the default 75 seeds per risk the result is, row for row,
 the `gs_situation_allocation_v3.0` table (1,950 seeds over 134 situation types).
 
-The seed stores `goldStandardId` and `situationType`, and both the seed and the
-expansion prompts pin the situation type. A risk absent from
+Each situation type carries a `description`: its definition in the "Scenarios
+in scope" list of Section 1 of its gold standard. The same name is defined
+differently from one gold standard to the next ("Direct request" is about
+weapons and stunts in 1.1, about viral challenges and in-game spending in 7.1),
+so the prompts quote the definition, not the name alone. The definitions are the
+gold standards' wording, cut down to the sentences that describe the situation
+where the original also carries response guidance or citations (1.2a, 1.2b, 7.3,
+8.4).
+
+The seed stores `goldStandardId` and `situationType`. The seed prompt pins the
+situation type with its definition, and `coreBehavior` must be one concrete case
+of it; the expansion and validation prompts quote the same definition. A risk absent from
 `situationTypes.json` (a custom taxonomy) gets no situation type.
 
-### 8. Private split — a random 30% per risk, spread over situation types
+### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
 
 Once every risk is allocated, 30% of each risk's seeds are marked private
 (`--private-ratio`, default 0.3). The count is rounded to the nearest
@@ -237,6 +251,21 @@ type never holds out its last public seed, so that every situation type stays
 present in the public seeds: a type with a single seed keeps it public. A
 risk without situation types falls back to `selectPrivateIndices`: a uniformly
 random subset of the risk's seeds.
+
+That first pick is random within a situation type, so on its own it lets the
+other dimensions drift between the public and the private seeds. Once every
+risk has its pick, the split is evened out over the whole corpus
+(`balancePrivateIndices`): a private and a public seed of the same situation
+type of the same risk (of the same risk, without situation types) trade places
+whenever that brings the private seeds closer to the overall private share on
+every dimension value at once — age band, exact age, gender, race/ethnicity,
+SES, motivation, social context, risk signal type, use, refusal behavior and
+flavor. The trades stop when none helps. Each value then holds out its 30%
+(30.67% at 75 per risk) to within about one seed over the full corpus, so
+public and private seeds follow the same distribution. Trading within a
+situation type leaves the counts per risk and per situation type untouched.
+The balance holds over the corpus, not inside each risk: 23 private seeds
+cannot carry 30% of each of 10 motivations.
 
 The split only labels assignments, it does not change them: the dimensions
 above keep their exact counts over public and private seeds together.
@@ -260,7 +289,7 @@ situation types last, so adding a dimension does not disturb the draws before
 it. Seeds generated before the age bands rounded deterministically do not
 reproduce from the same `--random-seed`.
 
-### Worked example — `--total-seeds 75` (the default), `us-census-2023`
+### Worked example — `--total-seeds 75` (the default), `us-children-2020`
 
 | Dimension        | Counts per risk                                                   |
 | ---------------- | ----------------------------------------------------------------- |
@@ -275,7 +304,7 @@ reproduce from the same `--random-seed`.
 | Use              | 12–13 each                                                        |
 | Refusal behavior | 25 each                                                           |
 | Situation type   | 75 ÷ the gold standard's types, per age band (e.g. 15 each of 5)  |
-| Private          | 23, spread over the situation types                               |
+| Private          | 23, spread over the situation types, balanced over the corpus     |
 
 Where a range is shown, the rounding remainder is drawn at random per risk (see
 above), so each risk sums to exactly 75 and the corpus averages to the target.

@@ -7,6 +7,8 @@ export interface SeedSituation {
   goldStandardId: string;
   goldStandardName: string;
   situationType: string;
+  /** What the situation type means for this gold standard, when listed. */
+  situationDescription?: string;
 }
 
 /**
@@ -105,9 +107,18 @@ export function allocateSituations(
     })
   );
 
-  return ageRanges.map((_, i) => ({
-    goldStandardId: goldStandard.id,
-    goldStandardName: goldStandard.name,
-    situationType: typeByIndex.get(i)!,
-  }));
+  const descriptions = new Map(
+    types.map(type => [type.name, type.description] as const)
+  );
+
+  return ageRanges.map((_, i) => {
+    const situationType = typeByIndex.get(i)!;
+    const situationDescription = descriptions.get(situationType);
+    return {
+      goldStandardId: goldStandard.id,
+      goldStandardName: goldStandard.name,
+      situationType,
+      ...(situationDescription ? {situationDescription} : {}),
+    };
+  });
 }

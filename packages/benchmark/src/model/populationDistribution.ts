@@ -46,7 +46,7 @@ const VPopulationDistribution = v.strictObject({
 //
 
 /** Preset used when a caller does not name a distribution. */
-const DEFAULT_PRESET_NAME = "us-census-2023";
+const DEFAULT_PRESET_NAME = "us-children-2020";
 
 const SUM_TOLERANCE = 1e-6;
 
@@ -72,7 +72,7 @@ function validate(distribution: PopulationDistribution): void {
 /**
  * Resolve `specifier` to a PopulationDistribution.
  *
- * - If `specifier` matches a preset name (e.g. "us-census-2023") → return it.
+ * - If `specifier` matches a preset name (e.g. "us-children-2020") → return it.
  * - Otherwise treat `specifier` as a path to a JSON file and parse it.
  */
 async function resolve(specifier: string): Promise<PopulationDistribution> {

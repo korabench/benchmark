@@ -63,7 +63,7 @@ async function collectSeeds(
   return seeds;
 }
 
-const census = populationDistributionPresets["us-census-2023"]!;
+const census = populationDistributionPresets["us-children-2020"]!;
 const privacy = "privacy_and_personal_data_protection";
 const riskCount = RiskCategory.listAll().flatMap(c => c.risks).length;
 
@@ -175,7 +175,7 @@ describe("generateScenarioSeeds filters", () => {
 
     expect(DEFAULT_TOTAL_SEEDS).toBe(75);
     expect(seeds).toHaveLength(75);
-    // us-census-2023 at 75: each count is floor(75 * p) or one more.
+    // us-children-2020 at 75: each count is floor(75 * p) or one more.
     const ages = R.countBy(seeds, s => s.ageRange);
     expect([20, 21]).toContain(ages["7to9"]);
     expect([20, 21]).toContain(ages["10to12"]);
@@ -435,6 +435,49 @@ describe("generateScenarioSeeds dimension allocation", () => {
     );
     expect(Object.keys(privateCounts)).toHaveLength(riskCount);
     expect(R.unique(Object.values(privateCounts))).toEqual([23]);
+  });
+
+  it("gives public and private seeds the same distribution on every dimension", async () => {
+    const seeds: {seed: ScenarioSeed; isPrivate: boolean}[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+      totalSeeds: 75,
+      randomSeed: 3,
+    })) {
+      seeds.push(
+        ...event.items.map(seed => ({seed, isPrivate: event.private === true}))
+      );
+    }
+    const share = seeds.filter(s => s.isPrivate).length / seeds.length;
+    const dimensions: ((seed: ScenarioSeed) => string | number | undefined)[] =
+      [
+        s => s.ageRange,
+        s => s.childAge,
+        s => s.childGender,
+        s => s.childRaceEthnicity,
+        s => s.childSES,
+        s => s.motivation.name,
+        s => s.socialContext,
+        s => s.riskSignalType,
+        s => s.use,
+        s => s.refusalBehavior,
+      ];
+
+    const gaps = dimensions.flatMap(dimension =>
+      Object.values(R.groupBy(seeds, s => String(dimension(s.seed)))).map(
+        group =>
+          Math.abs(group.filter(s => s.isPrivate).length - group.length * share)
+      )
+    );
+    // Every value holds out the overall private share, to within two seeds.
+    expect(Math.max(...gaps)).toBeLessThan(2);
+
+    // Every situation type keeps a public seed.
+    const publicBySituation = R.pipe(
+      seeds,
+      R.groupBy(s => `${s.seed.goldStandardId}|${s.seed.situationType}`),
+      R.mapValues(group => group.filter(s => !s.isPrivate).length)
+    );
+    expect(Math.min(...Object.values(publicBySituation))).toBeGreaterThan(0);
   });
 
   it("keeps every seed public at privateRatio 0, with the same assignments", async () => {

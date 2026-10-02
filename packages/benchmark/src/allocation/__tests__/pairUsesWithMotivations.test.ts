@@ -110,7 +110,7 @@ describe("pairUsesWithMotivations", () => {
 
 describe("allocateSeedAssignments with the use mask", () => {
   const risk = RiskCategory.listAll()[0]!.risks[0]!;
-  const distribution = populationDistributionPresets["us-census-2023"]!;
+  const distribution = populationDistributionPresets["us-children-2020"]!;
   const allocate = (useMask?: MotivationUseMask) =>
     allocateSeedAssignments({
       risk,
