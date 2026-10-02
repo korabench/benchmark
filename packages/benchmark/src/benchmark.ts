@@ -55,16 +55,30 @@ export interface TestContext {
 export interface GenerationEvent<T> {
   total: number;
   items: readonly T[];
+  /**
+   * True when `items` are held out as private: they must be stored apart from
+   * the public items and never published.
+   */
+  private?: boolean;
 }
 
 export interface GenerateSeedsOptions {
-  seedsPerTask?: number;
+  /** Seeds to generate per risk. Defaults to `DEFAULT_TOTAL_SEEDS`. */
   totalSeeds?: number;
+  /** Restricts and renormalizes the age dimension of `distribution`. */
   ageRanges?: AgeRange[];
   riskIds?: readonly string[];
+  /** Restricts the motivations seeds are spread over. */
   motivations?: readonly string[];
+  /** Target population. Defaults to `PopulationDistribution.default()`. */
   distribution?: PopulationDistribution;
+  /** Makes every allocation reproducible. */
   randomSeed?: number;
+  /**
+   * Share of each risk's seeds held out as private, between 0 and 1. Defaults
+   * to `DEFAULT_PRIVATE_RATIO`; 0 keeps every seed public.
+   */
+  privateRatio?: number;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {

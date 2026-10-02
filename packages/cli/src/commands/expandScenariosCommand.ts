@@ -12,6 +12,7 @@ import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import * as R from "remeda";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
@@ -31,6 +32,7 @@ import {
   hasCachedFiles,
   listCachedFiles,
 } from "./shared/cacheStamp.js";
+import {isPrivatePath, privatePathFor} from "./shared/privatePath.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
 
@@ -49,16 +51,43 @@ async function* readSeedsFromJsonl(
   }
 }
 
-async function countSeeds(
-  filePath: string,
+/** The seeds of every file in turn. */
+async function* readSeedsFromFiles(
+  filePaths: readonly string[],
   riskIdFilter?: ReadonlySet<string>
-): Promise<number> {
-  let count = 0;
-  for await (const seed of readSeedsFromJsonl(filePath, riskIdFilter)) {
-    void seed;
-    count++;
+): AsyncGenerator<ScenarioSeed> {
+  for (const filePath of filePaths) {
+    yield* readSeedsFromJsonl(filePath, riskIdFilter);
   }
-  return count;
+}
+
+async function readSeedIds(
+  filePaths: readonly string[],
+  riskIdFilter?: ReadonlySet<string>
+): Promise<string[]> {
+  const ids: string[] = [];
+  for await (const seed of readSeedsFromFiles(filePaths, riskIdFilter)) {
+    ids.push(seed.id);
+  }
+  return ids;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return fs.access(filePath).then(
+    () => true,
+    () => false
+  );
+}
+
+/**
+ * The private seed files read along with `seedsFilePath`: the file itself when
+ * it is private, else its private sibling when there is one.
+ */
+async function privateSeedFiles(seedsFilePath: string): Promise<string[]> {
+  const privatePath = privatePathFor(seedsFilePath);
+  return isPrivatePath(seedsFilePath) || (await fileExists(privatePath))
+    ? [privatePath]
+    : [];
 }
 
 export async function expandScenariosCommand(
@@ -77,10 +106,25 @@ export async function expandScenariosCommand(
     `Expanding scenarios using ${chainLabel(roles.expansion)} (user: ${chainLabel(roles.expansionUser)})...`
   );
   const riskIdFilter = resolveRiskIdFilter(riskIds);
-  const seedCount = await assertInputConforms(seedsFilePath, "seeds");
-  console.log(
-    `Validated ${seedCount} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  // Private seeds expand into private scenarios: both stay out of the published
+  // corpus, in files git ignores.
+  const privateSeedPaths = await privateSeedFiles(seedsFilePath);
+  const seedPaths = R.unique([seedsFilePath, ...privateSeedPaths]);
+  const privateOutputFilePath = privatePathFor(outputFilePath);
+  const seedCounts = await Promise.all(
+    seedPaths.map(filePath => assertInputConforms(filePath, "seeds"))
   );
+  console.log(
+    `Validated ${R.sum(seedCounts)} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
+  const privateSeedIds = new Set(
+    await readSeedIds(privateSeedPaths, riskIdFilter)
+  );
+  if (privateSeedPaths.length > 0) {
+    console.log(
+      `Private seeds: ${privateSeedIds.size} from ${privateSeedPaths.join(", ")} → ${privateOutputFilePath} (git-ignored)`
+    );
+  }
   const stamp = await buildRunStamp({
     effective,
     modelsJsonPath,
@@ -115,12 +159,15 @@ export async function expandScenariosCommand(
   if (!(await hasCachedFiles(tempDir))) {
     await fs.mkdir(outputDir, {recursive: true});
     await fs.writeFile(outputFilePath, "");
+    if (privateSeedPaths.length > 0) {
+      await fs.writeFile(privateOutputFilePath, "");
+    }
   }
 
   await fs.mkdir(tempDir, {recursive: true});
   await assertResumable(tempDir, stamp);
 
-  const totalSeeds = await countSeeds(seedsFilePath, riskIdFilter);
+  const totalSeeds = (await readSeedIds(seedPaths, riskIdFilter)).length;
   const progress = Script.progress(totalSeeds, text =>
     process.stdout.write(text)
   );
@@ -188,7 +235,7 @@ export async function expandScenariosCommand(
 
         throw lastError;
       },
-      readSeedsFromJsonl(seedsFilePath, riskIdFilter)
+      readSeedsFromFiles(seedPaths, riskIdFilter)
     )
   );
 
@@ -205,19 +252,36 @@ export async function expandScenariosCommand(
   // Build final output from temp files.
   await fs.mkdir(outputDir, {recursive: true});
   const tempFiles = await listCachedFiles(tempDir);
-  let scenarioCount = 0;
+  let publicCount = 0;
+  let privateCount = 0;
 
   await fs.writeFile(outputFilePath, "");
+  if (privateSeedPaths.length > 0) {
+    await fs.writeFile(privateOutputFilePath, "");
+  }
   for (const file of tempFiles) {
     const content = await fs.readFile(path.join(tempDir, file), "utf-8");
     const scenarios = JSON.parse(content) as Scenario[];
     for (const scenario of scenarios) {
-      await fs.appendFile(outputFilePath, JSON.stringify(scenario) + "\n");
-      scenarioCount++;
+      const isPrivate = privateSeedIds.has(scenario.seed.id);
+      await fs.appendFile(
+        isPrivate ? privateOutputFilePath : outputFilePath,
+        JSON.stringify(scenario) + "\n"
+      );
+      if (isPrivate) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
     }
   }
 
   await fs.rm(tempDir, {recursive: true, force: true});
 
-  console.log(`\nExpanded ${scenarioCount} scenarios → ${outputFilePath}`);
+  console.log(
+    privateOutputFilePath === outputFilePath || privateCount === 0
+      ? `\nExpanded ${publicCount + privateCount} scenarios → ${outputFilePath}`
+      : `\nExpanded ${publicCount} public scenarios → ${outputFilePath}\n` +
+          `Expanded ${privateCount} private scenarios → ${privateOutputFilePath}`
+  );
 }

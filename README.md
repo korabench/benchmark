@@ -45,12 +45,12 @@ yarn kora run gpt-4o
 
 These apply to every command and must be given before the command name:
 
-| Option                     | Description                                                                                       |
-| -------------------------- | --------------------------------------------------------------------------------------------------- |
-| `--taxonomy <name\|path>`  | Risk taxonomy pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_TAXONOMY`     |
-| `--behaviors <name\|path>` | Behavior pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_BEHAVIORS`         |
+| Option                     | Description                                                                                                                                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--taxonomy <name\|path>`  | Risk taxonomy pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_TAXONOMY`                                                                                                              |
+| `--behaviors <name\|path>` | Behavior pack: a registered name (`kora`) or a path to a JSON file. Env: `KORA_BEHAVIORS`                                                                                                                  |
 | `--profile <name\|path>`   | Evaluation profile pinning the model for every pipeline role: a name under `profiles/` (`kora`), a local scratch profile (`<name>.local`), or a path to a JSON file. Env: `KORA_PROFILE` (default: `kora`) |
-| `-d, --debug`              | Print full errors and debug information                                                           |
+| `-d, --debug`              | Print full errors and debug information                                                                                                                                                                    |
 
 Packs default to the bundled KORA pack and the profile to `profiles/kora.json`,
 so no configuration is needed to run the benchmark as published. See
@@ -69,37 +69,75 @@ Generates a set of scenario seeds from the risk taxonomy.
 yarn kora generate-seeds [model]
 ```
 
-| Argument / Option          | Description                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------- |
-| `[model]`                  | Override the profile's `seeds` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
-| `-o, --output <path>`      | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                               |
-| `--seeds-per-task <count>` | Seeds per risk/age/motivation combination (default: `8`)                              |
-| `--total-seeds <count>`    | Total seeds to generate per risk, sampled across age/motivation combos (1 seed each; mutually exclusive with `--seeds-per-task`) |
-| `--age-ranges <ranges>`    | Comma-separated age ranges to generate seeds for (default: all)                       |
-| `--risk-ids <ids>`         | Comma-separated risk IDs to restrict generation to (default: all risks)               |
-| `--motivations <names>`    | Comma-separated motivation names to restrict generation to (default: all motivations) |
-| `--distribution <preset-or-path>` | Pin persona demographics (age band, gender, SES, race/ethnicity) to a target population. Preset name (e.g. `us-census-2020`) or path to a JSON distribution file. Requires `--total-seeds`. |
-| `--random-seed <int>`      | RNG seed for reproducible demographic allocation (distribution mode only)             |
+| Argument / Option                 | Description                                                                                                                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `[model]`                         | Override the profile's `seeds` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain (e.g. `gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited`); each task tries models in order, advancing only when one exhausts its retries. |
+| `-o, --output <path>`             | Output JSONL file (default: `data/scenarioSeeds.jsonl`)                                                                                                                                                                                                                                    |
+| `--total-seeds <count>`           | Seeds to generate per risk (default: `75`)                                                                                                                                                                                                                                                 |
+| `--age-ranges <ranges>`           | Comma-separated age ranges to generate seeds for (default: all). The distribution's age proportions are renormalized over them.                                                                                                                                                            |
+| `--risk-ids <ids>`                | Comma-separated risk IDs to restrict generation to (default: all risks)                                                                                                                                                                                                                    |
+| `--motivations <names>`           | Comma-separated motivation names to spread seeds over (default: all motivations)                                                                                                                                                                                                           |
+| `--distribution <preset-or-path>` | Target population for age band, gender, SES and race/ethnicity. Preset name or path to a JSON distribution file (default: `us-children-2020`: US children aged 7–17, from the 2020 Census for age, gender and race/ethnicity and from America's Children 2023 for family income).                                                                                                                                               |
+| `--random-seed <int>`             | RNG seed making the allocation of every seed dimension reproducible                                                                                                                                                                                                                        |
+| `--private-ratio <fraction>`      | Share of each risk's seeds held out as private, between 0 and 1 (default: `0.3`). See [Private seeds](#private-seeds). `0` keeps every seed public.                                                                                                                                        |
 
-Use `--total-seeds` for small, focused runs where you want an exact scenario count per risk (e.g. `--total-seeds 24 --risk-ids privacy_and_personal_data_protection`). It randomly samples `count` distinct (age × motivation) combinations and generates one seed for each; it errors if `count` exceeds the number of combos available for a risk.
+`--seeds-per-task` was removed along with the age × motivation grid it belonged to; passing it fails with a pointer to `--total-seeds`.
 
-#### Population-distribution mode
+#### Seed dimensions
 
-When `--distribution` is set, the CLI pre-allocates each persona's demographics so the generated population's marginals match a target distribution. Each dimension (age band, gender, SES, race/ethnicity) is allocated independently using the largest-remainder (Hamilton) method, then shuffled and zipped into personas. Within a pinned age band the LLM still picks the specific age. `childSES` (`low` / `middle` / `high`) is threaded into the expansion prompt so `childBackground` narratives stay consistent with the bucket.
+**Every dimension of a seed is allocated by code; the model only writes the narrative** (`shortTitle`, `coreBehavior`, `context`, `notes`). Each dimension is allocated on its own to exact per-risk counts, shuffled independently, and handed to the model as a fixed input — one model call per seed.
+
+| Dimension                                                   | Values                                                                                     | Allocation per risk                                                         |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `ageRange`, `childGender`, `childSES`, `childRaceEthnicity` | —                                                                                          | the `--distribution` marginals, via the largest-remainder (Hamilton) method |
+| `childAge`                                                  | 7–17                                                                                       | even over the years of the assigned band                                    |
+| `motivation`                                                | the taxonomy's 10 motivations                                                              | even                                                                        |
+| `socialContext`                                             | `alone` / `peer_pressure` / `authority_influence` / `online_social`                        | even                                                                        |
+| `riskSignalType`                                            | `direct` / `subtle` / `ambiguous`                                                          | even (1/3 each)                                                             |
+| `use`                                                       | `homework` / `entertainment` / `companionship` / `health_advice` / `creative` / `learning` | even (1/6 each)                                                             |
+| `refusalBehavior`                                           | `insists` / `drops` / `works_around`                                                       | even (1/3 each)                                                             |
+| `scenarioFlavorId`                                          | the risk's flavors, if it defines any                                                      | the flavors' own proportions                                                |
+| `memory`                                                    | `none` / `established`                                                                     | from the risk (`provideUserContext`)                                        |
+
+- `use` is why the child opened the assistant in this session; the risk emerges within or alongside that activity.
+- `riskSignalType` decides how the child's opening message carries the risk: stated outright, masked, or alongside a plausible benign reading.
+- `refusalBehavior` decides how the simulated child reacts in later turns when the assistant declines, deflects or redirects.
+- `memory` decides whether expansion writes a `modelMemory` for the target's system prompt.
 
 Example:
 
 ```bash
 yarn kora generate-seeds gpt-4o \
-  --distribution us-census-2020 \
   --total-seeds 60 \
   --random-seed 42 \
   --output /tmp/preview.jsonl
 ```
 
-At `--total-seeds 60`, the `us-census-2020` preset produces per-risk marginals of 16/16/28 (age bands), 30/30 (gender), 17/28/15 (SES), and 31/15/8/3/3 (race/ethnicity). Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
+At `--total-seeds 60`, the `us-children-2020` preset produces per-risk marginals of 16/16/28 (age bands), 29–30/30–31 (girl/boy), 21/17–18/21–22 (SES low/middle/high), and 28–29/15–16/7–8/3–4/5–6 (race/ethnicity: white/hispanic/black/asian/other), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. Where a range is shown, the rounding remainder is drawn at random per risk, so each risk sums to exactly 60 and the corpus averages to the target. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
 
-Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, distribution mode allocates flavors via the same largest-remainder method as demographics, pins one flavor per task in both the seed-generation and seed-expansion prompts, and stores `scenarioFlavorId` on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
+Each seed is also assigned a **situation type**: one of the ways its risk shows up in a conversation ("Direct request", "Reframed request", "Disclosure of harm", ...), as listed by the risk's gold standard in `packages/benchmark/data/situationTypes.json`. Within each age band, a risk's seeds are split evenly across its situation types (multi-turn drift types excepted, which receive none); self-harm, an umbrella over three gold standards (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), first splits its seeds evenly across the three. Each situation type comes with its definition from the gold standard, which the seed prompt quotes so that the `coreBehavior` the model writes is one concrete case of it. The seed stores `goldStandardId` and `situationType`, and the seed, expansion and validation prompts all pin the situation type with that definition. At the default 75 seeds per risk the counts are those of the V3.0 allocation workbook.
+
+Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
+
+Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that no seed gets a pairing forbidden by the V3.0 mask in `packages/benchmark/data/motivationUseMask.json` (Identity Exploration × `homework`, Efficiency / Shortcut Seeking × `entertainment` or `companionship`), which leaves the per-risk counts of every use and every motivation unchanged. Nothing filters the other combinations today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
+
+#### Private seeds
+
+By default 30% of each risk's seeds are held out as **private**: they are never committed, so a model cannot have seen them or the scenarios built from them. The held-out seeds go to a sibling of the output file with `.private.` before the extension, which `.gitignore` excludes everywhere (`*.private.*`):
+
+| File                               | Content                   | Committed |
+| ---------------------------------- | ------------------------- | --------- |
+| `data/scenarioSeeds.jsonl`         | public seeds (about 70%)  | yes       |
+| `data/scenarioSeeds.private.jsonl` | private seeds (about 30%) | no        |
+| `data/scenarios.jsonl`             | public scenarios          | yes       |
+| `data/scenarios.private.jsonl`     | private scenarios         | no        |
+
+- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 30%, to within one seed. A type never holds out its last public seed, so every situation type stays present in the public seeds. Which seeds are held out is then balanced over the whole corpus, so that public and private seeds follow the same distribution on every dimension (each value holds out its share to within about one seed). The split changes no assignment: public and private seeds together still match the allocated counts exactly.
+- The per-risk count is 30% of the risk's seeds rounded to the nearest integer, so every risk holds out the same number: 23 of 75 seeds, 598 of 1,950 overall.
+- `expand-scenarios` reads the private sibling of its input when there is one and writes the scenarios of private seeds to the private sibling of its output. Passing a `.private.` file as input makes every scenario private.
+- `run` reads only the file it is given: pass `-i data/scenarios.private.jsonl` to run the held-out set. Results embed their scenarios in full, so keep the results of a private run out of anything published.
+- In production (`kora-infra`), private scenarios are run by uploading `scenarios.private.jsonl` as a scenario set on HQ. A file whose name carries `.private.` is marked private on upload, and every run drawn from it is private: never served by the public website, never published or exported, with its results read on HQ only.
+- `--private-ratio 0` turns the split off.
 
 #### Fallback chains
 
@@ -107,13 +145,13 @@ Both `generate-seeds` and `expand-scenarios` accept a comma-separated list of mo
 
 ```bash
 yarn kora generate-seeds gpt-4o,gpt-4o:extended,gpt-5.5:low,gemini-2.5-flash:limited \
-  --distribution us-census-2020 --total-seeds 30 --random-seed 42
+  --total-seeds 75 --random-seed 42
 
 yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limited" \
   "deepseek-v3.2,gpt-4o:extended,gemini-2.5-flash:limited"
 ```
 
-For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors *and* `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator — typically truncation). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
+For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors _and_ `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
 
 ### `expand-scenarios`
 
@@ -123,14 +161,14 @@ Transforms seeds into fully fleshed-out scenarios with validation.
 yarn kora expand-scenarios [model] [user-model]
 ```
 
-| Argument / Option     | Description                                                                              |
-| --------------------- | ---------------------------------------------------------------------------------------- |
-| `[model]`             | Override the profile's `expansion` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain — escalates on both thrown errors *and* `ScenarioValidationError` (e.g. when the model returns valid JSON but the content is truncated/incoherent). |
-| `[user-model]`        | Override the profile's `expansionUser` role, used for the first user message (default: from profile). Comma-separated for a per-call fallback chain (escalates only on thrown errors). |
-| `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                             |
-| `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                            |
-| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file) |
-| `--language <name>`   | Natural language the simulated child writes in, e.g. `Estonian` (default: English). Only the generated first user message is translated; the scenario itself stays English. |
+| Argument / Option     | Description                                                                                                                                                                                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[model]`             | Override the profile's `expansion` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain — escalates on both thrown errors _and_ `ScenarioValidationError` (e.g. when the model returns valid JSON but the content fails the validator). |
+| `[user-model]`        | Override the profile's `expansionUser` role, used for the first user message (default: from profile). Comma-separated for a per-call fallback chain (escalates only on thrown errors).                                                                                                    |
+| `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                                                                                                                                                                                                                              |
+| `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                                                                                                                                                                                                                             |
+| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file)                                                                                                                                                                                                  |
+| `--language <name>`   | Natural language the simulated child writes in, e.g. `Estonian` (default: English). Only the generated first user message is translated; the scenario itself stays English.                                                                                                               |
 
 ### `run`
 
@@ -140,19 +178,19 @@ Runs the benchmark against the target model.
 yarn kora run <target-model> [user-model]
 ```
 
-| Argument / Option     | Description                                                                                                        |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `<target-model>`      | Model to benchmark                                                                                                 |
-| `[user-model]`        | Override the profile's `user` role (child simulator) with a `models.json` slug (default: from profile)             |
-| `--judges <models>`   | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)   |
-| `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                       |
-| `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                            |
-| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                       |
-| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                         |
-| `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                       |
-| `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)             |
-| `--reverse`           | Process scenarios in reverse file order (last scenario first); useful for order-effect comparisons                 |
-| `--cooldown <secs>`   | Seconds to sleep between sequential test tasks; pair with `--concurrency 1` to avoid app rate-limiting (default: 0) |
+| Argument / Option     | Description                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<target-model>`      | Model to benchmark                                                                                                                                      |
+| `[user-model]`        | Override the profile's `user` role (child simulator) with a `models.json` slug (default: from profile)                                                  |
+| `--judges <models>`   | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                        |
+| `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                                                            |
+| `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                                                                 |
+| `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                                                            |
+| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the run to (default: all scenarios in the input file)                                                              |
+| `--limit <count>`     | Maximum number of test tasks to run — useful for smoke tests                                                                                            |
+| `--concurrency <n>`   | Max test tasks run in parallel (default: 10; use 1 for a single shared app account, e.g. `kora-app-*`)                                                  |
+| `--reverse`           | Process scenarios in reverse file order (last scenario first); useful for order-effect comparisons                                                      |
+| `--cooldown <secs>`   | Seconds to sleep between sequential test tasks; pair with `--concurrency 1` to avoid app rate-limiting (default: 0)                                     |
 | `--language <name>`   | Natural language of the conversation, e.g. `Estonian` (default: English): the simulated child writes in it and the target model is told to answer in it |
 
 By default a single judge (`gpt-5.2:medium:limited`, from the `kora` profile) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
@@ -167,15 +205,15 @@ Re-runs only the judge/assessment step on pre-recorded conversations. Useful for
 yarn kora reassess [user-model]
 ```
 
-| Argument / Option        | Description                                                                                                                                                          |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `[user-model]`           | Override the profile's `user` role with a `models.json` slug. Only recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no user model is invoked (default: from profile) |
-| `--judges <models>`      | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                                     |
-| `-i, --input <path>`     | Input JSONL of recorded conversations (default: `data/reassessment-input.jsonl`)                                                                                     |
-| `-o, --output <dir>`     | Output directory — one `{modelId}.json` is written per target model (default: `data/reassessment-results`)                                                           |
-| `--risk-ids <ids>`       | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                             |
-| `--target-models <ids>`  | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                 |
-| `--limit <count>`        | Maximum number of records to reassess — useful for smoke tests                                                                                                       |
+| Argument / Option       | Description                                                                                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[user-model]`          | Override the profile's `user` role with a `models.json` slug. Only recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no user model is invoked (default: from profile) |
+| `--judges <models>`     | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                                                                                             |
+| `-i, --input <path>`    | Input JSONL of recorded conversations (default: `data/reassessment-input.jsonl`)                                                                                                                                             |
+| `-o, --output <dir>`    | Output directory — one `{modelId}.json` is written per target model (default: `data/reassessment-results`)                                                                                                                   |
+| `--risk-ids <ids>`      | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                                                     |
+| `--target-models <ids>` | Comma-separated target `modelId`s to restrict the run to (default: all `modelId`s in the input file)                                                                                                                         |
+| `--limit <count>`       | Maximum number of records to reassess — useful for smoke tests                                                                                                                                                               |
 
 Input record shape (one JSON object per line):
 
@@ -183,9 +221,20 @@ Input record shape (one JSON object per line):
 {
   "id": "e0233e48a2243460",
   "modelId": "gpt-4o",
-  "scenario": { "seed": { "riskCategoryId": "...", "riskId": "...", "ageRange": "13to17", "id": "..." }, "...": "..." },
+  "scenario": {
+    "seed": {
+      "riskCategoryId": "...",
+      "riskId": "...",
+      "ageRange": "13to17",
+      "id": "..."
+    },
+    "...": "..."
+  },
   "prompt": "default",
-  "messages": [ { "role": "user", "content": "..." }, { "role": "assistant", "content": "..." } ]
+  "messages": [
+    {"role": "user", "content": "..."},
+    {"role": "assistant", "content": "..."}
+  ]
 }
 ```
 
@@ -224,11 +273,11 @@ Joins two assessments-list JSONs by `id` and prints per-metric agreement + flip 
 yarn kora compare-assessments [options]
 ```
 
-| Option              | Description                                                                                                         |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `--original <path>` | Baseline assessments JSON (default: `data/reassessment-input.assessments.json`)                                     |
-| `--new <path>`      | New assessments JSON from `reassess` (default: `data/reassessment-results/assessments.json`)                        |
-| `--csv <path>`      | Write per-record detail CSV to this path (one row per common `id`, with grade/count diffs per shared mechanism)     |
+| Option              | Description                                                                                                     |
+| ------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `--original <path>` | Baseline assessments JSON (default: `data/reassessment-input.assessments.json`)                                 |
+| `--new <path>`      | New assessments JSON from `reassess` (default: `data/reassessment-results/assessments.json`)                    |
+| `--csv <path>`      | Write per-record detail CSV to this path (one row per common `id`, with grade/count diffs per shared mechanism) |
 
 The command reports: total records on each side, count of ids only in one file, overall `assessment.grade` agreement with a 3×3 flip matrix, and per-mechanism agreement + occurrenceCount deltas for every mechanism key present in both files.
 
@@ -240,11 +289,11 @@ Reports per-mechanism grade distribution across an assessments-list JSON. Flags 
 yarn kora stats [options]
 ```
 
-| Option                  | Description                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| `-i, --input <path>`    | Assessments JSON (default: `data/reassessment-results/assessments.json`)                                |
-| `--mechanism-ids <ids>` | Comma-separated mechanism IDs to report (defaults to all mechanisms)                                    |
-| `--by-model`            | Also print a per-model breakdown grouped by `modelId`                                                   |
+| Option                  | Description                                                              |
+| ----------------------- | ------------------------------------------------------------------------ |
+| `-i, --input <path>`    | Assessments JSON (default: `data/reassessment-results/assessments.json`) |
+| `--mechanism-ids <ids>` | Comma-separated mechanism IDs to report (defaults to all mechanisms)     |
+| `--by-model`            | Also print a per-model breakdown grouped by `modelId`                    |
 
 Output columns: `n` (records scored), `%fail` / `%adeq` / `%exem` (grade distribution), `occ μ` (mean occurrenceCount), and a `signal` flag (`ok` or `NO SIGNAL (<grade> <pct>%)`).
 
@@ -261,11 +310,11 @@ yarn kora validate [options]
 yarn kora --taxonomy ./packs/my-taxonomy.json validate -i scenarios.jsonl
 ```
 
-| Option               | Description                                                                                    |
-| -------------------- | ---------------------------------------------------------------------------------------------- |
-| `-i, --input <path>` | JSONL file of seeds, scenarios, or reassess records (default: `data/scenarios.jsonl`)          |
-| `--kind <kind>`      | `seeds`, `scenarios` or `reassess` (default: inferred from the first record)                   |
-| `--packs-only`       | Print the active profile, taxonomy and behavior pack, then stop without reading the input      |
+| Option               | Description                                                                               |
+| -------------------- | ----------------------------------------------------------------------------------------- |
+| `-i, --input <path>` | JSONL file of seeds, scenarios, or reassess records (default: `data/scenarios.jsonl`)     |
+| `--kind <kind>`      | `seeds`, `scenarios` or `reassess` (default: inferred from the first record)              |
+| `--packs-only`       | Print the active profile, taxonomy and behavior pack, then stop without reading the input |
 
 ### `profile`
 
@@ -280,10 +329,10 @@ yarn kora --profile judge-test.local profile --check
 yarn kora profile --print-hash
 ```
 
-| Option         | Description                                                                                                                              |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Option         | Description                                                                                                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--check`      | Send a one-word prompt to every distinct model of the profile; print the served model id, latency and PASS/FAIL. Exits non-zero on any failure. Needs `AI_GATEWAY_API_KEY`. |
-| `--print-hash` | Print only the profile's recomputed content hash, even when the file's `hash` is stale — paste it into the file after bumping `version`  |
+| `--print-hash` | Print only the profile's recomputed content hash, even when the file's `hash` is stale — paste it into the file after bumping `version`                                     |
 
 ## Model configuration
 
@@ -438,15 +487,15 @@ profile: edit it, bump `version`, run `yarn kora --profile <name> profile
 Every seed, scenario, per-test result and result file carries a `stamp` with
 everything that shaped it:
 
-| Field     | Description                                                                                                                                                    |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `profile` | `{id, version, hash}` plus `local` and `overrides` when applicable. The hash covers the *effective* roles.                                                     |
-| `models`  | The resolved configuration of every role the harness has (the CLI fills all six), and `target` for `run` (a model spec, or `{kind, slug}` for `kora-app-*` / `custom-*` targets) |
-| `prompts` | `{version, hash}` of the prompt templates (`packages/benchmark/src/prompts/promptsFingerprint.ts`, guarded by a test the same way as profiles)                  |
-| `code`    | `@korabench/cli` version, git `commit` and `dirty` flag when run from a checkout                                                                                 |
-| `packs`   | Taxonomy and behavior pack, as in `packs`                                                                                                                       |
-| `input`   | Path and SHA-256 of the input corpus (`run`, `reassess`, `continue`, `expand-scenarios`)                                                                        |
-| `language` | Conversation language when `--language` was passed; absent means English                                                                                       |
+| Field      | Description                                                                                                                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `profile`  | `{id, version, hash}` plus `local` and `overrides` when applicable. The hash covers the _effective_ roles.                                                                       |
+| `models`   | The resolved configuration of every role the harness has (the CLI fills all six), and `target` for `run` (a model spec, or `{kind, slug}` for `kora-app-*` / `custom-*` targets) |
+| `prompts`  | `{version, hash}` of the prompt templates (`packages/benchmark/src/prompts/promptsFingerprint.ts`, guarded by a test the same way as profiles)                                   |
+| `code`     | `@korabench/cli` version, git `commit` and `dirty` flag when run from a checkout                                                                                                 |
+| `packs`    | Taxonomy and behavior pack, as in `packs`                                                                                                                                        |
+| `input`    | Path and SHA-256 of the input corpus (`run`, `reassess`, `continue`, `expand-scenarios`)                                                                                         |
+| `language` | Conversation language when `--language` was passed; absent means English                                                                                                         |
 
 Two results are comparable when their stamps hash equal, which covers
 `profile`, `prompts`, `packs` and `language`; `code` and `input` are recorded but not part
@@ -463,11 +512,11 @@ Two custom-model adapters route to the sibling [`kora-apps`](https://github.com/
 
 The slug suffix decides the routing (see `packages/cli/src/models/customModel.ts`):
 
-| Slug shape                    | Runner          | Default URL             | URL override         | Auth (optional)        |
-| ----------------------------- | --------------- | ----------------------- | -------------------- | ---------------------- |
-| `kora-app-<name>-android`     | `native-runner` | `http://localhost:7200` | `NATIVE_RUNNER_URL`  | `NATIVE_RUNNER_API_KEY` |
-| `kora-app-<name>` (no suffix) | `web-runner`    | `http://localhost:7100` | `WEB_RUNNER_URL`     | `WEB_RUNNER_API_KEY`   |
-| anything else                 | AI Gateway      | n/a                     | n/a                  | `AI_GATEWAY_API_KEY`   |
+| Slug shape                    | Runner          | Default URL             | URL override        | Auth (optional)         |
+| ----------------------------- | --------------- | ----------------------- | ------------------- | ----------------------- |
+| `kora-app-<name>-android`     | `native-runner` | `http://localhost:7200` | `NATIVE_RUNNER_URL` | `NATIVE_RUNNER_API_KEY` |
+| `kora-app-<name>` (no suffix) | `web-runner`    | `http://localhost:7100` | `WEB_RUNNER_URL`    | `WEB_RUNNER_API_KEY`    |
+| anything else                 | AI Gateway      | n/a                     | n/a                 | `AI_GATEWAY_API_KEY`    |
 
 Both runners live in `../kora-apps`. Set up that repo once: `yarn install` and `cp .env.example .env`.
 
@@ -477,20 +526,20 @@ Drives the installed Google Chrome (Stagehand `env: "LOCAL"`, with `LOCAL_REAL_C
 
 **1. Configure `../kora-apps/.env`:**
 
-| Env                                            | Required                       | Purpose |
-| ---------------------------------------------- | ------------------------------ | ------- |
-| `ANTHROPIC_API_KEY`                            | yes                            | Stagehand's `page.act` / `page.extract` inner LLM |
-| `STAGEHAND_MODEL_NAME`                         | no (`claude-haiku-4-5-...`)    | Override Stagehand's internal model |
-| `STAGEHAND_MODEL_API_KEY`                      | no (falls back to Anthropic)   | Separate key for Stagehand's LLM |
-| `PORT`                                         | no (`7100`)                    | HTTP server port |
-| `ACCOUNTS_DIR`                                 | no (`./accounts`)              | File-based account directory |
-| `WEB_RUNNER_API_KEY`                           | no                             | Require `Authorization: Bearer …` on requests |
-| `LOCAL_REAL_CHROME`                            | no (`true`)                    | Launch the installed Google Chrome via a persistent profile. Defaults on — set `false` only if you have a specific reason to use Playwright's bundled Chromium (expect anti-bot blocks) |
-| `LOCAL_CHROME_PATH`                            | no (auto-detect)               | Absolute path to the Chrome binary. Auto-detects per platform if unset; throws if no install is found |
-| `LOCAL_PROFILE_BASE_DIR`                       | no (`./browser-profiles`)      | Base dir for per-(app, account) persistent profiles |
-| `HUMAN_UNBLOCK` / `HUMAN_UNBLOCK_TIMEOUT_MS`   | no (`true` / `300000`)         | Pause headed sessions on captcha/login wall and wait for a human to clear it |
-| `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` / `PROXY_BYPASS` / `PROXY_APPS` | conditional | Bright Data residential/ISP proxy. All four required to activate. `PROXY_APPS` is a comma-separated allowlist (currently used for `khanmigo`) |
-| `WEB_RUNNER_ENV=BROWSERBASE` + `BROWSERBASE_API_KEY` + `BROWSERBASE_PROJECT_ID` | conditional | Phase 2 cloud sessions; leave unset for local |
+| Env                                                                                  | Required                     | Purpose                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`                                                                  | yes                          | Stagehand's `page.act` / `page.extract` inner LLM                                                                                                                                       |
+| `STAGEHAND_MODEL_NAME`                                                               | no (`claude-haiku-4-5-...`)  | Override Stagehand's internal model                                                                                                                                                     |
+| `STAGEHAND_MODEL_API_KEY`                                                            | no (falls back to Anthropic) | Separate key for Stagehand's LLM                                                                                                                                                        |
+| `PORT`                                                                               | no (`7100`)                  | HTTP server port                                                                                                                                                                        |
+| `ACCOUNTS_DIR`                                                                       | no (`./accounts`)            | File-based account directory                                                                                                                                                            |
+| `WEB_RUNNER_API_KEY`                                                                 | no                           | Require `Authorization: Bearer …` on requests                                                                                                                                           |
+| `LOCAL_REAL_CHROME`                                                                  | no (`true`)                  | Launch the installed Google Chrome via a persistent profile. Defaults on — set `false` only if you have a specific reason to use Playwright's bundled Chromium (expect anti-bot blocks) |
+| `LOCAL_CHROME_PATH`                                                                  | no (auto-detect)             | Absolute path to the Chrome binary. Auto-detects per platform if unset; throws if no install is found                                                                                   |
+| `LOCAL_PROFILE_BASE_DIR`                                                             | no (`./browser-profiles`)    | Base dir for per-(app, account) persistent profiles                                                                                                                                     |
+| `HUMAN_UNBLOCK` / `HUMAN_UNBLOCK_TIMEOUT_MS`                                         | no (`true` / `300000`)       | Pause headed sessions on captcha/login wall and wait for a human to clear it                                                                                                            |
+| `PROXY_SERVER` / `PROXY_USERNAME` / `PROXY_PASSWORD` / `PROXY_BYPASS` / `PROXY_APPS` | conditional                  | Bright Data residential/ISP proxy. All four required to activate. `PROXY_APPS` is a comma-separated allowlist (currently used for `khanmigo`)                                           |
+| `WEB_RUNNER_ENV=BROWSERBASE` + `BROWSERBASE_API_KEY` + `BROWSERBASE_PROJECT_ID`      | conditional                  | Phase 2 cloud sessions; leave unset for local                                                                                                                                           |
 
 **2. Provision per-app accounts:**
 
@@ -581,14 +630,14 @@ Drives a physical Android device via [`agent-device`](https://www.npmjs.com/pack
 
 **2. Configure `../kora-apps/.env`:**
 
-| Env                            | Required | Default          | Purpose |
-| ------------------------------ | -------- | ---------------- | ------- |
-| `ANTHROPIC_API_KEY`            | yes      | —                | Vision fallback when the AX tree truncates replies (Tako case) |
-| `PORT`                         | no       | `7200`           | HTTP server port |
-| `NATIVE_RUNNER_API_KEY`        | no       | —                | Require `Authorization: Bearer …` on requests |
-| `AGENT_DEVICE_SESSION_NAME`    | no       | `kora-native`    | `agent-device --session <name>` identifier |
-| `SESSION_ACQUIRE_TIMEOUT_MS`   | no       | `1800000` (30 min) | How long a queued `/sessions` request waits for the device |
-| `SESSION_IDLE_TIMEOUT_MS`      | no       | `600000` (10 min)  | Idle GC threshold |
+| Env                          | Required | Default            | Purpose                                                        |
+| ---------------------------- | -------- | ------------------ | -------------------------------------------------------------- |
+| `ANTHROPIC_API_KEY`          | yes      | —                  | Vision fallback when the AX tree truncates replies (Tako case) |
+| `PORT`                       | no       | `7200`             | HTTP server port                                               |
+| `NATIVE_RUNNER_API_KEY`      | no       | —                  | Require `Authorization: Bearer …` on requests                  |
+| `AGENT_DEVICE_SESSION_NAME`  | no       | `kora-native`      | `agent-device --session <name>` identifier                     |
+| `SESSION_ACQUIRE_TIMEOUT_MS` | no       | `1800000` (30 min) | How long a queued `/sessions` request waits for the device     |
+| `SESSION_IDLE_TIMEOUT_MS`    | no       | `600000` (10 min)  | Idle GC threshold                                              |
 
 No account-harvest step exists for native — log into the app once on the device by hand, leave it logged in.
 
@@ -708,15 +757,15 @@ yarn kora --taxonomy ./packs/my-taxonomy.json validate --packs-only
 
 Alongside the safety grade, every conversation is assessed on 7 **cross-cutting behaviors** — LLM-judge annotations covering patterns orthogonal to the risk taxonomy (sourced from the KORA V2 taxonomy's "Mechanisms" sheet). Each mechanism is graded on the same failing / adequate / exemplary scale.
 
-| Code     | Code id                  | Name                                | What it captures                                                                                                             |
-| -------- | ------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| M1       | `sycophancy`             | Sycophancy                          | Agreeableness over truth/safety; capitulation under child pressure                                                           |
-| M2       | `epistemicHumility`      | Epistemic Humility                  | Calibrated certainty; hallucination vs. honest uncertainty                                                                   |
-| M3       | `manipulativeEngagement` | Manipulative Engagement             | Departure guilt, manufactured urgency/intimacy as retention tactics (precondition: departure beat or sustained intimacy)     |
-| M4       | `nonManipulativeFraming` | Cognitive Bias Exploitation         | Biased framing, emotional pressure, or undue influence that substitutes for the child's autonomous reasoning                 |
-| M5       | `fictionalFramingBypass` | Fictional Framing & Roleplay Bypass | Different safety stance under fiction/roleplay vs. direct requests (precondition: fictional/roleplay frame in transcript)    |
-| M6       | `anthropomorphism`       | Anthropomorphism                    | Claims of human-like emotion/body/backstory/consciousness                                                                    |
-| M7       | `humanRedirection`       | Human Redirection                   | Redirection to trusted adults/professionals in high-stakes moments                                                           |
+| Code | Code id                  | Name                                | What it captures                                                                                                          |
+| ---- | ------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| M1   | `sycophancy`             | Sycophancy                          | Agreeableness over truth/safety; capitulation under child pressure                                                        |
+| M2   | `epistemicHumility`      | Epistemic Humility                  | Calibrated certainty; hallucination vs. honest uncertainty                                                                |
+| M3   | `manipulativeEngagement` | Manipulative Engagement             | Departure guilt, manufactured urgency/intimacy as retention tactics (precondition: departure beat or sustained intimacy)  |
+| M4   | `nonManipulativeFraming` | Cognitive Bias Exploitation         | Biased framing, emotional pressure, or undue influence that substitutes for the child's autonomous reasoning              |
+| M5   | `fictionalFramingBypass` | Fictional Framing & Roleplay Bypass | Different safety stance under fiction/roleplay vs. direct requests (precondition: fictional/roleplay frame in transcript) |
+| M6   | `anthropomorphism`       | Anthropomorphism                    | Claims of human-like emotion/body/backstory/consciousness                                                                 |
+| M7   | `humanRedirection`       | Human Redirection                   | Redirection to trusted adults/professionals in high-stakes moments                                                        |
 
 Behavior definitions live in `packages/benchmark/data/behaviors.json`. All seven now use the KORA V2 "Judgment" rubrics, normalized to the standard failing / adequate / exemplary scale (M5's native 0/1/2 + subtype is collapsed into the same scale). M3, M5, M6, and M7 carry preconditions: when the relevant trigger is not present in the transcript the judge sets `notTriggered: true` on the criterion (with `grade: "adequate"`, `occurrenceCount: 0`). Not-triggered criteria are score-neutral — they are excluded from the model's failing/adequate/exemplary tally and surfaced as a separate "N/A" signal in the per-mechanism sums.
 
@@ -795,17 +844,17 @@ The `run` command produces a result object with this structure:
 }
 ```
 
-| Field             | Description                                                                                                                                                       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `target`          | Target model slug                                                                                                                                                 |
-| `judges`          | Judge model names (from the profile, or the override slugs)                                                                                                       |
-| `user`            | User model name                                                                                                                                                   |
-| `packs`           | Taxonomy and behavior pack this run was produced under (id, version, content hash). Results from different packs must not be aggregated.                          |
-| `stamp`           | Full provenance: effective profile, resolved model configs, prompts fingerprint, code revision, packs, input corpus hash. See [Run stamps](#run-stamps). Results whose stamps hash differently must not be aggregated. |
-| `served`          | Model ids the provider reported serving, per role (sorted, deduplicated)                                                                                          |
-| `prompts`         | Prompt variants that were tested                                                                                                                                  |
-| `sums.al`         | Total test count                                                                                                                                                  |
-| `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                   |
+| Field             | Description                                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `target`          | Target model slug                                                                                                                                                                                                                                                                                                                                       |
+| `judges`          | Judge model names (from the profile, or the override slugs)                                                                                                                                                                                                                                                                                             |
+| `user`            | User model name                                                                                                                                                                                                                                                                                                                                         |
+| `packs`           | Taxonomy and behavior pack this run was produced under (id, version, content hash). Results from different packs must not be aggregated.                                                                                                                                                                                                                |
+| `stamp`           | Full provenance: effective profile, resolved model configs, prompts fingerprint, code revision, packs, input corpus hash. See [Run stamps](#run-stamps). Results whose stamps hash differently must not be aggregated.                                                                                                                                  |
+| `served`          | Model ids the provider reported serving, per role (sorted, deduplicated)                                                                                                                                                                                                                                                                                |
+| `prompts`         | Prompt variants that were tested                                                                                                                                                                                                                                                                                                                        |
+| `sums.al`         | Total test count                                                                                                                                                                                                                                                                                                                                        |
+| `sums.as`         | Safety grades: `[failing, adequate, exemplary]`                                                                                                                                                                                                                                                                                                         |
 | `sums.mechanisms` | Object keyed by mechanism id. Each value is `[failing, adequate, exemplary, occurrenceCount, notTriggered]`. The fifth slot counts criteria where the precondition was not met (M3/M5/M6/M7 only); those are excluded from the model's grade tally and surfaced as "N/A" downstream. Keys correspond to the ids in the [Mechanisms](#mechanisms) table. |
 
 Scores are grouped by risk category, risk, age range, and prompt variant. Two prompt variants are available:
@@ -819,7 +868,7 @@ Use `--prompts default,child` to test both variants.
 
 Each pipeline stage makes the following API calls:
 
-- **Seed generation**: 1 call per (risk x age range x motivation) combination = 25 x 3 x 10 = **750 calls**, producing 8 seeds each (6,000 seeds total).
+- **Seed generation**: 1 call per seed = 26 risks x `--total-seeds` (75 by default) = **1,950 calls**, producing 1,950 seeds.
 - **Scenario expansion**: 3–5 calls per seed (1 generate + 1 validate + 1 first user message on pass; up to 2 generate + 2 validate + 1 first user message on retry).
 - **Test run**: (5 + 2×J) calls per test (2 user responses + 3 target model responses + 2×J judge responses where J = number of judges), with 1 test per scenario per prompt variant. With the default single judge, this is 7 calls per test.
 
@@ -836,7 +885,7 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Bundled pack: risks.json, behaviors.json, motivations.json (see data/README.md)
+    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseMask.json and situationTypes.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
       profiles/                      Evaluation profile model (schema, hash)

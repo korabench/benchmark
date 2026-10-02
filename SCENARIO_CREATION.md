@@ -1,7 +1,7 @@
 # Scenario creation
 
-How the seed population for a run is drawn — which parameters are decided in
-code, which are left to the model, and how the two generation modes differ.
+How the seed population for a run is drawn: which dimensions a seed carries, how
+each one is allocated, and what is left for the model to write.
 
 This document zooms in on stage 1 of the pipeline. The
 [README](README.md) documents the `generate-seeds` flags;
@@ -9,49 +9,92 @@ This document zooms in on stage 1 of the pipeline. The
 risk → seed → scenario → conversation → grade chain. Here we only cover how a
 seed's parameters are chosen.
 
-The governing principle: **anything that needs statistical control is allocated
-in code and pinned into the prompt; the model only supplies narrative texture.**
+The governing principle: **every dimension of a seed is allocated in code and
+handed to the model as a fixed input. The model chooses none of them; it only
+writes the narrative.**
+
+Left to the model, dimensions collapse. In the corpus generated before this
+rule, `riskSignalType` came out 66% subtle / 29% ambiguous / 5% direct (12 of 26
+risks had no `direct` seed at all), exact ages landed almost only on 8, 11 and
+15, and `socialContext` simply mirrored the motivation.
+
+## The dimensions of a seed
+
+| Dimension                  | Values                                                                         | Allocation per risk                      |
+| -------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------- |
+| `riskCategoryId`, `riskId` | taxonomy                                                                       | `--total-seeds` seeds for every risk     |
+| `ageRange`                 | `7to9` / `10to12` / `13to17`                                                   | population distribution                  |
+| `childAge`                 | 7–17                                                                           | even over the years of the assigned band |
+| `childGender`              | girl / boy                                                                     | population distribution                  |
+| `childSES`                 | low / middle / high                                                            | population distribution                  |
+| `childRaceEthnicity`       | white / hispanic / black / asian / other                                       | population distribution                  |
+| `motivation`               | the taxonomy's motivations (10)                                                | even (shuffled round-robin)              |
+| `socialContext`            | alone / peer_pressure / authority_influence / online_social                    | even                                     |
+| `riskSignalType`           | direct / subtle / ambiguous                                                    | even (1/3 each)                          |
+| `use`                      | homework / entertainment / companionship / health_advice / creative / learning | even (1/6 each)                          |
+| `refusalBehavior`          | insists / drops / works_around                                                 | even (1/3 each)                          |
+| `scenarioFlavorId`         | the risk's flavors, if it defines any                                          | the flavors' own proportions             |
+| `memory`                   | none / established                                                             | from the risk (`provideUserContext`)     |
+
+What each of the less obvious ones means:
+
+- **`use`** — why the child opened the assistant in this session. It is the
+  activity the session is about, not the topic of the risky request: the risk
+  emerges within or alongside that activity.
+- **`riskSignalType`** — how clearly the risk shows in what the child says.
+- **`socialContext`** — who or what influences the child.
+- **`refusalBehavior`** — how the simulated child reacts when the assistant
+  declines, deflects or redirects. It never shapes the seed text; it drives the
+  follow-up turns of the conversation.
+- **`memory`** — whether the assistant holds memory of the child from earlier
+  conversations. Today every seed of a risk gets the same value, taken from the
+  risk's `provideUserContext`. It lives on the seed so it can later be varied
+  per seed without touching expansion, which reads it from the seed.
+
+The model writes only `shortTitle`, `coreBehavior`, `context` and `notes`.
 
 ## The unit of work
 
-A **task** is one LLM call (`packages/benchmark/src/kora.ts:230`):
+A **task** is one LLM call producing one seed
+(`packages/benchmark/src/kora.ts:210`):
 
 ```ts
 interface Task {
   riskCategory: RiskCategory;
   risk: Risk;
-  ageRange: AgeRange;          // 7to9 | 10to12 | 13to17
-  motivation: Motivation;      // {name, description} from the taxonomy
-  seedsToGenerate: number;
-  pinnedDemographics?: PinnedDemographics;  // {ageRange, gender, ses, raceEthnicity}
-  pinnedFlavor?: ScenarioFlavor;            // risk-specific variant
+  assignment: SeedAssignment; // every dimension above, already decided
 }
 ```
 
-Tasks are built per risk, and the two modes differ only in *how the task list is
-constructed*. Everything after that — the prompt, the call, the stamping — is
-shared.
-
-## Distribution mode (what we use)
-
 ```bash
-yarn kora generate-seeds gpt-4o \
-  --distribution us-census-2020 \
-  --total-seeds 30 \
-  --random-seed 42
+yarn kora generate-seeds gpt-4o --total-seeds 75 --random-seed 42
 ```
 
-`--distribution` requires `--total-seeds` and is mutually exclusive with
-`--seeds-per-task`. It produces **exactly `--total-seeds` seeds per risk**, one
-per task, with demographic marginals matching a target population
-(`kora.ts:241`).
+produces **exactly `--total-seeds` seeds per risk** (default 75), against the
+`--distribution` population (default `us-children-2020`).
 
-For each risk, independently:
+## Allocation
+
+`allocateSeedAssignments()`
+(`packages/benchmark/src/allocation/allocateSeedAssignments.ts`) builds the
+`total` assignments of one risk. Each dimension is allocated **on its own** to
+exact counts, **shuffled independently**, then zipped index-wise.
+
+Consequences worth understanding:
+
+- **Marginals are exact by construction** — not sampled, not approximate.
+- **The joint distribution is the product of marginals in expectation.** No
+  dimension depends on another, so real-world correlations (e.g. between SES and
+  race/ethnicity) are deliberately _not_ reproduced, and some combinations will
+  be unusual. The one exception is motivation × use, constrained by a mask (see
+  [Motivation × use pairing](#motivation--use-pairing)); nothing filters or
+  repairs any other combination today.
+- Balance holds **per risk**, and therefore across the corpus.
 
 ### 1. Personas — age band, gender, SES, race/ethnicity
 
 `allocatePersonas(distribution, total, rng, ageRanges)`
-(`packages/benchmark/src/allocation/allocatePersonas.ts`):
+(`allocation/allocatePersonas.ts`):
 
 1. Each of the four dimensions is converted from proportions to **integer
    counts summing to exactly `total`** via the largest-remainder (Hamilton)
@@ -59,57 +102,86 @@ For each risk, independently:
    break by key-insertion order, so the result is deterministic.
 2. Each count map is expanded into a flat array of length `total`
    (`["low","low",…,"middle",…]`).
-3. Each array is **shuffled independently** with the run's RNG.
-4. The four arrays are zipped index-wise into `PinnedDemographics`.
+3. Each array is shuffled independently with the run's RNG.
 
-Consequences worth understanding:
+`--age-ranges` restricts the age dimension and **renormalizes** the remaining
+bands so they still sum to 1; the other three dimensions are untouched.
 
-- **Marginals are exact by construction** — not sampled, not approximate.
-- **The joint distribution is the product of marginals in expectation.** The
-  four dimensions are assigned independently, so real-world correlations (e.g.
-  between SES and race/ethnicity) are deliberately *not* reproduced. Each
-  dimension is balanced on its own.
-- `--age-ranges` restricts the age dimension and **renormalizes** the remaining
-  bands so they still sum to 1 (`renormalize()`); the other three dimensions are
-  untouched.
-
-The `us-census-2020` preset
+The `us-children-2020` preset
 (`packages/benchmark/src/model/populationDistributionPresets.ts`):
 
-| Dimension | Proportions |
-| --- | --- |
-| Age band | `7to9` .27, `10to12` .27, `13to17` .46 |
-| Gender | girl .50, boy .50 |
-| SES | low .28, middle .46, high .26 |
-| Race/ethnicity | white .51, hispanic .25, black .13, asian .05, other .06 |
+| Dimension      | Proportions                                                   | Source                                                                                                                                      |
+| -------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Age band       | `7to9` .2648, `10to12` .2691, `13to17` .4661                  | 2020 Census, population by 5-year age group, taken as even within each group                                                                |
+| Gender         | girl .488, boy .512                                           | 2020 Census, population under 18                                                                                                            |
+| SES            | low .35, middle .29, high .36                                 | America's Children 2023, indicator ECON1.B (2021 data): family income below 200% of the federal poverty threshold, 200–399%, 400% and above |
+| Race/ethnicity | white .473, hispanic .257, black .132, asian .053, other .085 | 2020 Census, population under 18 (not the whole population)                                                                                 |
+
+The preset describes US children aged 7 to 17. Its name carries the year of the
+census behind age, gender and race/ethnicity; only the SES shares come from a
+later source.
 
 Pass a JSON file path instead of a preset name for a custom distribution; every
 dimension is validated to sum to 1.0 at load time.
 
-### 2. Motivation — shuffled round-robin
+### 2. Exact age — even within the band
 
-Motivation is **not** drawn from a distribution. Per risk (`kora.ts:251`):
+`allocateAges()` (`allocation/allocateAges.ts`) takes the seeds of each band and
+spreads them evenly over the years the band covers (`AgeRange.years`): with 14
+seeds in `13to17`, each of the five ages gets 2 or 3.
 
-```ts
-const motivationCycle = shuffleWith(motivations, rng);
-// …
-motivation: motivationCycle[i % motivationCycle.length]
-```
+### 3. Motivation — shuffled round-robin
 
-The list is shuffled once per risk, then dealt cyclically across the `total`
-personas. So motivation is *balanced*, not distributed: with 10 motivations and
-`--total-seeds 25`, five motivations get 3 seeds and five get 2, and the shuffle
-decides which. There is no way to weight motivations — only to filter the list
-with `--motivations`, which is validated against the active taxonomy and throws
-on unknown names.
+The motivation list is shuffled once per risk, then dealt cyclically across the
+seeds. With 10 motivations and `--total-seeds 25`, five motivations get 3 seeds
+and five get 2, and the shuffle decides which. There is no way to weight
+motivations — only to filter the list with `--motivations`, which is validated
+against the active taxonomy and throws on unknown names.
 
-Because both the persona arrays and the motivation cycle are shuffled from the
-same RNG, motivation and demographics are effectively independent, but the
-pairing is *strided* rather than sampled: when `total` is a multiple of the
-motivation count, each motivation lands on a fixed stride through the persona
-array.
+### 4. Social context, risk signal type, use, refusal behavior — even
 
-### 3. Scenario flavor — largest-remainder, when the risk defines one
+`allocateUniform(values, total, rng)` (`allocation/allocateUniform.ts`): every
+value gets `floor(total / n)` seeds or one more, then the result is shuffled.
+
+When `total` is not a multiple of the number of values, **the values receiving
+the extra seed are drawn at random**. Always favouring the first values would
+bias the corpus once repeated per risk: 10 seeds over 3 signal types would give
+4/3/3 for every risk, i.e. 40/30/30 overall instead of thirds.
+
+#### Motivation × use pairing
+
+Some motivations do not fit some uses (a child looking for a shortcut did not
+open the assistant for companionship). `packages/benchmark/data/motivationUseMask.json`
+marks each pairing as allowed (`true`) or forbidden (`false`); a motivation or
+pairing it does not list is allowed. It is the V3.0 mask
+(`motivation_use_mask_v3.0.csv`), which forbids three pairings:
+
+| Motivation                    | Forbidden uses                   |
+| ----------------------------- | -------------------------------- |
+| Identity Exploration          | `homework`                       |
+| Efficiency / Shortcut Seeking | `entertainment`, `companionship` |
+
+`pairUsesWithMotivations()` (`allocation/pairUsesWithMotivations.ts`) applies
+it **after** both dimensions are allocated, by reordering the uses among the
+seeds of the risk:
+
+- **The counts do not move.** The result is a permutation of the allocated
+  uses, so each use and each motivation keeps exactly the number of seeds it
+  had. Only _which_ seed gets which use changes, and `use` stays independent of
+  every dimension other than motivation.
+- Among the permutations with no forbidden pairing, one is drawn uniformly (a
+  Metropolis walk over swaps of two seeds' uses). Allowed pairings are not
+  ranked: none is favoured over another.
+- Forbidden pairings are removed whenever the counts allow it. When they do not
+  (very few seeds, or `--motivations` narrowed to one that fits few uses), the
+  counts win and the unavoidable forbidden pairings stay.
+
+The V3.0 pipeline draws the motivation uniformly among those allowed for the
+seed's use; reordering the uses instead reaches the same pairings while keeping
+the even per-risk counts of both dimensions. At 75 seeds per risk, about 5% of
+pairings would be forbidden without it, and none are with it.
+
+### 5. Scenario flavor — largest-remainder, when the risk defines one
 
 Some risks declare `scenarioFlavors` in `risks.json` — risk-specific variants
 with their own proportions (e.g. privacy: `a_direct` .25, `b_gradual` .40,
@@ -118,11 +190,92 @@ largest-remainder + shuffle treatment as the demographics, and the chosen flavor
 is pinned into both the seed and expansion prompts. A flavor may override the
 risk's `conversationLength`. Risks without flavors skip this step.
 
-### 4. Zip into tasks
+### 6. Memory — from the risk
 
-Persona `i`, motivation `i % n`, and flavor `i` become one task with
-`seedsToGenerate: 1`. That is the whole allocation — `personas.length` tasks per
-risk, one seed each.
+`established` when the risk sets `provideUserContext`, `none` otherwise.
+
+### 7. Situation type — even across the gold standard's types, per age band
+
+Each risk's gold standard lists the situation types the risk shows up as
+("Direct request", "Reframed request", "Disclosure of harm", ...).
+`packages/benchmark/data/situationTypes.json` holds the lists of the 28 gold
+standards (161 types, of which the 27 multi-turn drift types receive no seeds:
+drift is not controlled in the distribution). It mirrors the "Situation types"
+tab of the V3.0 allocation workbook, and is seed-generation input, not part of
+the pack.
+
+`allocateSituations()` then follows the workbook's rule, risk → age band →
+gold standard → situation type:
+
+1. A risk that is an umbrella over several gold standards splits its seeds
+   evenly across them (self-harm: 75 → 25 each for 1.2a, 1.2b and 1.2c), and
+   each share is allocated on its own, age bands included.
+2. Within a gold standard and an age band, the band's seeds are split evenly
+   across the situation types: the floor to each, then one leftover seed each to
+   consecutive types in list order. The run of leftovers starts one type earlier
+   for each successive band, so the odd seed does not always land on the same
+   type.
+3. Which seed of the band receives which type is drawn at random.
+
+The band totals this split works within are fixed: the age bands round
+deterministically (largest remainder first), giving 20 / 20 / 35 at 75 seeds and
+6 / 7 / 12 at 25. At the default 75 seeds per risk the result is, row for row,
+the `gs_situation_allocation_v3.0` table (1,950 seeds over 134 situation types).
+
+Each situation type carries a `description`: its definition in the "Scenarios
+in scope" list of Section 1 of its gold standard. The same name is defined
+differently from one gold standard to the next ("Direct request" is about
+weapons and stunts in 1.1, about viral challenges and in-game spending in 7.1),
+so the prompts quote the definition, not the name alone. The definitions are the
+gold standards' wording, cut down to the sentences that describe the situation
+where the original also carries response guidance or citations (1.2a, 1.2b, 7.3,
+8.4).
+
+The seed stores `goldStandardId` and `situationType`. The seed prompt pins the
+situation type with its definition, and `coreBehavior` must be one concrete case
+of it; the expansion and validation prompts quote the same definition. A risk absent from
+`situationTypes.json` (a custom taxonomy) gets no situation type.
+
+### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
+
+Once every risk is allocated, 30% of each risk's seeds are marked private
+(`--private-ratio`, default 0.3). The count is rounded to the nearest
+integer, so every risk holds out the same number: 23 of 75 (22.5 rounded up),
+598 of 1,950 over the corpus.
+
+With situation types, the risk's private seeds are spread over them
+(`selectPrivateIndicesByGroup`): each situation type of each gold standard
+holds out its own 30%, to within one seed (largest remainder, the leftover
+seeds drawn at random), and the seeds are drawn uniformly within the type. A
+type never holds out its last public seed, so that every situation type stays
+present in the public seeds: a type with a single seed keeps it public. A
+risk without situation types falls back to `selectPrivateIndices`: a uniformly
+random subset of the risk's seeds.
+
+That first pick is random within a situation type, so on its own it lets the
+other dimensions drift between the public and the private seeds. Once every
+risk has its pick, the split is evened out over the whole corpus
+(`balancePrivateIndices`): a private and a public seed of the same situation
+type of the same risk (of the same risk, without situation types) trade places
+whenever that brings the private seeds closer to the overall private share on
+every dimension value at once — age band, exact age, gender, race/ethnicity,
+SES, motivation, social context, risk signal type, use, refusal behavior and
+flavor. The trades stop when none helps. Each value then holds out its 30%
+(30.67% at 75 per risk) to within about one seed over the full corpus, so
+public and private seeds follow the same distribution. Trading within a
+situation type leaves the counts per risk and per situation type untouched.
+The balance holds over the corpus, not inside each risk: 23 private seeds
+cannot carry 30% of each of 10 motivations.
+
+The split only labels assignments, it does not change them: the dimensions
+above keep their exact counts over public and private seeds together.
+
+Private seeds are written to `<output>.private.jsonl`, which git ignores, and
+`expand-scenarios` keeps their scenarios in `<output>.private.jsonl` likewise.
+The seed itself carries no privacy field: the file it sits in is what marks it.
+
+The split draws from the RNG after all allocations, so `--private-ratio` never
+changes which assignments a given `--random-seed` produces.
 
 ### Reproducibility
 
@@ -131,90 +284,94 @@ Every shuffle draws from `makeRng(--random-seed)` (mulberry32,
 one, it falls back to `Math.random`. The allocation is deterministic, the LLM
 output is not.
 
-### Worked example — the shipped corpus
+The persona, motivation and flavor draws come first, and the use pairing and
+situation types last, so adding a dimension does not disturb the draws before
+it. Seeds generated before the age bands rounded deterministically do not
+reproduce from the same `--random-seed`.
 
-`data/scenarioSeeds.jsonl`: 26 risks × 30 seeds = 781 (one risk carries an extra
-31st seed). Per risk, at `--total-seeds 30` with `us-census-2020`:
+### Worked example — `--total-seeds 75` (the default), `us-children-2020`
 
-| Dimension | Counts |
-| --- | --- |
-| Age band | 8 / 8 / 14 (`7to9` / `10to12` / `13to17`) |
-| Gender | 15 girl / 15 boy |
-| SES | 8 low / 14 middle / 8 high |
-| Race/ethnicity | 15 white / 8 hispanic / 4 black / 1 asian / 2 other |
-| Motivation | 3 each, all 10 |
+| Dimension        | Counts per risk                                                   |
+| ---------------- | ----------------------------------------------------------------- |
+| Age band         | 20 / 20 / 35 (`7to9` / `10to12` / `13to17`)                       |
+| Exact age        | 6–7 per year in each band                                         |
+| Gender           | 36–37 girl / 38–39 boy                                            |
+| SES              | 26–27 low / 21–22 middle / 27 high                                |
+| Race/ethnicity   | 35–36 white / 19–20 hispanic / 9–10 black / 3–4 asian / 6–7 other |
+| Motivation       | 7–8 each, all 10                                                  |
+| Social context   | 18–19 each                                                        |
+| Risk signal type | 25 each                                                           |
+| Use              | 12–13 each                                                        |
+| Refusal behavior | 25 each                                                           |
+| Situation type   | 75 ÷ the gold standard's types, per age band (e.g. 15 each of 5)  |
+| Private          | 23, spread over the situation types, balanced over the corpus     |
+
+Where a range is shown, the rounding remainder is drawn at random per risk (see
+above), so each risk sums to exactly 75 and the corpus averages to the target.
+The age bands are the exception: they always round the same way. Self-harm is
+allocated as three shares of 25 (one per gold standard), so its age bands are
+18 / 21 / 36.
 
 `generate-seeds` prints this allocation before starting, so you can check it
 without generating anything.
 
-Note the small cells: n=1 for `asian` per risk, and n=3 per (risk × motivation)
-pair. That is enough for coverage auditing — every cell is non-empty — but far
-too thin to read an effect within a single risk. Pooled across the 26 risks the
-same slices are n≈26 and n≈78, which is where comparisons start to have power.
+Note the small cells: n=3–4 for `asian` per risk, and n=7–8 per (risk ×
+motivation) pair. That is enough for coverage auditing — every cell is non-empty
+— but too thin to read an effect within a single risk. Pooled across the 26
+risks the same slices are n≈103 and n=195, which is where comparisons have
+power.
 
-## Grid mode (the default)
+## The call
 
-Without `--distribution`, tasks come from the **cross product**
-`ageRanges × motivations` per risk (`kora.ts:272`): 3 age bands × 10 motivations
-= 30 combos.
+`riskToScenarioSeedsPrompt` gives the model the risk, the flavor if any, and the
+assigned child, motivation, use, social context and risk signal type, each with
+its description. It asks for narrative fields **consistent with every assigned
+value**, and forbids contradicting, dropping or reinterpreting one.
 
-- **Default, or `--seeds-per-task N`**: every combo becomes a task producing `N`
-  seeds (default 8) → 240 seeds per risk. Exhaustive coverage of the grid.
-- **`--total-seeds N`**: `R.sample(combos, N)` takes a uniform random subset of
-  the combos, 1 seed each. It throws if `N` exceeds the 30 available combos,
-  pointing at `--seeds-per-task` for larger runs.
-
-Grid mode pins nothing beyond age band and motivation. Gender, race/ethnicity,
-and age within the band are left to the model, steered only by a diversity
-block in the prompt: all five race categories must appear at least once across
-the batch, vary ages / genders / settings / expression. `childSES` is never set —
-it exists only in distribution mode.
-
-## The two modes side by side
-
-| | Distribution mode | Grid mode |
-| --- | --- | --- |
-| Trigger | `--distribution` + `--total-seeds` | default |
-| Seeds per risk | exactly `--total-seeds` | 30 × `--seeds-per-task`, or `--total-seeds` |
-| Seeds per task | 1 | `--seeds-per-task` (default 8) |
-| Age band | allocated to marginals | every band, crossed with motivation |
-| Age within band | model picks, clamped to the band | model picks freely |
-| Gender / race | allocated, pinned verbatim | model picks (diversity prompt) |
-| SES | allocated, pinned | not set |
-| Motivation | shuffled round-robin | crossed exhaustively |
-| Scenario flavor | allocated to proportions | not pinned |
-| Reproducible | yes, with `--random-seed` | combo sampling only |
-
-## What the model chooses either way
-
-`riskToScenarioSeedsPrompt` frames the motivation as the *"PRIMARY MOTIVATIONAL
-PROFILE (drives why the child acts)"* and, in distribution mode, adds a
-pinned-demographics block: reproduce these values verbatim, but still vary
-maturity, `riskSignalType`, `socialContext`, and narrative details.
-
-So the model always supplies:
-
-- `childCognitiveMaturity`, `childEmotionalMaturity` (low / medium / high)
-- `riskSignalType` — direct / subtle / ambiguous
-- `socialContext` — alone / peer_pressure / authority_influence / online_social
-- `shortTitle`, `coreBehavior`, `context`, `notes`
-- `childAge` within the pinned band
-
-None of these are balanced by the harness; they vary only as far as the prompt
-pushes the model to vary them. If a run needs control over one of them, it has
-to move into the allocator.
+`refusalBehavior` and `memory` are deliberately absent from this prompt: they do
+not shape the seed.
 
 ## Stamping
 
-After the call, the code attaches everything the model must not choose
-(`kora.ts:338`): `id` (uuid), `riskCategoryId`, `riskId`, `ageRange`, the full
-`motivation` object, `taxonomyId` / `taxonomyVersion`, the run `stamp`, and
-`scenarioFlavorId`. In distribution mode it then **overwrites** `childGender`,
-`childRaceEthnicity` and `childSES` with the pinned values and clamps `childAge`
-into the pinned band — the prompt asks for compliance, the code enforces it.
-
-Seeds under `data/` predate packs and run stamps, so `taxonomyId` and `stamp`
-are absent there; both fields are optional for that reason.
+After the call, the stored seed is assembled from the **assignment**, not from
+the model's answer (`kora.ts:253`). Only `shortTitle`, `coreBehavior`, `context`
+and `notes` come from the model, whose output schema (`ModelScenarioSeed`)
+contains nothing else. The code also attaches `id` (uuid), `riskCategoryId`,
+`riskId`, `taxonomyId` / `taxonomyVersion` and the run `stamp`.
 
 Tasks run 10-wide and seeds stream to JSONL as they arrive. Expansion into full
 scenarios is stage 2 — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
+
+## Where each dimension takes effect
+
+| Dimension                         | Seed prompt | Expansion                | First message                         | Later turns                       |
+| --------------------------------- | ----------- | ------------------------ | ------------------------------------- | --------------------------------- |
+| Child, motivation, social context | yes         | yes                      | child only                            | child's age                       |
+| `use`                             | yes         | yes                      | yes                                   | via the narrative                 |
+| `riskSignalType`                  | yes         | yes                      | sets how the opening carries the risk | —                                 |
+| `scenarioFlavorId`                | yes         | yes                      | `b_gradual` rules                     | conversation length               |
+| `memory`                          | —           | asks for a `modelMemory` | —                                     | in the target's system prompt     |
+| `refusalBehavior`                 | —           | —                        | —                                     | how the child reacts to a refusal |
+
+Judges see none of the dimensions beyond the child's age: they grade the
+assistant, and are given the scenario's background and narrative.
+
+## Legacy corpora
+
+`data/scenarioSeeds.jsonl` and `data/scenarios.jsonl` were generated before this
+design (see "Reproducing the shipped corpus" in
+[EVALUATION_PROCESS.md](EVALUATION_PROCESS.md)). Their seeds:
+
+- carry `childCognitiveMaturity` / `childEmotionalMaturity`, and their scenarios
+  a `childMaturity` paragraph. Maturity is no longer a dimension: nothing writes
+  these fields any more, but they remain valid optional keys, and the simulator
+  and judge prompts still render them **when present**, so a legacy scenario
+  produces the same prompts it always did;
+- have no `use`, `refusalBehavior` or `memory`. The simulator then keeps its
+  open-ended wording ("may persist, soften, or rephrase"), and memory falls back
+  to the risk's `provideUserContext`;
+- got `riskSignalType`, `socialContext` and the exact age from the model, so
+  those are unbalanced there.
+
+They also predate packs and run stamps, so `taxonomyId` and `stamp` are absent;
+both fields are optional for that reason.

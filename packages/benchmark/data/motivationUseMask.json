@@ -1,0 +1,82 @@
+{
+  "Curiosity / Exploration": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Social Belonging / Validation": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Emotional Distress / Anxiety": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Boredom / Sensation Seeking": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Rule Testing / Boundary Pushing": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Authority Influence": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Helping or Protecting Others": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Misunderstanding Consequences": {
+    "homework": true,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Identity Exploration": {
+    "homework": false,
+    "entertainment": true,
+    "companionship": true,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  },
+  "Efficiency / Shortcut Seeking": {
+    "homework": true,
+    "entertainment": false,
+    "companionship": false,
+    "health_advice": true,
+    "creative": true,
+    "learning": true
+  }
+}

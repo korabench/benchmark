@@ -45,6 +45,9 @@ const VPopulationDistribution = v.strictObject({
 // API.
 //
 
+/** Preset used when a caller does not name a distribution. */
+const DEFAULT_PRESET_NAME = "us-children-2020";
+
 const SUM_TOLERANCE = 1e-6;
 
 function assertSumsToOne(
@@ -69,7 +72,7 @@ function validate(distribution: PopulationDistribution): void {
 /**
  * Resolve `specifier` to a PopulationDistribution.
  *
- * - If `specifier` matches a preset name (e.g. "us-census-2020") → return it.
+ * - If `specifier` matches a preset name (e.g. "us-children-2020") → return it.
  * - Otherwise treat `specifier` as a path to a JSON file and parse it.
  */
 async function resolve(specifier: string): Promise<PopulationDistribution> {
@@ -85,6 +88,18 @@ async function resolve(specifier: string): Promise<PopulationDistribution> {
   return parsed;
 }
 
+/** The distribution seed generation allocates against when none is given. */
+function defaultDistribution(): PopulationDistribution {
+  const preset = populationDistributionPresets[DEFAULT_PRESET_NAME];
+  if (!preset) {
+    throw new Error(
+      `Default population distribution preset "${DEFAULT_PRESET_NAME}" is not defined.`
+    );
+  }
+  validate(preset);
+  return preset;
+}
+
 //
 // Exports.
 //
@@ -97,6 +112,8 @@ export const PopulationDistribution = {
   io: VPopulationDistribution,
   validate,
   resolve,
+  default: defaultDistribution,
+  defaultPresetName: DEFAULT_PRESET_NAME,
   presetNames: (): readonly string[] =>
     Object.keys(populationDistributionPresets),
 };

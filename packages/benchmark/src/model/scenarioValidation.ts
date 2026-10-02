@@ -11,10 +11,10 @@ const VScenarioValidation = v.strictObject({
   reasons: v.pipe(
     v.string(),
     v.minLength(20),
-    v.maxLength(500),
+    v.maxLength(1000),
     v.metadata({
       description:
-        "Brief explanation of the validation decision, citing specific issues if rejected.",
+        "Brief explanation of the validation decision, citing specific issues if rejected. At most about 80 words.",
     })
   ),
 });

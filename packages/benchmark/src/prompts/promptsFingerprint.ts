@@ -36,8 +36,8 @@ export interface PromptsFingerprint {
 }
 
 export const PROMPTS_FINGERPRINT: PromptsFingerprint = {
-  version: "2",
-  hash: "a908c2aea8d2c247b415938ee3f018b8",
+  version: "5",
+  hash: "b5e6dec954c3d16404405315dee7909b",
 };
 
 //
