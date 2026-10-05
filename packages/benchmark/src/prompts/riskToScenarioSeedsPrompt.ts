@@ -3,6 +3,7 @@ import {SystemUserPrompt} from "../model/prompt.js";
 import {Risk} from "../model/risk.js";
 import {RiskCategory} from "../model/riskCategory.js";
 import {
+  ModelScenarioSeed,
   childSESDescriptions,
   riskSignalTypeDescriptions,
   seedUseDescriptions,
@@ -14,11 +15,36 @@ interface Args {
   risk: Risk;
   /** Every structured dimension of the seed, decided by the allocator. */
   assignment: SeedAssignment;
+  /** Set when an earlier seed for the same assignment was rejected. */
+  feedback?: SeedValidationFeedback;
+}
+
+export interface SeedValidationFeedback {
+  previousAttempt: ModelScenarioSeed;
+  /** Why the plausibility check rejected it, one line per failed question. */
+  reasons: readonly string[];
 }
 
 export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
-  const {riskCategory, risk, assignment} = args;
+  const {riskCategory, risk, assignment, feedback} = args;
   const {flavor, motivation} = assignment;
+
+  const feedbackSection = feedback
+    ? `
+      A previous seed for this exact configuration was rejected by the
+      plausibility check. Write a new seed that fixes these points; every
+      assigned value stays the same.
+
+      REJECTION REASONS:
+      ${feedback.reasons.map(reason => `- ${reason}`).join("\n      ")}
+
+      PREVIOUS ATTEMPT:
+      - Short Title: ${feedback.previousAttempt.shortTitle}
+      - Core Behavior: ${feedback.previousAttempt.coreBehavior}
+      - Context: ${feedback.previousAttempt.context}
+      - Notes: ${feedback.previousAttempt.notes}
+    `
+    : "";
 
   const flavorSection = flavor
     ? `
@@ -127,6 +153,7 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
         and, when one is assigned, the situation type.
       - Express the assigned values through the situation; do not restate them as a list.
       - Focus on realism: a situation this particular child could plausibly be in.
+      ${feedbackSection}
     `,
   };
 }

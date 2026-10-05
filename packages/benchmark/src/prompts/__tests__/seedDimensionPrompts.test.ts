@@ -12,13 +12,17 @@ import {
   RiskSignalType,
   ScenarioSeed,
 } from "../../model/scenarioSeed.js";
+import {SeedValidation} from "../../model/seedValidation.js";
 import {Packs} from "../../packs/packs.js";
+import {planSeedSlots} from "../../seedSlots.js";
 import {conversationToAssessmentPrompt} from "../conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "../conversationToMechanismAssessmentPrompt.js";
+import {riskToScenarioSeedsPrompt} from "../riskToScenarioSeedsPrompt.js";
 import {scenarioToFirstUserMessagePrompt} from "../scenarioToFirstUserMessagePrompt.js";
 import {scenarioToNextUserMessagePrompt} from "../scenarioToNextUserMessagePrompt.js";
 import {scenarioToValidationPrompt} from "../scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "../seedToScenarioPrompt.js";
+import {seedToValidationPrompt} from "../seedToValidationPrompt.js";
 
 //
 // Helpers.
@@ -426,5 +430,89 @@ describe("scenarioToFirstUserMessagePrompt seed dimensions", () => {
     ).user;
     expect(prompt).not.toContain("Situation type");
     expect(prompt).not.toContain("- Memory:");
+  });
+});
+
+//
+// Seed plausibility check.
+//
+
+describe("seedToValidationPrompt", () => {
+  const seed = createScenarioSeed({
+    riskCategoryId: privacyCategory.id,
+    riskId: privacy.id,
+    goldStandardId: "7.3",
+    situationType: "Account / data flow",
+    use: "homework",
+    refusalBehavior: "insists",
+    memory: "established",
+    coreBehavior: "Marker core behavior written by the seed model.",
+    context: "Marker context written by the seed model.",
+  });
+  const prompt = text(seedToValidationPrompt(privacyCategory, privacy, seed));
+
+  it("shows the assigned values the seed model saw, and the seed as written", () => {
+    expect(prompt).toContain(`Risk Definition: ${privacy.description}`);
+    expect(prompt).toContain("- Child Age: 11 (age range ");
+    expect(prompt).toContain("): homework (");
+    expect(prompt).toContain("): Account / data flow (within 7.3, ");
+    expect(prompt).toContain("- Social Context: alone (");
+    expect(prompt).toContain(
+      "- Core Behavior: Marker core behavior written by the seed model."
+    );
+    expect(prompt).toContain(
+      "- Context: Marker context written by the seed model."
+    );
+  });
+
+  it("leaves out refusal behavior and memory, which the seed model never saw", () => {
+    expect(prompt).not.toContain("Refusal Behavior");
+    expect(prompt).not.toContain("Memory (");
+  });
+
+  it("asks every question of the schema and no overall verdict", () => {
+    SeedValidation.questions.forEach(question => {
+      expect(prompt).toContain(`) ${question}: `);
+    });
+    expect(prompt).toContain("do NOT return an overall verdict");
+  });
+});
+
+describe("riskToScenarioSeedsPrompt feedback", () => {
+  const slot = planSeedSlots({
+    riskIds: [privacy.id],
+    totalSeeds: 1,
+    randomSeed: 1,
+  })[0]!;
+
+  it("has no feedback section on a first attempt", () => {
+    const prompt = text(riskToScenarioSeedsPrompt(slot));
+    expect(prompt).not.toContain("REJECTION REASONS");
+    expect(prompt).not.toContain("PREVIOUS ATTEMPT");
+  });
+
+  it("quotes the rejection reasons and the previous attempt on a retry", () => {
+    const first = text(riskToScenarioSeedsPrompt(slot));
+    const retry = text(
+      riskToScenarioSeedsPrompt({
+        ...slot,
+        feedback: {
+          previousAttempt: {
+            shortTitle: "Rejected title",
+            coreBehavior: "Rejected core behavior of the earlier attempt.",
+            context: "Rejected context of the earlier attempt.",
+            notes: "",
+          },
+          reasons: ["showsUse: No homework in sight.", "addressesAI: A forum."],
+        },
+      })
+    );
+    expect(retry).toContain("- showsUse: No homework in sight.");
+    expect(retry).toContain("- addressesAI: A forum.");
+    expect(retry).toContain(
+      "- Core Behavior: Rejected core behavior of the earlier attempt."
+    );
+    // The assignment itself is untouched.
+    expect(retry.startsWith(first.trimEnd().slice(0, 2000))).toBe(true);
   });
 });

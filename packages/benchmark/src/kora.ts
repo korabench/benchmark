@@ -7,28 +7,21 @@ import {
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
 import {
-  allocateSeedAssignments,
-  SeedAssignment,
-} from "./allocation/allocateSeedAssignments.js";
-import {balancePrivateIndices} from "./allocation/balancePrivateIndices.js";
-import {makeRng} from "./allocation/rng.js";
-import {selectPrivateIndices} from "./allocation/selectPrivateIndices.js";
-import {selectPrivateIndicesByGroup} from "./allocation/selectPrivateIndicesByGroup.js";
-import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
+  Benchmark,
+  GenerateSeedsContext,
+  JudgeModel,
+  TraceEvent,
+} from "./benchmark.js";
 import {
   generateFirstUserMessage,
   generateNextUserMessage,
 } from "./generateUserMessage.js";
-import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
-import {MotivationUseMask} from "./model/motivationUseMask.js";
-import {PopulationDistribution} from "./model/populationDistribution.js";
-import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
   RunAssessmentSums,
@@ -47,37 +40,139 @@ import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
-import {SituationTypes} from "./model/situationTypes.js";
+import {SeedValidation} from "./model/seedValidation.js";
 import {TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
-import {Conformance} from "./packs/conformance.js";
 import {Packs} from "./packs/packs.js";
 import {conversationToAssessmentPrompt} from "./prompts/conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "./prompts/conversationToMechanismAssessmentPrompt.js";
 import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessagePrompt.js";
-import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
+import {
+  riskToScenarioSeedsPrompt,
+  SeedValidationFeedback,
+} from "./prompts/riskToScenarioSeedsPrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+import {seedToValidationPrompt} from "./prompts/seedToValidationPrompt.js";
+import {planSeedSlots, SeedSlot} from "./seedSlots.js";
 import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
-/**
- * Seeds generated per risk when the caller does not say, and therefore the
- * number of scenarios per risk once every seed is expanded.
- */
-export const DEFAULT_TOTAL_SEEDS = 75;
+export {DEFAULT_PRIVATE_RATIO, DEFAULT_TOTAL_SEEDS} from "./seedSlots.js";
 
 /**
- * Share of each risk's seeds held out as private when the caller does not say.
- * Private seeds, and the scenarios expanded from them, are never published.
+ * Seeds written for one slot before giving up on it, when the plausibility
+ * check is on and the caller does not say.
  */
-export const DEFAULT_PRIVATE_RATIO = 0.3;
+export const DEFAULT_SEED_VALIDATION_ATTEMPTS = 3;
 
 /** The active run stamp as a spreadable field: present only when configured. */
 function stampField(): {stamp?: RunStamp} {
   const stamp = Stamp.current();
   return stamp ? {stamp} : {};
+}
+
+function buildSeed(slot: SeedSlot, output: ModelScenarioSeed): ScenarioSeed {
+  const {riskCategory, risk, assignment} = slot;
+  const {taxonomy} = Packs.current();
+
+  // The assignment is the source of truth for every dimension: nothing
+  // structured is read back from the model.
+  return {
+    childAge: assignment.childAge,
+    childGender: assignment.childGender,
+    childRaceEthnicity: assignment.childRaceEthnicity,
+    childSES: assignment.childSES,
+    shortTitle: output.shortTitle,
+    coreBehavior: output.coreBehavior,
+    context: output.context,
+    notes: output.notes,
+    riskSignalType: assignment.riskSignalType,
+    socialContext: assignment.socialContext,
+    use: assignment.use,
+    refusalBehavior: assignment.refusalBehavior,
+    memory: assignment.memory,
+    ...(assignment.flavor ? {scenarioFlavorId: assignment.flavor.id} : {}),
+    ...(assignment.situation
+      ? {
+          goldStandardId: assignment.situation.goldStandardId,
+          situationType: assignment.situation.situationType,
+        }
+      : {}),
+    taxonomyId: taxonomy.id,
+    taxonomyVersion: taxonomy.version,
+    ...stampField(),
+    id: uuid(),
+    riskCategoryId: riskCategory.id,
+    riskId: risk.id,
+    ageRange: assignment.ageRange,
+    motivation: assignment.motivation,
+  };
+}
+
+/**
+ * Write the seed of one slot. With a plausibility check, a rejected seed is
+ * written again for the same slot, with the reasons of the last rejection,
+ * until one passes; undefined when `maxAttempts` seeds were all rejected.
+ */
+async function fillSlot(
+  c: GenerateSeedsContext,
+  slot: SeedSlot,
+  maxAttempts: number,
+  attempt: number,
+  feedback: SeedValidationFeedback | undefined
+): Promise<ScenarioSeed | undefined> {
+  const {riskCategory, risk, assignment} = slot;
+  const prompt = riskToScenarioSeedsPrompt({
+    riskCategory,
+    risk,
+    assignment,
+    feedback,
+  });
+
+  const {output} = await c.getResponse({
+    messages: [
+      {role: "system", content: prompt.system},
+      {role: "user", content: prompt.user},
+    ],
+    outputType: ModelScenarioSeed.io,
+  });
+  const seed = buildSeed(slot, output);
+
+  if (!c.getValidationResponse) {
+    return seed;
+  }
+
+  const validationPrompt = seedToValidationPrompt(riskCategory, risk, seed);
+  const {output: validation} = await c.getValidationResponse({
+    messages: [
+      {role: "system", content: validationPrompt.system},
+      {role: "user", content: validationPrompt.user},
+    ],
+    outputType: SeedValidation.io,
+  });
+  const verdict = SeedValidation.verdict(validation);
+  await c.onValidation?.({
+    key: slot.key,
+    attempt,
+    maxAttempts,
+    seed,
+    isPrivate: slot.isPrivate,
+    validation,
+    verdict,
+  });
+
+  if (verdict === "pass") {
+    return seed;
+  }
+  if (attempt >= maxAttempts) {
+    return undefined;
+  }
+  return fillSlot(c, slot, maxAttempts, attempt + 1, {
+    previousAttempt: output,
+    reasons: SeedValidation.failedReasons(validation),
+  });
 }
 
 /**
@@ -183,206 +278,35 @@ export const kora = Benchmark.new({
     return RunResult.io;
   },
   async *generateScenarioSeeds(c, options) {
-    const riskCategories = RiskCategory.listAll();
-    const allMotivations = Motivation.listAll();
-    const totalSeeds = options?.totalSeeds ?? DEFAULT_TOTAL_SEEDS;
-    const ageRanges = options?.ageRanges ?? AgeRange.list;
-    const riskIds = options?.riskIds;
-    const motivationNames = options?.motivations;
-    const distribution =
-      options?.distribution ?? PopulationDistribution.default();
-    const privateRatio = options?.privateRatio ?? DEFAULT_PRIVATE_RATIO;
-
-    if (
-      !Number.isFinite(privateRatio) ||
-      privateRatio < 0 ||
-      privateRatio > 1
-    ) {
+    const slots = planSeedSlots(options);
+    const maxAttempts =
+      options?.maxValidationAttempts ?? DEFAULT_SEED_VALIDATION_ATTEMPTS;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
       throw new Error(
-        `--private-ratio must be a number between 0 and 1 (got ${privateRatio}).`
+        `maxValidationAttempts must be a positive integer (got ${maxAttempts}).`
       );
     }
+    const skipSlotKeys = options?.skipSlotKeys;
 
-    if (!Number.isInteger(totalSeeds) || totalSeeds < 0) {
-      throw new Error(
-        `--total-seeds must be a non-negative integer (got ${totalSeeds}).`
-      );
-    }
-
-    if (riskIds) {
-      Conformance.assertRiskIdsKnown(riskIds);
-    }
-    const riskIdSet = riskIds ? new Set(riskIds) : undefined;
-
-    if (motivationNames) {
-      const knownNames = new Set(allMotivations.map(m => m.name));
-      const unknown = motivationNames.filter(n => !knownNames.has(n));
-      if (unknown.length > 0) {
-        throw new Error(`Unknown motivation names: ${unknown.join(", ")}`);
-      }
-    }
-    const motivations = motivationNames
-      ? allMotivations.filter(m => motivationNames.includes(m.name))
-      : allMotivations;
-
-    const rng = makeRng(options?.randomSeed);
-    const useMask = MotivationUseMask.bundled();
-    const situationTypes = SituationTypes.bundled();
-
-    // One task per seed. Every structured dimension is decided here, before the
-    // model is called: the model only writes the narrative fields.
-    interface Task {
-      riskCategory: RiskCategory;
-      risk: Risk;
-      assignment: SeedAssignment;
-      isPrivate: boolean;
-    }
-
-    const allocations = riskCategories.flatMap(riskCategory =>
-      riskCategory.risks
-        .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-        .map(risk => ({
-          riskCategory,
-          risk,
-          assignments: allocateSeedAssignments({
-            risk,
-            distribution,
-            motivations,
-            total: totalSeeds,
-            rng,
-            ageRanges,
-            useMask,
-            situationTypes,
-          }),
-        }))
-    );
-
-    // The private split draws only once every risk is allocated, so that it
-    // never changes which assignments a given random seed produces.
-    const firstPick = allocations.flatMap(
-      ({riskCategory, risk, assignments}) => {
-        // With situation types, the risk's private seeds are spread evenly
-        // over the situation types of its gold standards.
-        const hasSituations = assignments.every(a => a.situation);
-        const situationKeys = assignments.map(a =>
-          hasSituations
-            ? `${a.situation!.goldStandardId}|${a.situation!.situationType}`
-            : ""
-        );
-        const privateIndices = hasSituations
-          ? selectPrivateIndicesByGroup(situationKeys, privateRatio, rng)
-          : selectPrivateIndices(assignments.length, privateRatio, rng);
-        return assignments.map((assignment, i) => ({
-          riskCategory,
-          risk,
-          assignment,
-          swapKey: `${risk.id}|${situationKeys[i]!}`,
-          isPrivate: privateIndices.has(i),
-        }));
-      }
-    );
-
-    // Which seeds are private is then evened out over the whole corpus, so
-    // that public and private seeds follow the same distribution on every
-    // dimension. Seeds only trade places within a risk's situation type (or
-    // within the risk, without situation types), which keeps the counts above.
-    const privateIndices = balancePrivateIndices({
-      privateIndices: new Set(
-        firstPick.flatMap((task, i) => (task.isPrivate ? [i] : []))
-      ),
-      swapKeys: firstPick.map(task => task.swapKey),
-      values: firstPick.map(({assignment: a}) => [
-        `ageRange:${a.ageRange}`,
-        `childAge:${a.childAge}`,
-        `childGender:${a.childGender}`,
-        `childRaceEthnicity:${a.childRaceEthnicity}`,
-        `childSES:${a.childSES}`,
-        `motivation:${a.motivation.name}`,
-        `socialContext:${a.socialContext}`,
-        `riskSignalType:${a.riskSignalType}`,
-        `use:${a.use}`,
-        `refusalBehavior:${a.refusalBehavior}`,
-        ...(a.flavor ? [`flavor:${a.flavor.id}`] : []),
-      ]),
-      rng,
-    });
-    const tasks: Task[] = firstPick.map(
-      ({riskCategory, risk, assignment}, i) => ({
-        riskCategory,
-        risk,
-        assignment,
-        isPrivate: privateIndices.has(i),
-      })
-    );
-
-    yield {total: tasks.length, items: []};
+    yield {total: slots.length, items: []};
 
     const seedStream = flatTransform(
       10,
       async (
-        task: Task
-      ): Promise<{seed: ScenarioSeed; isPrivate: boolean}[]> => {
-        const {riskCategory, risk, assignment, isPrivate} = task;
-        const prompt = riskToScenarioSeedsPrompt({
-          riskCategory,
-          risk,
-          assignment,
-        });
-
-        const {output} = await c.getResponse({
-          messages: [
-            {role: "system", content: prompt.system},
-            {role: "user", content: prompt.user},
-          ],
-          outputType: ModelScenarioSeed.io,
-        });
-
-        const {taxonomy} = Packs.current();
-
-        // The assignment is the source of truth for every dimension: nothing
-        // structured is read back from the model.
-        const seed: ScenarioSeed = {
-          childAge: assignment.childAge,
-          childGender: assignment.childGender,
-          childRaceEthnicity: assignment.childRaceEthnicity,
-          childSES: assignment.childSES,
-          shortTitle: output.shortTitle,
-          coreBehavior: output.coreBehavior,
-          context: output.context,
-          notes: output.notes,
-          riskSignalType: assignment.riskSignalType,
-          socialContext: assignment.socialContext,
-          use: assignment.use,
-          refusalBehavior: assignment.refusalBehavior,
-          memory: assignment.memory,
-          ...(assignment.flavor
-            ? {scenarioFlavorId: assignment.flavor.id}
-            : {}),
-          ...(assignment.situation
-            ? {
-                goldStandardId: assignment.situation.goldStandardId,
-                situationType: assignment.situation.situationType,
-              }
-            : {}),
-          taxonomyId: taxonomy.id,
-          taxonomyVersion: taxonomy.version,
-          ...stampField(),
-          id: uuid(),
-          riskCategoryId: riskCategory.id,
-          riskId: risk.id,
-          ageRange: assignment.ageRange,
-          motivation: assignment.motivation,
-        };
-        return [{seed, isPrivate}];
+        slot: SeedSlot
+      ): Promise<{seed: ScenarioSeed; slot: SeedSlot}[]> => {
+        const seed = await fillSlot(c, slot, maxAttempts, 1, undefined);
+        return seed ? [{seed, slot}] : [];
       },
-      tasks
+      slots.filter(slot => !skipSlotKeys?.has(slot.key))
     );
 
-    for await (const {seed, isPrivate} of seedStream) {
+    for await (const {seed, slot} of seedStream) {
       yield {
-        total: tasks.length,
+        total: slots.length,
         items: [seed],
-        ...(isPrivate ? {private: true} : {}),
+        key: slot.key,
+        ...(slot.isPrivate ? {private: true} : {}),
       };
     }
   },
@@ -421,11 +345,17 @@ export const kora = Benchmark.new({
         outputType,
       });
 
-      const scenario: Scenario = {
+      // The first user message is written before the validation, which asks
+      // whether a child of this age would write it.
+      const draft: Scenario = {
         seed,
         firstUserMessage: "",
         ...modelScenario,
         ...stampField(),
+      };
+      const scenario: Scenario = {
+        ...draft,
+        firstUserMessage: await generateFirstUserMessage(c, risk, draft),
       };
 
       const validationPrompt = scenarioToValidationPrompt(
@@ -442,19 +372,26 @@ export const kora = Benchmark.new({
         ],
         outputType: ScenarioValidation.io,
       });
+      const verdict = ScenarioValidation.verdict(validation);
+      const reasons = ScenarioValidation.reasons(validation);
 
-      if (validation.verdict === "pass") {
-        scenario.firstUserMessage = await generateFirstUserMessage(
-          c,
-          risk,
-          scenario
-        );
+      await c.onValidation?.({
+        seed,
+        attempt: attempt + 1,
+        maxAttempts,
+        scenario,
+        validation,
+        verdict,
+        reasons,
+      });
+
+      if (verdict === "pass") {
         return [scenario];
       }
 
       validationFeedback = {
         previousAttempt: modelScenario,
-        reasons: validation.reasons,
+        reasons,
       };
     }
 

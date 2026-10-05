@@ -41,6 +41,7 @@ const VChain = v.array(ModelSpec.io);
 // optional. `user` and `judges` are what every evaluation needs.
 const VStampModels = v.object({
   seeds: v.optional(VChain),
+  seedValidation: v.optional(VChain),
   expansion: v.optional(VChain),
   expansionUser: v.optional(VChain),
   user: ModelSpec.io,

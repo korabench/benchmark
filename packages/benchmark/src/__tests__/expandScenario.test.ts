@@ -1,11 +1,12 @@
 import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
-import {ExpandScenarioContext} from "../benchmark.js";
+import {ExpandScenarioContext, ScenarioValidationEvent} from "../benchmark.js";
 import {kora} from "../kora.js";
 import {
   ModelScenarioLight,
   ModelScenarioWithMemory,
 } from "../model/scenario.js";
+import {ScenarioValidation} from "../model/scenarioValidation.js";
 import {ScenarioValidationError} from "../model/scenarioValidationError.js";
 import {
   createLegacyScenarioSeed,
@@ -35,19 +36,23 @@ function validModelScenarioLight(): ModelScenarioLight {
   };
 }
 
-function passingValidation() {
+const yes = {reason: "Fine as written.", answer: "yes" as const};
+
+function passingValidation(
+  overrides: Partial<ScenarioValidation> = {}
+): ScenarioValidation {
   return {
-    verdict: "pass" as const,
+    verdict: "pass",
     reasons:
       "The scenario is well-constructed and appropriately represents the risk category.",
+    childWouldWrite: yes,
+    allowsRefusalBehavior: yes,
+    ...overrides,
   };
 }
 
-function failingValidation(reasons: string) {
-  return {
-    verdict: "fail" as const,
-    reasons,
-  };
+function failingValidation(reasons: string): ScenarioValidation {
+  return {...passingValidation(), verdict: "fail", reasons};
 }
 
 function createExpandContext(
@@ -136,7 +141,60 @@ describe("kora.expandScenario", () => {
 
     expect(result).toHaveLength(1);
     expect(context.getResponse).toHaveBeenCalledTimes(4);
-    expect(context.getUserResponse).toHaveBeenCalledTimes(1);
+    // The first user message is written before each validation.
+    expect(context.getUserResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports every verdict, including a rejection that a retry fixes", async () => {
+    const seed = createScenarioSeed();
+    const events: ScenarioValidationEvent[] = [];
+    const context = {
+      ...createExpandContext([
+        validModelScenarioLight(),
+        failingValidation(
+          "Scenario does not adequately represent the risk signal type."
+        ),
+        validModelScenarioLight(),
+        passingValidation(),
+      ]),
+      onValidation: (event: ScenarioValidationEvent) => {
+        events.push(event);
+      },
+    };
+
+    await kora.expandScenario(context, seed);
+
+    expect(events.map(e => [e.attempt, e.maxAttempts, e.verdict])).toEqual([
+      [1, 2, "fail"],
+      [2, 2, "pass"],
+    ]);
+    expect(events[0]!.reasons).toBe(
+      "Scenario does not adequately represent the risk signal type."
+    );
+    expect(events[0]!.seed).toBe(seed);
+    expect(events[0]!.scenario.narrative).toBe(
+      validModelScenarioLight().narrative
+    );
+  });
+
+  it("reports both verdicts before giving up", async () => {
+    const events: ScenarioValidationEvent[] = [];
+    const context = {
+      ...createExpandContext([
+        validModelScenarioLight(),
+        failingValidation("First failure reason, long enough to parse."),
+        validModelScenarioLight(),
+        failingValidation("Second failure reason, long enough to parse."),
+      ]),
+      onValidation: (event: ScenarioValidationEvent) => {
+        events.push(event);
+      },
+    };
+
+    await expect(
+      kora.expandScenario(context, createScenarioSeed())
+    ).rejects.toThrow(ScenarioValidationError);
+    expect(events.map(e => e.verdict)).toEqual(["fail", "fail"]);
   });
 
   it("throws ScenarioValidationError after 2 failed attempts", async () => {
@@ -179,22 +237,55 @@ describe("kora.expandScenario", () => {
     }
   });
 
-  it("does not call getUserResponse when validation fails both times", async () => {
-    const seed = createScenarioSeed();
-    const context = createExpandContext([
-      validModelScenarioLight(),
-      failingValidation(
-        "First failure reason that is long enough for validation."
-      ),
-      validModelScenarioLight(),
-      failingValidation(
-        "Second failure reason that is long enough for validation."
-      ),
-    ]);
+  it("shows the validator the first user message it asks about", async () => {
+    const context = createExpandContext(
+      [validModelScenarioLight(), passingValidation()],
+      ["hey can u help me with smth"]
+    );
 
-    await expect(kora.expandScenario(context, seed)).rejects.toThrow();
-    expect(context.getUserResponse).toHaveBeenCalledTimes(0);
+    const [scenario] = await kora.expandScenario(context, createScenarioSeed());
+
+    expect(promptText(requestAt(context, 1))).toContain(
+      "): hey can u help me with smth"
+    );
+    expect(scenario!.firstUserMessage).toBe("hey can u help me with smth");
   });
+
+  it.each(ScenarioValidation.questions)(
+    "rejects a scenario whose checklist passes but %s is answered no",
+    async question => {
+      const events: ScenarioValidationEvent[] = [];
+      const context = {
+        ...createExpandContext(
+          [
+            validModelScenarioLight(),
+            passingValidation({
+              [question]: {reason: "Clear problem here.", answer: "no"},
+            }),
+            validModelScenarioLight(),
+            passingValidation(),
+          ],
+          ["First message.", "Second message."]
+        ),
+        onValidation: (event: ScenarioValidationEvent) => {
+          events.push(event);
+        },
+      };
+
+      const [scenario] = await kora.expandScenario(
+        context,
+        createScenarioSeed()
+      );
+
+      expect(events.map(e => e.verdict)).toEqual(["fail", "pass"]);
+      expect(events[0]!.reasons).toBe(`${question}: Clear problem here.`);
+      // The retry is told why, and the kept message is the one that passed.
+      expect(promptText(requestAt(context, 2))).toContain(
+        `${question}: Clear problem here.`
+      );
+      expect(scenario!.firstUserMessage).toBe("Second message.");
+    }
+  );
 
   it("never writes a childMaturity onto the expanded scenario", async () => {
     const context = createExpandContext([

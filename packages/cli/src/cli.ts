@@ -180,7 +180,11 @@ program
   )
   .option(
     "--random-seed <int>",
-    "RNG seed making the allocation of every seed dimension reproducible"
+    "RNG seed making the allocation of every seed dimension reproducible (default: drawn, printed, and kept for a resumed run)"
+  )
+  .option(
+    "--validator <models>",
+    "override the profile's seedValidation role (the plausibility check of every seed) with models.json slug(s); comma-separated for a fallback chain"
   )
   .option(
     "--private-ratio <fraction>",
@@ -218,7 +222,10 @@ program
     return generateSeeds(
       program,
       modelsJsonPath,
-      {seeds: optionalCsv(model)},
+      {
+        seeds: optionalCsv(model),
+        seedValidation: optionalCsv(opts.validator),
+      },
       opts.output,
       {
         totalSeeds:

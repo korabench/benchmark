@@ -8,12 +8,55 @@ import {
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
+import {Scenario} from "./model/scenario.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
+import {ScenarioSeed} from "./model/scenarioSeed.js";
+import {ScenarioValidation} from "./model/scenarioValidation.js";
+import {SeedValidation, SeedValidationVerdict} from "./model/seedValidation.js";
+
+/** One verdict of the seed plausibility check. */
+export interface SeedValidationEvent {
+  /** Key of the slot the seed was written for. */
+  key: string;
+  /** 1-based, within this call of `generateScenarioSeeds`. */
+  attempt: number;
+  maxAttempts: number;
+  /** The seed that was checked; the one kept when `verdict` is "pass". */
+  seed: ScenarioSeed;
+  isPrivate: boolean;
+  validation: SeedValidation;
+  verdict: SeedValidationVerdict;
+}
+
+/** One verdict of the scenario validation step. */
+export interface ScenarioValidationEvent {
+  seed: ScenarioSeed;
+  /** 1-based, within this call of `expandScenario`. */
+  attempt: number;
+  maxAttempts: number;
+  /** The scenario that was checked, with its first user message. */
+  scenario: Scenario;
+  validation: ScenarioValidation;
+  /** Derived: the checklist passed and every question was answered yes. */
+  verdict: "pass" | "fail";
+  /** The checklist reasons and the reason of every question answered no. */
+  reasons: string;
+}
 
 export interface GenerateSeedsContext {
   getResponse: <T>(
     request: TypedModelRequest<T>
   ) => Promise<TypedModelResponse<T>>;
+  /**
+   * The model checking each seed's plausibility. When set, a rejected seed is
+   * regenerated for the same slot, with the rejection reasons, until it passes
+   * or the attempts run out. Undefined skips the check.
+   */
+  getValidationResponse?: <T>(
+    request: TypedModelRequest<T>
+  ) => Promise<TypedModelResponse<T>>;
+  /** Called after every verdict of the plausibility check, pass or fail. */
+  onValidation?: (event: SeedValidationEvent) => void | Promise<void>;
 }
 
 export interface ExpandScenarioContext {
@@ -25,6 +68,8 @@ export interface ExpandScenarioContext {
    * scenario itself stays English; only the generated first user message is
    * translated. Undefined keeps the default English. */
   language?: string;
+  /** Called after every verdict of the validation step, pass or fail. */
+  onValidation?: (event: ScenarioValidationEvent) => void | Promise<void>;
 }
 
 export interface JudgeModel {
@@ -60,6 +105,8 @@ export interface GenerationEvent<T> {
    * the public items and never published.
    */
   private?: boolean;
+  /** Key of the seed slot `items` fills, for seed generation. */
+  key?: string;
 }
 
 export interface GenerateSeedsOptions {
@@ -79,6 +126,17 @@ export interface GenerateSeedsOptions {
    * to `DEFAULT_PRIVATE_RATIO`; 0 keeps every seed public.
    */
   privateRatio?: number;
+  /**
+   * Slots to leave out: already filled by an earlier run of the same plan.
+   * See `planSeedSlots` for the keys.
+   */
+  skipSlotKeys?: ReadonlySet<string>;
+  /**
+   * Seeds written per slot before giving up on it, when the plausibility
+   * check is on. Defaults to `DEFAULT_SEED_VALIDATION_ATTEMPTS`. A slot that
+   * runs out yields no seed.
+   */
+  maxValidationAttempts?: number;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {

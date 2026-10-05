@@ -1,7 +1,7 @@
 import * as R from "remeda";
 import * as v from "valibot";
 import {describe, expect, it} from "vitest";
-import {GenerateSeedsContext} from "../benchmark.js";
+import {GenerateSeedsContext, SeedValidationEvent} from "../benchmark.js";
 import {DEFAULT_TOTAL_SEEDS, kora} from "../kora.js";
 import {AgeRange} from "../model/ageRange.js";
 import {populationDistributionPresets} from "../model/populationDistributionPresets.js";
@@ -14,7 +14,9 @@ import {
   SeedUse,
   SocialContext,
 } from "../model/scenarioSeed.js";
+import {SeedValidation} from "../model/seedValidation.js";
 import {Packs} from "../packs/packs.js";
+import {planSeedSlots} from "../seedSlots.js";
 
 //
 // Fixtures.
@@ -610,5 +612,156 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
     expect(
       calls.some(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))
     ).toBe(false);
+  });
+});
+
+//
+// Plausibility check.
+//
+
+function makeValidation(rejected: boolean): SeedValidation {
+  const yes = {reason: "Fine as written.", answer: "yes" as const};
+  return {
+    plausibleForChild: yes,
+    matchesSituation: rejected
+      ? {reason: "Not an instance of the situation type.", answer: "no"}
+      : yes,
+    showsUse: yes,
+    addressesAI: yes,
+  };
+}
+
+function userPromptOf(request: {
+  messages: readonly {role: string; content: unknown}[];
+}): string {
+  return String(request.messages.find(m => m.role === "user")?.content ?? "");
+}
+
+/**
+ * A seed model that writes a "BAD" core behavior until it is given feedback
+ * (or always, with `alwaysBad`), and a validator that rejects exactly those.
+ * Both decide from the prompt: calls of different slots interleave.
+ */
+function makeCheckedContext(options: {alwaysBad?: boolean} = {}) {
+  const seedPrompts: string[] = [];
+  const events: SeedValidationEvent[] = [];
+  const context: GenerateSeedsContext = {
+    getResponse: async request => {
+      const prompt = userPromptOf(request);
+      seedPrompts.push(prompt);
+      const bad = options.alwaysBad || !prompt.includes("REJECTION REASONS");
+      return {
+        output: {
+          ...makeFakeSeed(),
+          coreBehavior: `${bad ? "BAD" : "GOOD"} core behavior for the fixture.`,
+        } as never,
+      };
+    },
+    getValidationResponse: async request => ({
+      output: makeValidation(
+        userPromptOf(request).includes("Core Behavior: BAD")
+      ) as never,
+    }),
+    onValidation: event => {
+      events.push(event);
+    },
+  };
+  return {context, seedPrompts, events};
+}
+
+describe("generateScenarioSeeds plausibility check", () => {
+  const options: Options = {
+    riskIds: [privacy],
+    totalSeeds: 6,
+    randomSeed: 7,
+    distribution: census,
+  };
+
+  it("makes one call per seed and reports slot keys without a validator", async () => {
+    const calls: Call[] = [];
+    const keys: (string | undefined)[] = [];
+    for await (const event of kora.generateScenarioSeeds(
+      makeContext(calls),
+      options
+    )) {
+      if (event.items.length > 0) keys.push(event.key);
+    }
+    expect(calls).toHaveLength(6);
+    expect([...keys].sort()).toEqual(
+      planSeedSlots(options).map(slot => slot.key)
+    );
+  });
+
+  it("writes a rejected seed again for the same slot, with the reasons", async () => {
+    const {context, seedPrompts, events} = makeCheckedContext();
+    const plain = await collectSeeds(makeContext([]), options);
+    const seeds = await collectSeeds(context, options);
+
+    expect(seeds).toHaveLength(6);
+    expect(seeds.every(s => s.coreBehavior.startsWith("GOOD"))).toBe(true);
+    expect(seedPrompts).toHaveLength(12);
+    expect(
+      seedPrompts.filter(p =>
+        p.includes("matchesSituation: Not an instance of the situation type.")
+      )
+    ).toHaveLength(6);
+
+    // Nothing but the narrative moved: the planned population is obtained.
+    const dimensions = (s: ScenarioSeed) =>
+      JSON.stringify(R.omit(s, ["id", "coreBehavior"]));
+    expect(seeds.map(dimensions).sort()).toEqual(plain.map(dimensions).sort());
+
+    const byKey = R.groupBy(events, e => e.key);
+    expect(Object.keys(byKey)).toHaveLength(6);
+    Object.values(byKey).forEach(slotEvents => {
+      expect(slotEvents.map(e => [e.attempt, e.verdict])).toEqual([
+        [1, "fail"],
+        [2, "pass"],
+      ]);
+    });
+  });
+
+  it("gives up on a slot after the attempt cap and yields nothing for it", async () => {
+    const {context, seedPrompts, events} = makeCheckedContext({
+      alwaysBad: true,
+    });
+    const seeds = await collectSeeds(context, {
+      ...options,
+      maxValidationAttempts: 2,
+    });
+    expect(seeds).toHaveLength(0);
+    expect(seedPrompts).toHaveLength(12);
+    expect(events.every(e => e.verdict === "fail")).toBe(true);
+    expect(events.map(e => e.maxAttempts)).toEqual(Array(12).fill(2));
+  });
+
+  it("skips the slots it is told are already filled", async () => {
+    const slots = planSeedSlots(options);
+    const skipped = new Set(slots.slice(0, 4).map(slot => slot.key));
+    const calls: Call[] = [];
+    const keys: (string | undefined)[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext(calls), {
+      ...options,
+      skipSlotKeys: skipped,
+    })) {
+      expect(event.total).toBe(6);
+      if (event.items.length > 0) keys.push(event.key);
+    }
+    expect(calls).toHaveLength(2);
+    expect([...keys].sort()).toEqual(slots.slice(4).map(slot => slot.key));
+  });
+
+  it("lets a validator error through without recording a verdict", async () => {
+    const {context, events} = makeCheckedContext();
+    const failing: GenerateSeedsContext = {
+      ...context,
+      getValidationResponse: async () => {
+        throw new Error("validator unavailable");
+      },
+    };
+    await expect(collectSeeds(failing, options)).rejects.toThrow(
+      "validator unavailable"
+    );
+    expect(events).toHaveLength(0);
   });
 });

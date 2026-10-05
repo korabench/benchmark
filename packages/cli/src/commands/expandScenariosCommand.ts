@@ -5,6 +5,7 @@ import {
   RiskTaxonomy,
   Scenario,
   ScenarioSeed,
+  ScenarioValidation,
   ScenarioValidationError,
   Stamp,
 } from "@korabench/benchmark";
@@ -32,9 +33,20 @@ import {
   hasCachedFiles,
   listCachedFiles,
 } from "./shared/cacheStamp.js";
+import {
+  buildPassRateReport,
+  formatPassRateReport,
+  writePassRateReport,
+} from "./shared/passRateReport.js";
 import {isPrivatePath, privatePathFor} from "./shared/privatePath.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
+import {
+  openLedger,
+  populationRowOf,
+  readLedger,
+  validationPathsFor,
+} from "./shared/validationLedger.js";
 
 async function* readSeedsFromJsonl(
   filePath: string,
@@ -156,7 +168,8 @@ export async function expandScenariosCommand(
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
 
   // Clear output file if no process in progress (no temp files)
-  if (!(await hasCachedFiles(tempDir))) {
+  const fresh = !(await hasCachedFiles(tempDir));
+  if (fresh) {
     await fs.mkdir(outputDir, {recursive: true});
     await fs.writeFile(outputFilePath, "");
     if (privateSeedPaths.length > 0) {
@@ -166,6 +179,22 @@ export async function expandScenariosCommand(
 
   await fs.mkdir(tempDir, {recursive: true});
   await assertResumable(tempDir, stamp);
+
+  // Every verdict of the validation step is recorded, including a rejection
+  // followed by a retry that passes, so that the pass rate can be reported.
+  const paths = validationPathsFor(outputFilePath);
+  const ledger = await openLedger(paths.ledger, {fresh});
+  const reportValidation = async () => {
+    const report = buildPassRateReport({
+      stage: "expansion",
+      rows: await readLedger(paths.ledger),
+    });
+    await writePassRateReport(paths, report);
+    console.log(`\n${formatPassRateReport(report)}`);
+    console.log(
+      `Report → ${paths.reportMd} (and .json); every verdict → ${paths.ledger}`
+    );
+  };
 
   const totalSeeds = (await readSeedIds(seedPaths, riskIdFilter)).length;
   const progress = Script.progress(totalSeeds, text =>
@@ -198,6 +227,28 @@ export async function expandScenariosCommand(
             getUserResponse: async request => ({
               output: await userModel.getTextResponse(request),
             }),
+            onValidation: event =>
+              ledger.record({
+                stage: "expansion",
+                key: seed.id,
+                seedId: seed.id,
+                verdict: event.verdict,
+                questions: ScenarioValidation.questionsOf(event.validation),
+                reasons: event.reasons,
+                // The expansion model validates its own output.
+                generatorModel: label,
+                validatorModel: label,
+                ...(event.verdict === "fail"
+                  ? {
+                      rejected: {
+                        shortTitle: event.scenario.shortTitle,
+                        narrative: event.scenario.narrative,
+                        firstUserMessage: event.scenario.firstUserMessage,
+                      },
+                    }
+                  : {}),
+                population: populationRowOf(seed, privateSeedIds.has(seed.id)),
+              }),
           };
 
           try {
@@ -240,6 +291,7 @@ export async function expandScenariosCommand(
   );
 
   progress.finish();
+  await reportValidation();
 
   if (failureCount > 0) {
     console.log(

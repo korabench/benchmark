@@ -93,3 +93,19 @@ describe("Role.specsOf", () => {
     expect(Role.specsOf(roles, "continueUser")).toEqual([]);
   });
 });
+
+describe("Profile.effectiveRoles seedValidation", () => {
+  it("falls back to the judges", () => {
+    const roles = makeRoles({judges: [makeSpec("judge-a")]});
+    expect(Profile.effectiveRoles(roles).seedValidation).toEqual(roles.judges);
+  });
+
+  it("keeps an explicit chain, which is part of the hash", () => {
+    const roles = makeRoles({seedValidation: [makeSpec("checker")]});
+    expect(Profile.effectiveRoles(roles).seedValidation).toEqual([
+      makeSpec("checker"),
+    ]);
+    expect(makeProfile({roles}).hash).not.toBe(makeProfile().hash);
+    expect(Role.list).toContain("seedValidation");
+  });
+});

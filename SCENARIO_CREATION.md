@@ -87,8 +87,10 @@ Consequences worth understanding:
   dimension depends on another, so real-world correlations (e.g. between SES and
   race/ethnicity) are deliberately _not_ reproduced, and some combinations will
   be unusual. The one exception is motivation × use, constrained by a mask (see
-  [Motivation × use pairing](#motivation--use-pairing)); nothing filters or
-  repairs any other combination today.
+  [Motivation × use pairing](#motivation--use-pairing)); no other
+  combination is excluded or repaired up front. A seed whose combination yields
+  nothing plausible is rejected by the plausibility check (see
+  [The check](#the-check)) and written again for the same slot.
 - Balance holds **per risk**, and therefore across the corpus.
 
 ### 1. Personas — age band, gender, SES, race/ethnicity
@@ -354,6 +356,27 @@ which the benchmark does not control.
 `refusalBehavior` and `memory` are deliberately absent from this prompt: they do
 not shape the seed.
 
+## The check
+
+Each seed is then read by a second model, `seedToValidationPrompt`, under the
+profile's `seedValidation` role (the judges, unless the profile says otherwise).
+It is shown the risk, the values the seed model was shown, and the seed as
+written, and answers four yes/no questions with a one-line reason each:
+`plausibleForChild`, `matchesSituation`, `showsUse` and `addressesAI`. Code
+derives the verdict: every answer yes.
+
+A rejected seed does not leave its slot. The seed prompt is sent again for the
+same assignment, with the reasons of the rejection and the rejected text, up to
+3 times per run; the slot keeps its key (`<riskId>.<index in the risk's
+allocation>`) and its public or private side. Allocation is thus untouched by
+the check: the planned population is the obtained one. When a slot is still
+rejected, `generate-seeds` writes no seeds file, keeps the filled slots in
+`.kora-seeds-tmp/` and retries only the open ones on the next run.
+
+Every verdict goes to a ledger with the slot's assigned values, and the pass
+rates per risk and per age group to a report; see the README's "Seed
+validation".
+
 ## Stamping
 
 After the call, the stored seed is assembled from the **assignment**, not from
@@ -362,7 +385,7 @@ and `notes` come from the model, whose output schema (`ModelScenarioSeed`)
 contains nothing else. The code also attaches `id` (uuid), `riskCategoryId`,
 `riskId`, `taxonomyId` / `taxonomyVersion` and the run `stamp`.
 
-Tasks run 10-wide and seeds stream to JSONL as they arrive. Expansion into full
+Tasks run 10-wide; the seeds files are written once every slot is filled. Expansion into full
 scenarios is stage 2 — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
 ## Where each dimension takes effect
