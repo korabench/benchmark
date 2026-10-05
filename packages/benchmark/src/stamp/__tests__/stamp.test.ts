@@ -74,7 +74,7 @@ describe("RunStamp.describe", () => {
       })
     );
     expect(text).toMatch(
-      /^profile kora@1 \(h\) \[overrides: user\] \| prompts 1 \(prompts-hash\) \| packs kora@2/
+      /^profile kora@1 \(h\) \[overrides: user\] \| prompts 1 \(prompts-hash\) \| packs kora@3/
     );
   });
 });

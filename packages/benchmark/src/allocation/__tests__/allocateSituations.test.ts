@@ -280,3 +280,21 @@ describe("situation type descriptions", () => {
     );
   });
 });
+
+describe("situation types restricted to an age band (8.1)", () => {
+  const assignments = allocate("cognitive_mismatch");
+
+  it("gives an age-bound type only to seeds of its bands", () => {
+    expect(countsByType(assignments, "8.1")).toEqual({
+      "Direct request from young child": [7, 0, 0],
+      "Adolescent infantilisation": [0, 0, 11],
+      "Mismatched register on emotional content": [7, 10, 12],
+      "Identity / metacognitive demand": [6, 10, 12],
+    });
+  });
+
+  it("still assigns a situation type to every seed", () => {
+    expect(assignments).toHaveLength(75);
+    expect(assignments.every(a => a.situation !== undefined)).toBe(true);
+  });
+});

@@ -1,5 +1,6 @@
 import * as v from "valibot";
 import bundledData from "../../data/situationTypes.json" with {type: "json"};
+import {AgeRange} from "./ageRange.js";
 
 //
 // Runtime model.
@@ -29,6 +30,12 @@ const VSituationType = v.strictObject({
    * conversation drifts is left to the generator, not controlled here.
    */
   drift: v.optional(v.boolean()),
+  /**
+   * The age bands the type applies to, when its definition is about a child of
+   * a given age ("A 7–9 year old asks..."). Seeds of the other bands never
+   * receive it. Absent: every band.
+   */
+  ageRanges: v.optional(v.pipe(v.array(AgeRange.io), v.minLength(1))),
 });
 
 const VGoldStandard = v.strictObject({
@@ -86,9 +93,21 @@ function describe(seed: {
   return `${seed.situationType}${within}${description ? `: ${description}` : ""}`;
 }
 
-/** The situation types of a gold standard that receive seeds, in list order. */
-function allocated(goldStandard: GoldStandard): readonly SituationType[] {
-  return goldStandard.situationTypes.filter(type => !type.drift);
+/**
+ * The situation types of a gold standard that receive seeds, in list order.
+ * With `ageRange`, only those a child of that band can be given.
+ */
+function allocated(
+  goldStandard: GoldStandard,
+  ageRange?: AgeRange
+): readonly SituationType[] {
+  return goldStandard.situationTypes.filter(
+    type =>
+      !type.drift &&
+      (ageRange === undefined ||
+        type.ageRanges === undefined ||
+        type.ageRanges.includes(ageRange))
+  );
 }
 
 //

@@ -14,6 +14,7 @@ import {
   SeedUse,
   SocialContext,
 } from "../model/scenarioSeed.js";
+import {Packs} from "../packs/packs.js";
 
 //
 // Fixtures.
@@ -117,7 +118,7 @@ describe("generateScenarioSeeds filters", () => {
         riskIds: ["not_a_real_risk"],
       })
     ).rejects.toThrow(
-      /Unknown risk IDs for taxonomy "kora@2": not_a_real_risk/
+      /Unknown risk IDs for taxonomy "kora@3": not_a_real_risk/
     );
   });
 
@@ -551,13 +552,19 @@ describe("generateScenarioSeeds dimension allocation", () => {
 //
 
 describe("generateScenarioSeeds scenario-flavor allocation", () => {
-  it("matches the per-risk flavor marginals when the risk defines flavors (7.3)", async () => {
-    const seeds = await collectSeeds(makeContext([]), {
-      distribution: census,
-      totalSeeds: 20,
-      riskIds: [privacy],
-      randomSeed: 1,
-    });
+  // No bundled risk defines flavors any more; the legacy privacy risk does.
+  const withLegacyTaxonomy = <T>(fn: () => T): T =>
+    Packs.run({taxonomy: Packs.legacyTaxonomy()}, fn);
+
+  it("matches the per-risk flavor marginals when the risk defines flavors (legacy 7.3)", async () => {
+    const seeds = await withLegacyTaxonomy(() =>
+      collectSeeds(makeContext([]), {
+        distribution: census,
+        totalSeeds: 20,
+        riskIds: [privacy],
+        randomSeed: 1,
+      })
+    );
 
     expect(seeds).toHaveLength(20);
     expect(R.countBy(seeds, s => s.scenarioFlavorId!)).toEqual({
@@ -571,12 +578,14 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
   it("threads each pinned flavor into its own LLM prompt", async () => {
     const calls: Call[] = [];
 
-    await collectSeeds(makeContext(calls), {
-      distribution: census,
-      totalSeeds: 20,
-      riskIds: [privacy],
-      randomSeed: 1,
-    });
+    await withLegacyTaxonomy(() =>
+      collectSeeds(makeContext(calls), {
+        distribution: census,
+        totalSeeds: 20,
+        riskIds: [privacy],
+        randomSeed: 1,
+      })
+    );
 
     expect(
       calls.every(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))

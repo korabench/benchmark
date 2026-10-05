@@ -19,6 +19,7 @@ export const PROMPT_SOURCE_FILES = [
   "scenarioToFirstUserMessagePrompt.ts",
   "scenarioToNextUserMessagePrompt.ts",
   "scenarioToValidationPrompt.ts",
+  "seedDimensionLines.ts",
   "seedToScenarioPrompt.ts",
 ] as const;
 
@@ -37,7 +38,7 @@ export interface PromptsFingerprint {
 
 export const PROMPTS_FINGERPRINT: PromptsFingerprint = {
   version: "5",
-  hash: "b5e6dec954c3d16404405315dee7909b",
+  hash: "8996ca049471de471549d8c9ed843391",
 };
 
 //

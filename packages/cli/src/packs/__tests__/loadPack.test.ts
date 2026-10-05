@@ -22,7 +22,22 @@ describe("resolveTaxonomy", () => {
 
   it("lists known packs for an unknown name", () => {
     expect(() => resolveTaxonomy("nope")).toThrow(
-      /Unknown taxonomy pack "nope". Known packs: kora/
+      /Unknown taxonomy pack "nope". Known packs: kora, kora-legacy/
+    );
+  });
+
+  it("resolves the legacy taxonomy by name, with the same risks and its own version", () => {
+    const legacy = resolveTaxonomy("kora-legacy");
+    const bundled = resolveTaxonomy("kora");
+    const riskIds = (t: typeof legacy) =>
+      t.categories.flatMap(c => c.risks.map(r => r.id));
+
+    expect(legacy.id).toBe("kora");
+    expect(legacy.version).toBe("2");
+    expect(bundled.version).toBe("3");
+    expect(riskIds(legacy)).toEqual(riskIds(bundled));
+    expect(legacy.categories[0]!.risks[0]!.description).not.toBe(
+      bundled.categories[0]!.risks[0]!.description
     );
   });
 

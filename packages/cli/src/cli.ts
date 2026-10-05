@@ -111,12 +111,12 @@ const program = new Command()
   .option("-d, --debug", "print full errors and debug information")
   .option(
     "--taxonomy <name|path>",
-    'risk taxonomy pack: a registered name ("kora") or a path to a JSON file holding a full {id, version, categories} taxonomy',
+    'risk taxonomy pack: a registered name ("kora", or "kora-legacy" for the pre-gold-standard risk descriptions) or a path to a JSON file holding a full {id, version, categories} taxonomy',
     process.env.KORA_TAXONOMY
   )
   .option(
     "--behaviors <name|path>",
-    'behavior (mechanism) pack: a registered name ("kora") or a path to a JSON file holding a full {id, version, behaviors} set',
+    'behavior (mechanism) pack: a registered name ("kora", or "kora-legacy" for the pre-gold-standard risk descriptions) or a path to a JSON file holding a full {id, version, behaviors} set',
     process.env.KORA_BEHAVIORS
   )
   .option(

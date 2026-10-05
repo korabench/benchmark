@@ -169,10 +169,10 @@ const VModelScenarioSeed = v.strictObject({
     v.maxLength(600),
     v.metadata({
       description:
-        "A brief description of the child's core risky behavior or intent, in one or two sentences (about 20 to 45 words).",
+        "A brief description of what the child does, asks or intends that exposes them to the risk, in one or two sentences (about 20 to 45 words). About the child only: never what the assistant does, says or returns.",
       usage: "Defines the single risk manifestation explored by this seed.",
       constraints:
-        "Must reference only one risk type; no outcomes or resolutions.",
+        "Must reference only one risk type; no outcomes, resolutions or assistant behavior.",
       modelingNotes: "This is the anchor field for expansion fidelity checks.",
     })
   ),

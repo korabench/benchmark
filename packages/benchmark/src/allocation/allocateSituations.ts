@@ -1,5 +1,9 @@
 import {AgeRange} from "../model/ageRange.js";
-import {GoldStandard, SituationTypes} from "../model/situationTypes.js";
+import {
+  GoldStandard,
+  SituationType,
+  SituationTypes,
+} from "../model/situationTypes.js";
 import {shuffleWith} from "./rng.js";
 
 /** The gold standard and situation type one seed must be an instance of. */
@@ -74,51 +78,56 @@ export function situationTypeCounts(
  * type are fixed by `situationTypeCounts`; which seed of the band receives
  * which type is drawn at random, so the situation type is independent of every
  * dimension other than the age band.
+ *
+ * A type restricted to some age bands is left out of the others, whose seeds
+ * are split across the remaining types.
  */
 export function allocateSituations(
   goldStandard: GoldStandard,
   ageRanges: readonly AgeRange[],
   rng: () => number
 ): readonly SeedSituation[] {
-  const types = SituationTypes.allocated(goldStandard);
-  if (types.length === 0) {
+  if (SituationTypes.allocated(goldStandard).length === 0) {
     throw new Error(
       `allocateSituations: gold standard ${goldStandard.id} has no situation type to allocate.`
     );
   }
 
-  const typeByIndex = new Map<number, string>(
+  const typeByIndex = new Map<number, SituationType>(
     AgeRange.list.flatMap((band, bandIndex) => {
       const indices = ageRanges.flatMap((ageRange, i) =>
         ageRange === band ? [i] : []
       );
+      if (indices.length === 0) return [];
+
+      const types = SituationTypes.allocated(goldStandard, band);
+      if (types.length === 0) {
+        throw new Error(
+          `allocateSituations: gold standard ${goldStandard.id} has no situation type for age band ${band}.`
+        );
+      }
       const counts = situationTypeCounts(
         indices.length,
         types.length,
         bandIndex
       );
-      const names = shuffleWith(
+      const drawn = shuffleWith(
         types.flatMap((type, t) =>
-          Array.from({length: counts[t]!}, () => type.name)
+          Array.from({length: counts[t]!}, () => type)
         ),
         rng
       );
-      return indices.map((index, k) => [index, names[k]!] as const);
+      return indices.map((index, k) => [index, drawn[k]!] as const);
     })
   );
 
-  const descriptions = new Map(
-    types.map(type => [type.name, type.description] as const)
-  );
-
   return ageRanges.map((_, i) => {
-    const situationType = typeByIndex.get(i)!;
-    const situationDescription = descriptions.get(situationType);
+    const type = typeByIndex.get(i)!;
     return {
       goldStandardId: goldStandard.id,
       goldStandardName: goldStandard.name,
-      situationType,
-      ...(situationDescription ? {situationDescription} : {}),
+      situationType: type.name,
+      ...(type.description ? {situationDescription: type.description} : {}),
     };
   });
 }

@@ -12,6 +12,7 @@ import {
   RiskSignalType,
   ScenarioSeed,
 } from "../../model/scenarioSeed.js";
+import {Packs} from "../../packs/packs.js";
 import {conversationToAssessmentPrompt} from "../conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "../conversationToMechanismAssessmentPrompt.js";
 import {scenarioToFirstUserMessagePrompt} from "../scenarioToFirstUserMessagePrompt.js";
@@ -242,5 +243,166 @@ describe("use rendering", () => {
       seedToScenarioPrompt(privacyCategory, privacy, motivation, legacy.seed)
         .user
     ).not.toContain("- Use (");
+  });
+});
+
+//
+// Every seed field reaches expansion and validation.
+//
+
+describe("seed fields in the expansion and validation prompts", () => {
+  // The flavor comes from the legacy privacy risk: no bundled risk defines
+  // flavors any more.
+  const legacyPrivacy = Packs.legacyTaxonomy()
+    .categories.flatMap(c => c.risks)
+    .find(r => r.id === privacy.id)!;
+
+  const seed = createScenarioSeed({
+    riskCategoryId: privacyCategory.id,
+    riskId: privacy.id,
+    childAge: 15,
+    ageRange: "13to17",
+    childGender: "non-binary",
+    childRaceEthnicity: "hispanic",
+    childSES: "low",
+    shortTitle: "Marker short title",
+    coreBehavior: "Marker core behavior of the child in this seed.",
+    context: "Marker context of the child in this seed.",
+    notes: "Marker notes.",
+    riskSignalType: "ambiguous",
+    socialContext: "authority_influence",
+    use: "creative",
+    refusalBehavior: "works_around",
+    memory: "none",
+    scenarioFlavorId: "d_authority",
+    goldStandardId: "7.3",
+    situationType: "Account / data flow",
+  });
+  const scenario = createScenario({seed});
+
+  // What each seed field must put in the prompt. Fields that identify the
+  // seed or record where it comes from are listed as `undefined`: they are not
+  // content. A field added to the schema fails this test until it is listed.
+  const markers: Record<keyof ScenarioSeed, string | undefined> = {
+    childAge: "- Child Age: 15 ",
+    ageRange: "(age range 13to17: ",
+    childGender: "- Child Gender: non-binary",
+    childRaceEthnicity: "- Child Race/Ethnicity: hispanic",
+    childSES: "- Child SES: low (",
+    shortTitle: "- Short Title: Marker short title",
+    coreBehavior: "- Core Behavior: Marker core behavior",
+    context: "- Context: Marker context",
+    notes: "- Notes: Marker notes.",
+    motivation: `: ${seed.motivation.name} (${seed.motivation.description})`,
+    riskSignalType: "- Risk Signal Type: ambiguous (",
+    socialContext: "- Social Context: authority_influence (",
+    use: "): creative (",
+    refusalBehavior: "): works_around (",
+    memory: "): none (The assistant knows nothing",
+    scenarioFlavorId: "- Flavor id: d_authority",
+    goldStandardId: "(within 7.3, ",
+    situationType: "): Account / data flow (within",
+    childCognitiveMaturity: undefined,
+    childEmotionalMaturity: undefined,
+    taxonomyId: undefined,
+    taxonomyVersion: undefined,
+    stamp: undefined,
+    id: undefined,
+    riskCategoryId: undefined,
+    riskId: undefined,
+  };
+
+  const prompts = {
+    expansion: seedToScenarioPrompt(
+      privacyCategory,
+      legacyPrivacy,
+      seed.motivation,
+      seed
+    ).user,
+    validation: scenarioToValidationPrompt(
+      privacyCategory,
+      legacyPrivacy,
+      seed.ageRange,
+      scenario
+    ).user,
+  };
+
+  it("lists every field of the seed schema", () => {
+    expect(Object.keys(markers).sort()).toEqual(
+      Object.keys(ScenarioSeed.io.entries).sort()
+    );
+  });
+
+  it.each(Object.entries(prompts))("%s renders every field", (_, prompt) => {
+    for (const [field, marker] of Object.entries(markers)) {
+      if (marker === undefined) continue;
+      expect(prompt, field).toContain(marker);
+    }
+  });
+
+  it("quotes the situation type's definition from the gold standard", () => {
+    for (const prompt of Object.values(prompts)) {
+      expect(prompt).toContain("The child asks how their data is used");
+    }
+  });
+
+  it("asks for a model memory only when the seed has one", () => {
+    expect(prompts.expansion).toContain("NO MODEL MEMORY");
+    expect(prompts.expansion).not.toContain("MODEL MEMORY REQUIREMENT");
+
+    const established = seedToScenarioPrompt(
+      privacyCategory,
+      privacy,
+      seed.motivation,
+      {...seed, memory: "established"}
+    ).user;
+    expect(established).toContain("MODEL MEMORY REQUIREMENT");
+    expect(established).not.toContain("NO MODEL MEMORY");
+  });
+
+  it("shows the validator the model memory that was written", () => {
+    const withMemory = scenarioToValidationPrompt(
+      privacyCategory,
+      privacy,
+      seed.ageRange,
+      createScenario({
+        seed: {...seed, memory: "established"},
+        modelMemory: "Marker memory of earlier conversations.",
+      })
+    ).user;
+    expect(withMemory).toContain("Marker memory of earlier conversations.");
+    expect(prompts.validation).toContain("none written");
+  });
+});
+
+describe("scenarioToFirstUserMessagePrompt seed dimensions", () => {
+  it("renders the situation type, motivation, social context and memory", () => {
+    const scenario = scenarioWith({
+      goldStandardId: "7.3",
+      situationType: "Account / data flow",
+      socialContext: "peer_pressure",
+      memory: "established",
+    });
+    const prompt = scenarioToFirstUserMessagePrompt(privacy, scenario).user;
+
+    expect(prompt).toContain("): Account / data flow (within 7.3, ");
+    expect(prompt).toContain(
+      `- Why the child acts: ${scenario.seed.motivation.name} (`
+    );
+    expect(prompt).toContain(
+      "- Who or what influences the child: peer_pressure ("
+    );
+    expect(prompt).toContain(
+      "- Memory: the child has talked with this assistant before"
+    );
+  });
+
+  it("omits situation type and memory for seeds that predate them", () => {
+    const prompt = scenarioToFirstUserMessagePrompt(
+      privacy,
+      createLegacyScenario()
+    ).user;
+    expect(prompt).not.toContain("Situation type");
+    expect(prompt).not.toContain("- Memory:");
   });
 });

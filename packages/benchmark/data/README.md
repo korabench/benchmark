@@ -11,6 +11,24 @@ supplied (no `--taxonomy` / `--behaviors` flag, no `Packs.configure()`, no
 | `behaviors.json`   | Behavior set — the 7 cross-cutting behaviors (V2 mechanisms M1–M7). Full `BehaviorSet` shape.                           |
 | `motivations.json` | Seed-generation motivations. Bare array.                                                                                |
 
+Each risk's `description` in `risks.json` is the "Harm statement (short)" of
+Section 1 of its gold standard (`GS RISK <id> ... v1 FINAL SEPT 2026`), word for
+word. Self-harm, an umbrella over three gold standards, carries the three
+statements, each prefixed with its gold standard's name and number. This is
+taxonomy version 3.
+
+`scenarioGuidance`, on six risks (3.1, 3.3, 3.4, 5.2, 6.1, 7.3), tells the
+expansion step where the risk does and does not activate. It is written from
+Section 1 ("Scenarios in scope") and Section 4 ("Risk Boundaries") of the same
+gold standard, in our words rather than quoted. No risk defines
+`scenarioFlavors` any more: situation types took over that role.
+
+`risks.legacy.json` is `risks.json` as it was in version 2, before the gold
+standards: the longer scope descriptions the published results were produced
+with. It is kept so that a run can still be made against them and compared with
+that baseline: `--taxonomy kora-legacy` loads it as `kora@2`, with the pack
+stamp those results carry. Do not edit it.
+
 `motivationUseMask.json` also lives here but is **not part of the pack**: it is
 seed-generation input, loaded by `src/model/motivationUseMask.ts`, and editing
 it does not change the pack stamp on results. It says whether each bundled
@@ -25,7 +43,10 @@ V3.0 pipeline inputs.
 `src/model/situationTypes.ts`, and likewise outside the pack. For each bundled
 risk it lists the risk's gold standards (one, or three for the self-harm
 umbrella: 1.2a, 1.2b, 1.2c) and, for each, its situation types in the order of
-Section 1 of the gold standard. Types flagged `drift` receive no seeds. Data
+Section 1 of the gold standard. Types flagged `drift` receive no seeds. A type
+whose definition is about a child of a given age carries `ageRanges`, and only
+seeds of those age bands receive it (8.1: "Direct request from young child" is
+7–9, "Adolescent infantilisation" is 13–17). Data
 source: the "Situation types" tab of
 `KORA_Bench_V3.0_GS_Situation_Types_and_Allocation`. The order of the types
 matters: it decides which types take the leftover seeds.

@@ -183,9 +183,12 @@ pairings would be forbidden without it, and none are with it.
 
 ### 5. Scenario flavor — largest-remainder, when the risk defines one
 
-Some risks declare `scenarioFlavors` in `risks.json` — risk-specific variants
-with their own proportions (e.g. privacy: `a_direct` .25, `b_gradual` .40,
-`d_authority` .20, `e_fictional` .15). `allocateFlavors()` uses the same
+A risk may declare `scenarioFlavors` — risk-specific variants with their own
+proportions. No bundled risk does any more: situation types took over that role,
+and every conversation is 3 or 8 turns long. The legacy taxonomy
+(`--taxonomy kora-legacy`) still defines them for privacy (`a_direct` .25,
+`b_gradual` .40, `d_authority` .20, `e_fictional` .15), and a custom taxonomy
+can. `allocateFlavors()` uses the same
 largest-remainder + shuffle treatment as the demographics, and the chosen flavor
 is pinned into both the seed and expansion prompts. A flavor may override the
 risk's `conversationLength`. Risks without flavors skip this step.
@@ -217,9 +220,17 @@ gold standard → situation type:
    type.
 3. Which seed of the band receives which type is drawn at random.
 
+A situation type whose definition is about a child of a given age carries
+`ageRanges` in the data file and is left out of the other bands, whose seeds are
+split across the remaining types. Two types of 8.1 are in that case: "Direct
+request from young child" (7–9) and "Adolescent infantilisation" (13–17). At 75
+seeds, 8.1 therefore gets 7 and 11 of them, and 29 and 28 of its two other
+types. This is the one place where the counts differ from the workbook, which
+spreads those two types over every age.
+
 The band totals this split works within are fixed: the age bands round
 deterministically (largest remainder first), giving 20 / 20 / 35 at 75 seeds and
-6 / 7 / 12 at 25. At the default 75 seeds per risk the result is, row for row,
+6 / 7 / 12 at 25. At the default 75 seeds per risk the result is, row for row (8.1 excepted, see above),
 the `gs_situation_allocation_v3.0` table (1,950 seeds over 134 situation types).
 
 Each situation type carries a `description`: its definition in the "Scenarios
@@ -328,6 +339,12 @@ assigned child, motivation, use, social context and risk signal type, each with
 its description. It asks for narrative fields **consistent with every assigned
 value**, and forbids contradicting, dropping or reinterpreting one.
 
+A seed describes the child only. Some situation types are defined by what the
+assistant does ("the LLM responds with...", "the model asks for..."): for those
+the prompt asks for what the child asks, says or does that gives the assistant
+the occasion to respond that way, and forbids stating the assistant's behavior,
+which the benchmark does not control.
+
 `refusalBehavior` and `memory` are deliberately absent from this prompt: they do
 not shape the seed.
 
@@ -344,14 +361,18 @@ scenarios is stage 2 — see [EVALUATION_PROCESS.md](EVALUATION_PROCESS.md).
 
 ## Where each dimension takes effect
 
-| Dimension                         | Seed prompt | Expansion                | First message                         | Later turns                       |
-| --------------------------------- | ----------- | ------------------------ | ------------------------------------- | --------------------------------- |
-| Child, motivation, social context | yes         | yes                      | child only                            | child's age                       |
-| `use`                             | yes         | yes                      | yes                                   | via the narrative                 |
-| `riskSignalType`                  | yes         | yes                      | sets how the opening carries the risk | —                                 |
-| `scenarioFlavorId`                | yes         | yes                      | `b_gradual` rules                     | conversation length               |
-| `memory`                          | —           | asks for a `modelMemory` | —                                     | in the target's system prompt     |
-| `refusalBehavior`                 | —           | —                        | —                                     | how the child reacts to a refusal |
+| Dimension                         | Seed prompt | Expansion                                       | Validation                    | First message                         | Later turns                       |
+| --------------------------------- | ----------- | ----------------------------------------------- | ----------------------------- | ------------------------------------- | --------------------------------- |
+| Child, motivation, social context | yes         | yes                                             | checked                       | yes                                   | child's age                       |
+| `use`                             | yes         | yes                                             | checked                       | yes                                   | via the narrative                 |
+| `situationType`                   | yes         | yes, with its definition                        | checked                       | yes, with its definition              | via the narrative                 |
+| `riskSignalType`                  | yes         | yes                                             | checked                       | sets how the opening carries the risk | —                                 |
+| `scenarioFlavorId`                | yes         | yes                                             | checked                       | `b_gradual` rules                     | conversation length               |
+| `memory`                          | —           | asks for a `modelMemory`, or says there is none | checked against `modelMemory` | whether the child is a returning user | in the target's system prompt     |
+| `refusalBehavior`                 | —           | shown; must not be scripted or ruled out        | same                          | —                                     | how the child reacts to a refusal |
+
+A test (`prompts/__tests__/seedDimensionPrompts.test.ts`) fails when a field of
+the seed schema is missing from the expansion or the validation prompt.
 
 Judges see none of the dimensions beyond the child's age: they grade the
 assistant, and are given the scenario's background and narrative.

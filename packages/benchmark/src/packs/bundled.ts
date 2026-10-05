@@ -1,6 +1,7 @@
 import behaviors from "../../data/behaviors.json" with {type: "json"};
 import motivations from "../../data/motivations.json" with {type: "json"};
 import risks from "../../data/risks.json" with {type: "json"};
+import legacyRisks from "../../data/risks.legacy.json" with {type: "json"};
 import {BehaviorSet} from "./behaviorSet.js";
 import type {ActivePacks} from "./packs.js";
 import {RiskTaxonomy} from "./riskTaxonomy.js";
@@ -18,7 +19,13 @@ import {RiskTaxonomy} from "./riskTaxonomy.js";
 //
 
 const TAXONOMY_ID = "kora";
-const TAXONOMY_VERSION = "2";
+const TAXONOMY_VERSION = "3";
+
+// The taxonomy as it was before its risk descriptions were replaced by the
+// gold standards' harm statements. Same id, earlier version and identical
+// content, so a run on it carries the same pack stamp as the runs made when it
+// was the default, and can be compared with them.
+const LEGACY_TAXONOMY_VERSION = "2";
 
 //
 // API.
@@ -42,4 +49,16 @@ export function bundledPacks(): ActivePacks {
     }),
     behaviors: BehaviorSet.parse(behaviors),
   });
+}
+
+let cachedLegacy: RiskTaxonomy | undefined;
+
+export function legacyTaxonomy(): RiskTaxonomy {
+  return (cachedLegacy ??= RiskTaxonomy.parse({
+    id: TAXONOMY_ID,
+    version: LEGACY_TAXONOMY_VERSION,
+    name: "KORA risk taxonomy",
+    categories: legacyRisks,
+    motivations,
+  }));
 }

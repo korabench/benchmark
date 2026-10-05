@@ -104,6 +104,8 @@ yarn kora generate-seeds [model]
 - `refusalBehavior` decides how the simulated child reacts in later turns when the assistant declines, deflects or redirects.
 - `memory` decides whether expansion writes a `modelMemory` for the target's system prompt.
 
+Expansion is given every one of these values with its definition, and the validation step rejects a scenario that clearly contradicts one of them.
+
 Example:
 
 ```bash
@@ -115,9 +117,9 @@ yarn kora generate-seeds gpt-4o \
 
 At `--total-seeds 60`, the `us-children-2020` preset produces per-risk marginals of 16/16/28 (age bands), 29–30/30–31 (girl/boy), 21/17–18/21–22 (SES low/middle/high), and 28–29/15–16/7–8/3–4/5–6 (race/ethnicity: white/hispanic/black/asian/other), alongside 20 seeds per risk signal type and per refusal behavior, 15 per social context, 10 per use and 6 per motivation. Where a range is shown, the rounding remainder is drawn at random per risk, so each risk sums to exactly 60 and the corpus averages to the target. The command prints the allocation before generating anything. Pass a JSON file path to use a custom distribution — see `packages/benchmark/src/model/populationDistributionPresets.ts` for the schema.
 
-Each seed is also assigned a **situation type**: one of the ways its risk shows up in a conversation ("Direct request", "Reframed request", "Disclosure of harm", ...), as listed by the risk's gold standard in `packages/benchmark/data/situationTypes.json`. Within each age band, a risk's seeds are split evenly across its situation types (multi-turn drift types excepted, which receive none); self-harm, an umbrella over three gold standards (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), first splits its seeds evenly across the three. Each situation type comes with its definition from the gold standard, which the seed prompt quotes so that the `coreBehavior` the model writes is one concrete case of it. The seed stores `goldStandardId` and `situationType`, and the seed, expansion and validation prompts all pin the situation type with that definition. At the default 75 seeds per risk the counts are those of the V3.0 allocation workbook.
+Each seed is also assigned a **situation type**: one of the ways its risk shows up in a conversation ("Direct request", "Reframed request", "Disclosure of harm", ...), as listed by the risk's gold standard in `packages/benchmark/data/situationTypes.json`. Within each age band, a risk's seeds are split evenly across its situation types (multi-turn drift types excepted, which receive none); self-harm, an umbrella over three gold standards (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), first splits its seeds evenly across the three. Each situation type comes with its definition from the gold standard, which the seed prompt quotes so that the `coreBehavior` the model writes is one concrete case of it. The seed stores `goldStandardId` and `situationType`, and the seed, expansion and validation prompts all pin the situation type with that definition. A situation type defined for a given age (8.1: "Direct request from young child" for 7–9, "Adolescent infantilisation" for 13–17) only goes to seeds of that age band. At the default 75 seeds per risk the counts are those of the V3.0 allocation workbook, except for 8.1, where the workbook spreads those two types over every age.
 
-Risks may also define their own per-risk **scenario flavors** in `risks.json` (e.g. for Privacy 7.3: `a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
+A taxonomy may also define per-risk **scenario flavors**. No bundled risk does any more (situation types took over that role, and conversations are 3 or 8 turns long); the legacy taxonomy still defines them for Privacy 7.3 (`a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
 Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that no seed gets a pairing forbidden by the V3.0 mask in `packages/benchmark/data/motivationUseMask.json` (Identity Exploration × `homework`, Efficiency / Shortcut Seeking × `entertainment` or `companionship`), which leaves the per-risk counts of every use and every motivation unchanged. Nothing filters the other combinations today. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
 
@@ -708,6 +710,8 @@ supplied. Any command accepts a different one:
 yarn kora --taxonomy ./packs/my-taxonomy.json run gpt-4o
 ```
 
+Two names are registered: `kora`, the default, and `kora-legacy`, the taxonomy as it was before each risk's description was replaced by the harm statement of its gold standard (`packages/benchmark/data/risks.legacy.json`, stamped `kora@2`). Use `--taxonomy kora-legacy` to reproduce or extend the results produced with those descriptions. The corpus shipped under `data/` (`scenarioSeeds.jsonl`, `scenarios.jsonl`) was generated against it and needs it: its privacy seeds carry flavors that the default taxonomy no longer defines.
+
 `KORA_TAXONOMY` sets the same thing from the environment. A taxonomy file is the
 full envelope — the bundled `risks.json` is a bare array of categories and is
 wrapped internally, but a supplied file must carry its own id and version:
@@ -804,7 +808,7 @@ The `run` command produces a result object with this structure:
   "user": "gemma-4-31b-it",
   "prompts": ["default"],
   "packs": {
-    "taxonomy": {"id": "kora", "version": "2", "hash": "498ec8d2…"},
+    "taxonomy": {"id": "kora", "version": "3", "hash": "498ec8d2…"},
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
   "stamp": {
@@ -885,7 +889,7 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseMask.json and situationTypes.json (see data/README.md)
+    data/                            Bundled pack: risks.json (and risks.legacy.json, the version 2 descriptions), behaviors.json, motivations.json, plus motivationUseMask.json and situationTypes.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
       profiles/                      Evaluation profile model (schema, hash)
