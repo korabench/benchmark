@@ -36,6 +36,7 @@ export * from "./model/scenarioSeedSlice.js";
 export * from "./model/scenarioValidation.js";
 export * from "./model/scenarioValidationError.js";
 export * from "./model/seedValidation.js";
+export * from "./model/situationMask.js";
 export * from "./model/situationTypes.js";
 export * from "./model/testAssessment.js";
 export * from "./model/testResult.js";

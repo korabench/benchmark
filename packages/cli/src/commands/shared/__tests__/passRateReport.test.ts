@@ -164,6 +164,40 @@ describe("buildPassRateReport", () => {
     );
   });
 
+  it("counts the passes that came with the child-voice check relaxed", () => {
+    const expansionAttempt = (
+      key: string,
+      n: number,
+      verdict: "pass" | "fail",
+      answer: "yes" | "no",
+      relaxed: boolean
+    ): ValidationAttempt => ({
+      ...attempt(key, n, verdict, "r1", "7to9"),
+      stage: "expansion",
+      questions: {childWouldWrite: {reason: "As judged.", answer}},
+      ...(relaxed ? {childVoiceRelaxed: true as const} : {}),
+    });
+    const expansion = buildPassRateReport({
+      stage: "expansion",
+      rows: [
+        // Passed only because the check was relaxed.
+        expansionAttempt("s", 1, "fail", "no", false),
+        expansionAttempt("s", 2, "pass", "no", true),
+        // Relaxed, but the message was fine by then.
+        expansionAttempt("t", 1, "fail", "no", false),
+        expansionAttempt("t", 2, "pass", "yes", true),
+        expansionAttempt("u", 1, "pass", "yes", false),
+      ],
+    });
+
+    expect(expansion.childVoiceRelaxedPasses).toBe(2);
+    expect(expansion.childVoiceWaivedPasses).toBe(1);
+    expect(formatPassRateReport(expansion)).toContain(
+      "2 slot(s) passed with the child-voice check relaxed"
+    );
+    expect(formatPassRateReport(report)).not.toContain("Child-voice");
+  });
+
   it("renders the tables as Markdown", () => {
     const markdown = formatPassRateReport(report);
     expect(markdown).toContain("# Seed plausibility check: pass rates");

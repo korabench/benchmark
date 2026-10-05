@@ -218,12 +218,19 @@ export async function generateSeeds(
     );
   }
 
-  const {model} = createChainModel(roles.seeds);
+  // A slot the check rejected is written again by the next model of the
+  // chain: one that sanitises a risk away tends to do it again when asked to
+  // rewrite. Each rotation is still a fallback chain over the other models.
+  const rotations = roles.seeds.map((_, start) => {
+    const specs = [...roles.seeds.slice(start), ...roles.seeds.slice(0, start)];
+    return {label: chainLabel(specs), model: createChainModel(specs).model};
+  });
+  const rotationFor = (rejections: number) =>
+    rotations[rejections % rotations.length]!;
   const validator = createChainModel(roles.seedValidation).model;
-  const generatorLabel = chainLabel(roles.seeds);
   const validatorLabel = chainLabel(roles.seedValidation);
   console.log(
-    `Checking every seed with ${validatorLabel}: a rejected seed is written again for the same slot, up to ${DEFAULT_SEED_VALIDATION_ATTEMPTS} times per run.`
+    `Checking every seed with ${validatorLabel}: a rejected seed is written again for the same slot, up to ${DEFAULT_SEED_VALIDATION_ATTEMPTS} times per run${rotations.length > 1 ? ", each time by the next model of the chain" : ""}.`
   );
   if (roles.seeds[0]!.model === roles.seedValidation[0]!.model) {
     console.warn(
@@ -269,10 +276,19 @@ export async function generateSeeds(
 
   const paths = validationPathsFor(outputFilePath);
   const ledger = await openLedger(paths.ledger, {fresh});
+  // Rejections of earlier runs count: a resumed slot goes on down the chain.
+  const priorRejections = R.countBy(
+    (await readLedger(paths.ledger)).filter(
+      row => row.stage === "seed" && row.verdict === "fail"
+    ),
+    row => row.key
+  );
 
   const context: GenerateSeedsContext = {
-    getResponse: async request => ({
-      output: await model.getStructuredResponse(request),
+    getResponse: async (request, info) => ({
+      output: await rotationFor(
+        info?.rejections ?? 0
+      ).model.getStructuredResponse(request),
     }),
     getValidationResponse: async request => ({
       output: await validator.getStructuredResponse(request),
@@ -285,7 +301,7 @@ export async function generateSeeds(
         seedId: seed.id,
         verdict: event.verdict,
         questions: event.validation,
-        generatorModel: generatorLabel,
+        generatorModel: rotationFor(event.rejections).label,
         validatorModel: validatorLabel,
         ...(event.verdict === "fail"
           ? {
@@ -321,6 +337,7 @@ export async function generateSeeds(
   const generator = kora.generateScenarioSeeds(context, {
     ...planOptions,
     skipSlotKeys: cachedKeys,
+    priorRejections,
   });
   const filledKeys = new Set(cachedKeys);
   for await (const event of generator) {

@@ -53,6 +53,9 @@ export interface ValidationAttempt {
   questions?: Readonly<Record<string, ValidationAnswer>>;
   /** Expansion stage: why the scenario was rejected, or the checklist reasons. */
   reasons?: string;
+  /** Expansion stage: the child-voice check was relaxed for this verdict
+   * (temporary; `ScenarioValidation.relaxesChildVoice`). Absent when not. */
+  childVoiceRelaxed?: true;
   generatorModel: string;
   validatorModel: string;
   /** The text that was rejected; absent on a pass. */

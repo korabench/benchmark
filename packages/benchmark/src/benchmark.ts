@@ -26,6 +26,20 @@ export interface SeedValidationEvent {
   isPrivate: boolean;
   validation: SeedValidation;
   verdict: SeedValidationVerdict;
+  /** How often the slot had been rejected when this seed was written, earlier
+   * runs included (see `GenerateSeedsOptions.priorRejections`). */
+  rejections: number;
+}
+
+/** What a seed is being written for, passed along with the request. */
+export interface SeedWriteInfo {
+  key: string;
+  /**
+   * How often the slot was already rejected by the plausibility check, earlier
+   * runs included. Lets the caller hand a rejected slot to another model: one
+   * that sanitises a risk away tends to do it again when asked to rewrite.
+   */
+  rejections: number;
 }
 
 /** One verdict of the scenario validation step. */
@@ -41,11 +55,21 @@ export interface ScenarioValidationEvent {
   verdict: "pass" | "fail";
   /** The checklist reasons and the reason of every question answered no. */
   reasons: string;
+  /** Whether the child-voice check was relaxed for this verdict (temporary,
+   * see `ScenarioValidation.relaxesChildVoice`). */
+  childVoiceRelaxed: boolean;
+}
+
+export interface ExpandScenarioOptions {
+  /** How often the scenario of this seed was already rejected, in earlier
+   * calls. Counts toward the child-voice relaxation. */
+  priorRejections?: number;
 }
 
 export interface GenerateSeedsContext {
   getResponse: <T>(
-    request: TypedModelRequest<T>
+    request: TypedModelRequest<T>,
+    info?: SeedWriteInfo
   ) => Promise<TypedModelResponse<T>>;
   /**
    * The model checking each seed's plausibility. When set, a rejected seed is
@@ -137,6 +161,11 @@ export interface GenerateSeedsOptions {
    * runs out yields no seed.
    */
   maxValidationAttempts?: number;
+  /**
+   * Rejections each slot already had in earlier runs, by slot key. Added to
+   * the count reported in `SeedWriteInfo.rejections`.
+   */
+  priorRejections?: Readonly<Record<string, number>>;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
@@ -158,7 +187,8 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
   ): AsyncGenerator<GenerationEvent<TScenarioSeed>>;
   expandScenario(
     c: ExpandScenarioContext,
-    seed: TScenarioSeed
+    seed: TScenarioSeed,
+    options?: ExpandScenarioOptions
   ): Promise<readonly TScenario[]>;
   mapScenarioToKeys(
     scenario: TScenario,

@@ -121,6 +121,7 @@ async function fillSlot(
   slot: SeedSlot,
   maxAttempts: number,
   attempt: number,
+  rejections: number,
   feedback: SeedValidationFeedback | undefined
 ): Promise<ScenarioSeed | undefined> {
   const {riskCategory, risk, assignment} = slot;
@@ -131,13 +132,16 @@ async function fillSlot(
     feedback,
   });
 
-  const {output} = await c.getResponse({
-    messages: [
-      {role: "system", content: prompt.system},
-      {role: "user", content: prompt.user},
-    ],
-    outputType: ModelScenarioSeed.io,
-  });
+  const {output} = await c.getResponse(
+    {
+      messages: [
+        {role: "system", content: prompt.system},
+        {role: "user", content: prompt.user},
+      ],
+      outputType: ModelScenarioSeed.io,
+    },
+    {key: slot.key, rejections}
+  );
   const seed = buildSeed(slot, output);
 
   if (!c.getValidationResponse) {
@@ -161,6 +165,7 @@ async function fillSlot(
     isPrivate: slot.isPrivate,
     validation,
     verdict,
+    rejections,
   });
 
   if (verdict === "pass") {
@@ -169,7 +174,7 @@ async function fillSlot(
   if (attempt >= maxAttempts) {
     return undefined;
   }
-  return fillSlot(c, slot, maxAttempts, attempt + 1, {
+  return fillSlot(c, slot, maxAttempts, attempt + 1, rejections + 1, {
     previousAttempt: output,
     reasons: SeedValidation.failedReasons(validation),
   });
@@ -295,7 +300,14 @@ export const kora = Benchmark.new({
       async (
         slot: SeedSlot
       ): Promise<{seed: ScenarioSeed; slot: SeedSlot}[]> => {
-        const seed = await fillSlot(c, slot, maxAttempts, 1, undefined);
+        const seed = await fillSlot(
+          c,
+          slot,
+          maxAttempts,
+          1,
+          options?.priorRejections?.[slot.key] ?? 0,
+          undefined
+        );
         return seed ? [{seed, slot}] : [];
       },
       slots.filter(slot => !skipSlotKeys?.has(slot.key))
@@ -310,7 +322,7 @@ export const kora = Benchmark.new({
       };
     }
   },
-  async expandScenario(c, seed) {
+  async expandScenario(c, seed, options) {
     const maxAttempts = 2;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
@@ -358,11 +370,16 @@ export const kora = Benchmark.new({
         firstUserMessage: await generateFirstUserMessage(c, risk, draft),
       };
 
+      const relaxChildVoice = ScenarioValidation.relaxesChildVoice(
+        seed.ageRange,
+        (options?.priorRejections ?? 0) + attempt
+      );
       const validationPrompt = scenarioToValidationPrompt(
         riskCategory,
         risk,
         seed.ageRange,
-        scenario
+        scenario,
+        {relaxChildVoice}
       );
 
       const {output: validation} = await c.getResponse({
@@ -372,7 +389,9 @@ export const kora = Benchmark.new({
         ],
         outputType: ScenarioValidation.io,
       });
-      const verdict = ScenarioValidation.verdict(validation);
+      const verdict = ScenarioValidation.verdict(validation, {
+        relaxChildVoice,
+      });
       const reasons = ScenarioValidation.reasons(validation);
 
       await c.onValidation?.({
@@ -383,6 +402,7 @@ export const kora = Benchmark.new({
         validation,
         verdict,
         reasons,
+        childVoiceRelaxed: relaxChildVoice,
       });
 
       if (verdict === "pass") {

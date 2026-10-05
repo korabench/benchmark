@@ -86,9 +86,11 @@ Consequences worth understanding:
 - **The joint distribution is the product of marginals in expectation.** No
   dimension depends on another, so real-world correlations (e.g. between SES and
   race/ethnicity) are deliberately _not_ reproduced, and some combinations will
-  be unusual. The one exception is motivation × use, constrained by a mask (see
-  [Motivation × use pairing](#motivation--use-pairing)); no other
-  combination is excluded or repaired up front. A seed whose combination yields
+  be unusual. The exceptions are motivation × use, constrained by a mask (see
+  [Motivation × use pairing](#motivation--use-pairing)), and the few uses and
+  risk signal types that contradict a situation type (see
+  [Situation mask](#situation-mask)); no other combination is excluded or
+  repaired up front. A seed whose combination yields
   nothing plausible is rejected by the plausibility check (see
   [The check](#the-check)) and written again for the same slot.
 - Balance holds **per risk**, and therefore across the corpus.
@@ -255,6 +257,41 @@ situation type with its definition, and `coreBehavior` must be one concrete case
 of it; the expansion and validation prompts quote the same definition. A risk absent from
 `situationTypes.json` (a custom taxonomy) gets no situation type.
 
+#### Situation mask
+
+A few values contradict a situation type by definition, and no plausible seed
+can be written for the pair. `packages/benchmark/data/situationMask.json` lists
+them, each with its reason and the rejections that showed it:
+
+| Situation type                                                 | Forbidden               |
+| -------------------------------------------------------------- | ----------------------- |
+| Direct request (every risk that has one)                       | signal type `ambiguous` |
+| Indirect / coded disclosure                                    | signal type `direct`    |
+| Benign request yielding inappropriate content                  | signal type `direct`    |
+| Disclosure of academic-integrity context (academic dishonesty) | use `learning`          |
+
+`swapAwayForbidden()` (`allocation/swapAwayForbidden.ts`) applies it last, once
+the situation types are allocated: a seed holding a forbidden use or signal
+type trades it with another seed of the same risk (of the same gold standard,
+for an umbrella risk) that may hold it.
+
+- **Situation types do not move.** Each seed keeps the situation type it was
+  allocated, so the counts per gold standard, situation type and age band are
+  the allocated ones, for all 134 situation types.
+- **The counts per use and per signal type do not move** either: the result is
+  a permutation within the risk.
+- A trade never creates a forbidden motivation × use pairing.
+- It draws no random number: adding a rule changes the use or signal type of
+  the seeds concerned and of their trading partners, and nothing else in the
+  allocation. (Which seeds are private can still shift, since the private split
+  balances on these two dimensions.)
+- A forbidden value stays only where no trade exists, which does not happen at
+  75 seeds per risk.
+
+The mask is deliberately small. A pair goes in when the two definitions
+contradict each other **and** the validation ledger shows rejections for it,
+not when a pairing is merely unusual.
+
 ### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
 
 Once every risk is allocated, 30% of each risk's seeds are marked private
@@ -367,7 +404,8 @@ derives the verdict: every answer yes.
 
 A rejected seed does not leave its slot. The seed prompt is sent again for the
 same assignment, with the reasons of the rejection and the rejected text, up to
-3 times per run; the slot keeps its key (`<riskId>.<index in the risk's
+3 times per run, each rewrite going to the next model of the seeds chain when
+it has several; the slot keeps its key (`<riskId>.<index in the risk's
 allocation>`) and its public or private side. Allocation is thus untouched by
 the check: the planned population is the obtained one. When a slot is still
 rejected, `generate-seeds` writes no seeds file, keeps the filled slots in

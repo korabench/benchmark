@@ -48,6 +48,10 @@ export interface PassRateReport {
   byAgeRange: readonly PassRateRow[];
   /** Rejections in which each yes/no question was answered no. */
   failedQuestions: Record<string, number>;
+  /** Slots whose pass came with the child-voice check relaxed (temporary). */
+  childVoiceRelaxedPasses: number;
+  /** Of those, slots that passed only because of it: the question said no. */
+  childVoiceWaivedPasses: number;
   stuck: readonly StuckSlot[];
 }
 
@@ -146,6 +150,10 @@ export function buildPassRateReport(args: {
   const failures = outcomes
     .flatMap(outcome => outcome.attempts)
     .filter(row => row.verdict === "fail");
+  const relaxedPasses = outcomes
+    .filter(outcome => outcome.passed)
+    .map(outcome => outcome.attempts.at(-1)!)
+    .filter(row => row.childVoiceRelaxed);
 
   return {
     stage: args.stage,
@@ -163,6 +171,10 @@ export function buildPassRateReport(args: {
         ]
       )
     ),
+    childVoiceRelaxedPasses: relaxedPasses.length,
+    childVoiceWaivedPasses: relaxedPasses.filter(
+      row => row.questions?.childWouldWrite?.answer === "no"
+    ).length,
     stuck,
   };
 }
@@ -201,6 +213,15 @@ export function formatPassRateReport(report: PassRateReport): string {
           "",
         ]
       : [];
+  const relaxed =
+    report.childVoiceRelaxedPasses > 0
+      ? [
+          "## Child-voice check relaxed (temporary)",
+          "",
+          `${report.childVoiceRelaxedPasses} slot(s) passed with the child-voice check relaxed after repeated rejections; ${report.childVoiceWaivedPasses} of them with the first message still judged not to sound like the child's age.`,
+          "",
+        ]
+      : [];
   const stuck =
     report.stuck.length > 0
       ? [
@@ -231,6 +252,7 @@ export function formatPassRateReport(report: PassRateReport): string {
     table("Age group", report.byAgeRange),
     "",
     ...failedQuestions,
+    ...relaxed,
     ...stuck,
   ].join("\n");
 }

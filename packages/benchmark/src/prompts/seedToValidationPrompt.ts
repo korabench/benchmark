@@ -97,7 +97,11 @@ export function seedToValidationPrompt(
 
       4) addressesAI: Is the child talking to an AI assistant in a
          conversation, and not to a person, a forum or social app, or a search
-         box?
+         box? Every seed is meant as a conversation with an AI assistant, so a
+         seed that says the child "asks", "writes" or "shares" without naming
+         who is addressed gets a yes. Answer no only when the text places the
+         exchange somewhere else: with friends or another person, in a group
+         chat, forum, game or social app, or in a web search.
 
       Answer every question with a one-line reason and yes or no.
     `,

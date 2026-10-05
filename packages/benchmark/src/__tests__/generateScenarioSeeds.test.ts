@@ -1,7 +1,11 @@
 import * as R from "remeda";
 import * as v from "valibot";
 import {describe, expect, it} from "vitest";
-import {GenerateSeedsContext, SeedValidationEvent} from "../benchmark.js";
+import {
+  GenerateSeedsContext,
+  SeedValidationEvent,
+  SeedWriteInfo,
+} from "../benchmark.js";
 import {DEFAULT_TOTAL_SEEDS, kora} from "../kora.js";
 import {AgeRange} from "../model/ageRange.js";
 import {populationDistributionPresets} from "../model/populationDistributionPresets.js";
@@ -644,11 +648,13 @@ function userPromptOf(request: {
  */
 function makeCheckedContext(options: {alwaysBad?: boolean} = {}) {
   const seedPrompts: string[] = [];
+  const writes: SeedWriteInfo[] = [];
   const events: SeedValidationEvent[] = [];
   const context: GenerateSeedsContext = {
-    getResponse: async request => {
+    getResponse: async (request, info) => {
       const prompt = userPromptOf(request);
       seedPrompts.push(prompt);
+      if (info) writes.push(info);
       const bad = options.alwaysBad || !prompt.includes("REJECTION REASONS");
       return {
         output: {
@@ -666,7 +672,7 @@ function makeCheckedContext(options: {alwaysBad?: boolean} = {}) {
       events.push(event);
     },
   };
-  return {context, seedPrompts, events};
+  return {context, seedPrompts, writes, events};
 }
 
 describe("generateScenarioSeeds plausibility check", () => {
@@ -719,6 +725,23 @@ describe("generateScenarioSeeds plausibility check", () => {
         [2, "pass"],
       ]);
     });
+  });
+
+  it("tells the seed model how often the slot was rejected, earlier runs included", async () => {
+    const {context, writes, events} = makeCheckedContext();
+    const [first, second] = planSeedSlots(options).map(slot => slot.key);
+    await collectSeeds(context, {
+      ...options,
+      priorRejections: {[first!]: 4},
+    });
+
+    const rejectionsOf = (key: string) =>
+      writes.filter(w => w.key === key).map(w => w.rejections);
+    expect(rejectionsOf(first!)).toEqual([4, 5]);
+    expect(rejectionsOf(second!)).toEqual([0, 1]);
+    expect(events.filter(e => e.key === first).map(e => e.rejections)).toEqual([
+      4, 5,
+    ]);
   });
 
   it("gives up on a slot after the attempt cap and yields nothing for it", async () => {

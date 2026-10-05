@@ -39,6 +39,16 @@ Keys are motivation names from `motivations.json` and `use` values from
 `src/model/scenarioSeed.ts`. Data source: `motivation_use_mask_v3.0.csv` of the
 V3.0 pipeline inputs.
 
+`situationMask.json` is seed-generation input as well, loaded by
+`src/model/situationMask.ts`. It lists, per situation type, the `use` and
+`riskSignalType` values a seed of that type is never given (when avoidable),
+each with the reason and the evidence. A rule without a `riskId` applies to
+every risk that has a situation type of that name. It trades uses and signal
+types between seeds of a risk: it never moves a situation type, and never
+changes how many seeds receive each use or each signal type. Keep it small: a
+pair belongs there when the two definitions contradict each other and
+rejections show it.
+
 `situationTypes.json` is seed-generation input too, loaded by
 `src/model/situationTypes.ts`, and likewise outside the pack. For each bundled
 risk it lists the risk's gold standards (one, or three for the self-harm

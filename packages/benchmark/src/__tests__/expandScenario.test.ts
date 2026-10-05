@@ -197,6 +197,89 @@ describe("kora.expandScenario", () => {
     expect(events.map(e => e.verdict)).toEqual(["fail", "fail"]);
   });
 
+  describe("child-voice relaxation (temporary)", () => {
+    const tooOld = {reason: "Reads older than the age.", answer: "no" as const};
+    const young = () => createScenarioSeed({ageRange: "7to9", childAge: 8});
+    const run = async (
+      seed: ReturnType<typeof createScenarioSeed>,
+      priorRejections: number
+    ) => {
+      const events: ScenarioValidationEvent[] = [];
+      const context = {
+        ...createExpandContext([
+          validModelScenarioLight(),
+          passingValidation({childWouldWrite: tooOld}),
+          validModelScenarioLight(),
+          passingValidation({childWouldWrite: tooOld}),
+        ]),
+        onValidation: (event: ScenarioValidationEvent) => {
+          events.push(event);
+        },
+      };
+      const outcome = await kora
+        .expandScenario(context, seed, {priorRejections})
+        .then(
+          () => "kept",
+          () => "rejected"
+        );
+      return {
+        outcome,
+        events,
+        validationPrompts: [1, 3]
+          .slice(0, events.length)
+          .map(i => promptText(requestAt(context, i))),
+      };
+    };
+
+    it("rejects a 7-9 scenario on the child's voice for its first rejections", async () => {
+      const {outcome, events} = await run(young(), 0);
+
+      expect(outcome).toBe("rejected");
+      expect(events.map(e => e.childVoiceRelaxed)).toEqual([false, false]);
+    });
+
+    it("stops rejecting it on the child's voice once it was rejected often enough", async () => {
+      const after = ScenarioValidation.childVoiceRelaxationAfter;
+      const {outcome, events, validationPrompts} = await run(
+        young(),
+        after - 1
+      );
+
+      expect(outcome).toBe("kept");
+      expect(events.map(e => [e.verdict, e.childVoiceRelaxed])).toEqual([
+        ["fail", false],
+        ["pass", true],
+      ]);
+      // The answer is still recorded as given.
+      expect(events[1]!.validation.childWouldWrite.answer).toBe("no");
+      expect(validationPrompts[0]).not.toContain("CHILD VOICE (relaxed");
+      expect(validationPrompts[1]).toContain("CHILD VOICE (relaxed");
+    });
+
+    it("still rejects on the checklist when relaxed", async () => {
+      const context = createExpandContext([
+        validModelScenarioLight(),
+        failingValidation("The scenario drifts into a different risk type."),
+        validModelScenarioLight(),
+        failingValidation("The scenario drifts into a different risk type."),
+      ]);
+
+      await expect(
+        kora.expandScenario(context, young(), {priorRejections: 10})
+      ).rejects.toThrow(ScenarioValidationError);
+    });
+
+    it("never relaxes for older children", async () => {
+      const {outcome, events} = await run(
+        createScenarioSeed({ageRange: "13to17", childAge: 15}),
+        10
+      );
+
+      expect(outcome).toBe("rejected");
+      expect(events.map(e => e.childVoiceRelaxed)).toEqual([false, false]);
+    });
+  });
+
   it("throws ScenarioValidationError after 2 failed attempts", async () => {
     const seed = createScenarioSeed({id: "failing-seed"});
     const context = createExpandContext([

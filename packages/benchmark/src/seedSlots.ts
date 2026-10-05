@@ -14,6 +14,7 @@ import {MotivationUseMask} from "./model/motivationUseMask.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
+import {SituationMask} from "./model/situationMask.js";
 import {SituationTypes} from "./model/situationTypes.js";
 import {Conformance} from "./packs/conformance.js";
 import {stableJson} from "./packs/stableJson.js";
@@ -111,6 +112,7 @@ export function planSeedSlots(
   const rng = makeRng(options?.randomSeed);
   const useMask = MotivationUseMask.bundled();
   const situationTypes = SituationTypes.bundled();
+  const situationMask = SituationMask.bundled();
 
   const allocations = riskCategories.flatMap(riskCategory =>
     riskCategory.risks
@@ -127,6 +129,7 @@ export function planSeedSlots(
           ageRanges,
           useMask,
           situationTypes,
+          situationMask,
         }),
       }))
   );

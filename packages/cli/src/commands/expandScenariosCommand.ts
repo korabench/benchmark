@@ -184,6 +184,13 @@ export async function expandScenariosCommand(
   // followed by a retry that passes, so that the pass rate can be reported.
   const paths = validationPathsFor(outputFilePath);
   const ledger = await openLedger(paths.ledger, {fresh});
+  // Rejections of earlier runs count toward the child-voice relaxation.
+  const priorRejections = R.countBy(
+    (await readLedger(paths.ledger)).filter(
+      row => row.stage === "expansion" && row.verdict === "fail"
+    ),
+    row => row.key
+  );
   const reportValidation = async () => {
     const report = buildPassRateReport({
       stage: "expansion",
@@ -216,6 +223,7 @@ export async function expandScenariosCommand(
           // Not yet processed.
         }
 
+        let rejections = priorRejections[seed.id] ?? 0;
         let lastError: unknown;
         for (let i = 0; i < expansionModels.length; i++) {
           const {label, model} = expansionModels[i]!;
@@ -227,14 +235,18 @@ export async function expandScenariosCommand(
             getUserResponse: async request => ({
               output: await userModel.getTextResponse(request),
             }),
-            onValidation: event =>
-              ledger.record({
+            onValidation: event => {
+              if (event.verdict === "fail") {
+                rejections++;
+              }
+              return ledger.record({
                 stage: "expansion",
                 key: seed.id,
                 seedId: seed.id,
                 verdict: event.verdict,
                 questions: ScenarioValidation.questionsOf(event.validation),
                 reasons: event.reasons,
+                ...(event.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
                 // The expansion model validates its own output.
                 generatorModel: label,
                 validatorModel: label,
@@ -248,11 +260,14 @@ export async function expandScenariosCommand(
                     }
                   : {}),
                 population: populationRowOf(seed, privateSeedIds.has(seed.id)),
-              }),
+              });
+            },
           };
 
           try {
-            const scenarios = await kora.expandScenario(context, seed);
+            const scenarios = await kora.expandScenario(context, seed, {
+              priorRejections: rejections,
+            });
             await fs.writeFile(tempFile, JSON.stringify(scenarios, null, 2));
             progress.increment(true);
             return [];

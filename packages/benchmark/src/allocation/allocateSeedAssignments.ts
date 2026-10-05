@@ -11,6 +11,7 @@ import {
   SeedUse,
   SocialContext,
 } from "../model/scenarioSeed.js";
+import {SituationMask} from "../model/situationMask.js";
 import {GoldStandard, SituationTypes} from "../model/situationTypes.js";
 import {allocateAges} from "./allocateAges.js";
 import {allocateFlavors} from "./allocateFlavors.js";
@@ -28,6 +29,7 @@ import {
 import {allocateUniform} from "./allocateUniform.js";
 import {pairUsesWithMotivations} from "./pairUsesWithMotivations.js";
 import {shuffleWith} from "./rng.js";
+import {swapAwayForbidden} from "./swapAwayForbidden.js";
 
 /**
  * Every structured dimension of one seed, decided by code before the model is
@@ -71,6 +73,13 @@ interface Args {
    * split evenly across its gold standards, then across their situation types.
    */
   situationTypes?: SituationTypes;
+  /**
+   * Situation type × use and × risk signal type mask. When given, the uses and
+   * the signal types are reordered among the seeds so that no seed gets a
+   * value forbidden for its situation type; situation types stay where they
+   * are, and the counts per use and per signal type are the same either way.
+   */
+  situationMask?: SituationMask;
 }
 
 /**
@@ -83,7 +92,10 @@ interface Args {
  * `useMask` forbids, when it is given: its marginal is untouched, and it
  * stays independent of every dimension other than motivation. The situation
  * type is the other: its counts are fixed per age band, so it depends on the
- * age band and on nothing else.
+ * age band and on nothing else. Last, `situationMask` trades uses and risk
+ * signal types between seeds to avoid the few values it forbids for a
+ * situation type: the situation types do not move, and neither marginal
+ * changes.
  *
  *  - age band, gender, SES, race/ethnicity: the population distribution
  *  - exact age: even within the assigned band
@@ -101,7 +113,8 @@ interface Args {
  * The demographic, motivation and flavor draws come first and in their
  * historical order, so a given random seed keeps producing the demographics it
  * produced before the other dimensions were allocated. The use pairing and the
- * situation types draw last for the same reason.
+ * situation types draw last for the same reason, and the situation mask draws
+ * nothing at all.
  */
 function allocateShare(
   args: Args,
@@ -109,7 +122,7 @@ function allocateShare(
   goldStandard: GoldStandard | undefined
 ): readonly SeedAssignment[] {
   const {risk, distribution, motivations, rng, ageRanges} = args;
-  const {useMask} = args;
+  const {useMask, situationMask} = args;
 
   const personas = allocatePersonas(distribution, total, rng, ageRanges);
   const motivationCycle = shuffleWith(motivations, rng);
@@ -146,6 +159,39 @@ function allocateShare(
       )
     : undefined;
 
+  // Trades that avoid a forbidden situation pair never create a forbidden
+  // motivation × use pair.
+  const maskedUses =
+    situations && situationMask
+      ? swapAwayForbidden(
+          uses,
+          (i, use) =>
+            (!useMask ||
+              MotivationUseMask.allowed(
+                useMask,
+                seedMotivations[i]!.name,
+                use
+              )) &&
+            SituationMask.allowsUse(
+              situationMask,
+              risk.id,
+              situations[i]!.situationType,
+              use
+            )
+        )
+      : uses;
+  const maskedRiskSignalTypes =
+    situations && situationMask
+      ? swapAwayForbidden(riskSignalTypes, (i, riskSignalType) =>
+          SituationMask.allowsRiskSignalType(
+            situationMask,
+            risk.id,
+            situations[i]!.situationType,
+            riskSignalType
+          )
+        )
+      : riskSignalTypes;
+
   return personas.map((persona, i) => {
     const flavor = flavorIds
       ? risk.scenarioFlavors?.find(f => f.id === flavorIds[i])
@@ -158,8 +204,8 @@ function allocateShare(
       childSES: persona.ses,
       motivation: seedMotivations[i]!,
       socialContext: socialContexts[i]!,
-      riskSignalType: riskSignalTypes[i]!,
-      use: uses[i]!,
+      riskSignalType: maskedRiskSignalTypes[i]!,
+      use: maskedUses[i]!,
       refusalBehavior: refusalBehaviors[i]!,
       memory,
       ...(flavor ? {flavor} : {}),
