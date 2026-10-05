@@ -121,6 +121,12 @@ The preset describes US children aged 7 to 17. Its name carries the year of the
 census behind age, gender and race/ethnicity; only the SES shares come from a
 later source.
 
+The race/ethnicity groups are the source's: Hispanic or Latino of any race, then
+non-Hispanic white, Black and Asian. `other` is what remains (two or more races,
+American Indian or Alaska Native, Native Hawaiian or other Pacific Islander).
+The expansion and validation prompts quote that definition, so that an `other`
+child is not written as a member of one of the named groups.
+
 Pass a JSON file path instead of a preset name for a custom distribution; every
 dimension is validated to sum to 1.0 at load time.
 

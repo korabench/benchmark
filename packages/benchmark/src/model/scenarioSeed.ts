@@ -33,6 +33,21 @@ export const childSESDescriptions: Record<
 };
 
 //
+// Race/ethnicity.
+//
+// The groups are those of the population distribution's source (2020 Census,
+// population under 18): Hispanic or Latino of any race, then non-Hispanic
+// white, Black and Asian. "other" is what remains. Only it needs a
+// description: left undefined, it gets written as a named group, which shifts
+// the distribution toward that group.
+//
+
+export const childRaceEthnicityDescriptions: Partial<Record<string, string>> = {
+  other:
+    'none of the four named groups: two or more races, American Indian or Alaska Native, or Native Hawaiian or other Pacific Islander. Never a single Asian heritage (East, South or Southeast Asian, e.g. Filipino, Hmong, Indian), which is "asian"; never Hispanic or Latino, which is "hispanic"; never a single Middle Eastern, North African or African heritage, which the source counts as "white" or "black"',
+};
+
+//
 // Social Context.
 //
 

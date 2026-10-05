@@ -105,3 +105,22 @@ ids and the rule that selected them, every model config, the probe strings, the
 pack and prompt fingerprints, and the target system prompt in full — the study's
 central claim is that no age was declared to the target, and a reader should be
 able to check that against the bytes.
+
+## `seed-recovery.mjs` — can the seed be read back from the scenario?
+
+Shows a classifier model each scenario's own fields (never the seed), asks it
+for every seed dimension from the closed lists the generation prompts use, and
+compares the answers with the seed. Two calls per scenario: the dimensions
+(risk, child, motivation, use, social context, risk signal type, refusal
+behavior, memory), then the situation type with the true risk given. Ledgers
+are append-only, so a run can be interrupted and resumed. Writes `report.md`,
+`report.json` and `predictions.jsonl` to `RUN_DIR`.
+
+The classifier is a `models.json` slug, not a profile role: this is analysis
+tooling.
+
+```sh
+SCENARIOS=data/<dir>/scenarios.jsonl RUN_DIR=data/<dir>/seed-recovery \
+[CLASSIFIER=claude-sonnet-4.6:limited] [CONCURRENCY=10] [PHASE=all|classify|report] \
+  node --env-file=.env scripts/seed-recovery.mjs
+```

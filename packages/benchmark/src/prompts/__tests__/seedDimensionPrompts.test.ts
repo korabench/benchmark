@@ -360,6 +360,28 @@ describe("seed fields in the expansion and validation prompts", () => {
     expect(established).not.toContain("NO MODEL MEMORY");
   });
 
+  it('defines the "other" race/ethnicity group, and only that one', () => {
+    const other = {...seed, childRaceEthnicity: "other" as const};
+    const otherPrompts = [
+      seedToScenarioPrompt(privacyCategory, privacy, seed.motivation, other)
+        .user,
+      scenarioToValidationPrompt(
+        privacyCategory,
+        privacy,
+        seed.ageRange,
+        createScenario({seed: other})
+      ).user,
+    ];
+    for (const prompt of otherPrompts) {
+      expect(prompt).toContain(
+        "- Child Race/Ethnicity: other (none of the four named groups"
+      );
+    }
+    for (const prompt of Object.values(prompts)) {
+      expect(prompt).toContain("- Child Race/Ethnicity: hispanic\n");
+    }
+  });
+
   it("shows the validator the model memory that was written", () => {
     const withMemory = scenarioToValidationPrompt(
       privacyCategory,

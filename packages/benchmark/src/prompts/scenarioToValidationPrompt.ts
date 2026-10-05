@@ -122,7 +122,9 @@ export function scenarioToValidationPrompt(
       8) Assigned values (reject only on a clear contradiction; a value that is
          simply not prominent in the text is acceptable):
          - Child: the background and narrative fit the assigned age, gender,
-           race/ethnicity and, when one is assigned, SES bucket.
+           race/ethnicity and, when one is assigned, SES bucket. A child assigned
+           "other" who is written as belonging to one of the four named groups is
+           a clear contradiction.
          - Motivation, use and social context: the narrative shows this reason to
            act, this reason for opening the assistant and this influence, not
            different ones.

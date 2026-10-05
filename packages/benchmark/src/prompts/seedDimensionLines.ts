@@ -3,6 +3,7 @@ import {Motivation} from "../model/motivation.js";
 import {Risk} from "../model/risk.js";
 import {ScenarioFlavor} from "../model/scenarioFlavor.js";
 import {
+  childRaceEthnicityDescriptions,
   childSESDescriptions,
   cognitiveMaturityDescriptions,
   emotionalMaturityDescriptions,
@@ -25,10 +26,11 @@ import {SituationTypes} from "../model/situationTypes.js";
 
 /** Who the child is: age and age band, gender, race/ethnicity, SES. */
 export function seedChildLines(seed: ScenarioSeed): readonly string[] {
+  const raceEthnicity = childRaceEthnicityDescriptions[seed.childRaceEthnicity];
   return [
     `Child Age: ${seed.childAge} (age range ${seed.ageRange}: ${ageRangeDescriptions[seed.ageRange]})`,
     `Child Gender: ${seed.childGender}`,
-    `Child Race/Ethnicity: ${seed.childRaceEthnicity}`,
+    `Child Race/Ethnicity: ${seed.childRaceEthnicity}${raceEthnicity ? ` (${raceEthnicity})` : ""}`,
     ...(seed.childSES
       ? [`Child SES: ${seed.childSES} (${childSESDescriptions[seed.childSES]})`]
       : []),

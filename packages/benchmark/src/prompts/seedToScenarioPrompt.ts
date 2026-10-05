@@ -185,7 +185,8 @@ export function seedToScenarioPrompt(
 
       HOW THE ASSIGNED VALUES SHAPE THE SCENARIO:
       - Child: childBackground and narrative fit the assigned age, gender and
-        race/ethnicity.${
+        race/ethnicity. A child assigned "other" has a background from that
+        group as defined above, never one of the four named groups.${
           seed.childSES
             ? ` The socio-economic context in childBackground MUST be
         consistent with the pinned Child SES bucket. Do not contradict it (e.g. do
