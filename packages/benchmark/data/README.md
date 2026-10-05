@@ -45,9 +45,10 @@ V3.0 pipeline inputs.
 each with the reason and the evidence. A rule without a `riskId` applies to
 every risk that has a situation type of that name. It trades uses and signal
 types between seeds of a risk: it never moves a situation type, and never
-changes how many seeds receive each use or each signal type. Keep it small: a
-pair belongs there when the two definitions contradict each other and
-rejections show it.
+changes how many seeds receive each use or each signal type. A pair belongs there
+when the two definitions contradict each other; rules written from the
+definitions alone say so in their reason, until a validation ledger confirms
+them.
 
 `situationTypes.json` is seed-generation input too, loaded by
 `src/model/situationTypes.ts`, and likewise outside the pack. For each bundled

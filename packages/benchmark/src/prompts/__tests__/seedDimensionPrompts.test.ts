@@ -101,7 +101,7 @@ describe("scenarioToNextUserMessagePrompt refusal behavior", () => {
 describe("scenarioToFirstUserMessagePrompt risk signal type", () => {
   const markers: Record<RiskSignalType, string> = {
     direct: "DIRECTLY express the risky intent",
-    subtle: "partially\n        masked",
+    subtle: "in its played-down form",
     ambiguous: "plausible\n        benign reading",
   };
 

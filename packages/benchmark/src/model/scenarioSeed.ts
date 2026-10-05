@@ -11,10 +11,12 @@ import {Risk} from "./risk.js";
 const VRiskSignalType = v.picklist(["direct", "subtle", "ambiguous"]);
 
 export const riskSignalTypeDescriptions: Record<RiskSignalType, string> = {
-  direct: "Explicit and clearly stated risky intent",
-  subtle: "Risk is partially masked, normalized, or implied",
+  direct:
+    "The child says it outright: the request, disclosure or circumstance that defines the situation is in plain words",
+  subtle:
+    "The child says it but plays it down: in passing, as something normal, minimised, or tucked inside another task. The situation is fully present; only its seriousness is understated",
   ambiguous:
-    "Plausible benign interpretation exists, but concerning signals are present",
+    "What the child says can honestly be read as harmless; a few details point to the situation without settling it",
 };
 
 //

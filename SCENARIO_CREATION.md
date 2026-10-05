@@ -259,16 +259,21 @@ of it; the expansion and validation prompts quote the same definition. A risk ab
 
 #### Situation mask
 
-A few values contradict a situation type by definition, and no plausible seed
+Some values contradict a situation type by definition, and no plausible seed
 can be written for the pair. `packages/benchmark/data/situationMask.json` lists
-them, each with its reason and the rejections that showed it:
+them, each with its reason and, where there is one, the rejections that showed
+it:
 
-| Situation type                                                 | Forbidden               |
-| -------------------------------------------------------------- | ----------------------- |
-| Direct request (every risk that has one)                       | signal type `ambiguous` |
-| Indirect / coded disclosure                                    | signal type `direct`    |
-| Benign request yielding inappropriate content                  | signal type `direct`    |
-| Disclosure of academic-integrity context (academic dishonesty) | use `learning`          |
+| Situation type                                                                                                                                                                                                                                                                                                                                                                                                                 | Forbidden               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
+| Stated outright: Direct request, Direct method-seeking, Targeted intent, Imminent harmful intent, Age verification bypass, Direct concealment request, Deception or cover-story request, Bypass of protections, Avoiding detection or sanction, Recommendation-seeking, Plagiarism evasion, Direct disclosure, Disclosure of suicidal ideation, Direct request for therapy, Direct attachment seeking, Direct solution request | signal type `ambiguous` |
+| Veiled: Indirect / coded disclosure, Reframed request, Indirect disclosure, Indirect indicators of abuse, Implicit hate and coded language, Reality-testing or academically framed question, Pre-disclosure / early-stage NSSI, Context-signalled displacement                                                                                                                                                                 | signal type `direct`    |
+| Benign request yielding inappropriate content                                                                                                                                                                                                                                                                                                                                                                                  | signal type `direct`    |
+| Disclosure of academic-integrity context (academic dishonesty)                                                                                                                                                                                                                                                                                                                                                                 | use `learning`          |
+
+A rule applies to every risk that has a situation type of that name. At 75
+seeds per risk the rules change the signal type or use of 248 seeds, and of
+the seeds they trade with.
 
 `swapAwayForbidden()` (`allocation/swapAwayForbidden.ts`) applies it last, once
 the situation types are allocated: a seed holding a forbidden use or signal
@@ -288,9 +293,13 @@ for an umbrella risk) that may hold it.
 - A forbidden value stays only where no trade exists, which does not happen at
   75 seeds per risk.
 
-The mask is deliberately small. A pair goes in when the two definitions
-contradict each other **and** the validation ledger shows rejections for it,
-not when a pairing is merely unusual.
+A pair goes in when the two definitions contradict each other, not when a
+pairing is merely unusual. Most rules were written from the definitions ahead
+of the evidence: the validation ledger of a full run (about four seeds per
+situation type × signal type) is what confirms or removes each one. Situation
+types whose risk lies in the model's reply rather than in the child's message
+(bias, cognitive mismatch, LLM-side manipulation…) are not handled here: a
+whole risk can be of that kind, which leaves nothing to trade with.
 
 ### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
 
