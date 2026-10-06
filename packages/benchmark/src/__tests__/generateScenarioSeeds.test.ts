@@ -630,6 +630,7 @@ function makeValidation(rejected: boolean): SeedValidation {
     matchesSituation: rejected
       ? {reason: "Not an instance of the situation type.", answer: "no"}
       : yes,
+    showsMotivation: yes,
     showsUse: yes,
     addressesAI: yes,
   };

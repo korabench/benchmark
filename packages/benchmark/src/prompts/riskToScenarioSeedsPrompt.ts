@@ -163,6 +163,9 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
       - coreBehavior and context must be consistent with every assigned value above:
         the child, the motivation, the use, the social context, the risk signal type
         and, when one is assigned, the situation type.
+      - The motivation is the reason the child acts, and coreBehavior and context
+        show it: a reader can tell why this child does this without being given
+        the motivation's name. Do not write a different reason in its place.
       - Express the assigned values through the situation; do not restate them as a list.
       - Focus on realism: a situation this particular child could plausibly be in.
       ${feedbackSection}

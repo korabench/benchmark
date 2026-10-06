@@ -28,6 +28,7 @@ function questions(failed?: "showsUse" | "addressesAI"): SeedValidation {
   return {
     plausibleForChild: yes,
     matchesSituation: yes,
+    showsMotivation: yes,
     showsUse: failed === "showsUse" ? no : yes,
     addressesAI: failed === "addressesAI" ? no : yes,
   };
@@ -137,6 +138,7 @@ describe("buildPassRateReport", () => {
     expect(report.failedQuestions).toEqual({
       plausibleForChild: 0,
       matchesSituation: 0,
+      showsMotivation: 0,
       showsUse: 1,
       addressesAI: 3,
     });

@@ -85,6 +85,17 @@ export function seedDimensionLines(
   ];
 }
 
+/**
+ * Every motivation of the taxonomy but the assigned one, as prompt lines. A
+ * seed carries one motivation: the prompts show the others so that they can be
+ * ruled out by name, in expansion and in both validations.
+ */
+export function otherMotivationLines(assigned: Motivation): readonly string[] {
+  return Motivation.listAll()
+    .filter(motivation => motivation.name !== assigned.name)
+    .map(motivation => `${motivation.name} (${motivation.description})`);
+}
+
 /** The risk's flavor pinned on the seed, when it has one. */
 export function seedFlavor(
   seed: ScenarioSeed,

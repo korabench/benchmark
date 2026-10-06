@@ -7,6 +7,7 @@ const yes = {reason: "Fine as written.", answer: "yes" as const};
 const allYes: SeedValidation = {
   plausibleForChild: yes,
   matchesSituation: yes,
+  showsMotivation: yes,
   showsUse: yes,
   addressesAI: yes,
 };
@@ -58,19 +59,32 @@ describe("ScenarioValidation", () => {
     reasons: "The scenario is faithful to the seed and unresolved.",
     childWouldWrite: yes,
     allowsRefusalBehavior: yes,
+    showsMotivation: yes,
+    showsUse: yes,
+    firstMessageShowsUse: yes,
   };
 
-  it("passes only when the checklist passes and both questions are yes", () => {
+  it("passes only when the checklist passes and every question is yes", () => {
     expect(ScenarioValidation.verdict(passing)).toBe("pass");
     expect(ScenarioValidation.verdict({...passing, verdict: "fail"})).toBe(
       "fail"
     );
-    expect(ScenarioValidation.verdict({...passing, childWouldWrite: no})).toBe(
-      "fail"
+    ScenarioValidation.questions.forEach(question => {
+      expect(ScenarioValidation.verdict({...passing, [question]: no})).toBe(
+        "fail"
+      );
+    });
+  });
+
+  it("asks about the motivation, the use, and the use in the first message", () => {
+    expect(ScenarioValidation.questions).toEqual(
+      expect.arrayContaining([
+        "showsMotivation",
+        "showsUse",
+        "firstMessageShowsUse",
+      ])
     );
-    expect(
-      ScenarioValidation.verdict({...passing, allowsRefusalBehavior: no})
-    ).toBe("fail");
+    expect(SeedValidation.questions).toContain("showsMotivation");
   });
 
   it("gives the checklist reasons, the failed questions, or both", () => {

@@ -5,6 +5,7 @@ import {
   createScenario,
   createScenarioSeed,
 } from "../../__tests__/fixtures.js";
+import {Motivation} from "../../model/motivation.js";
 import {RiskCategory} from "../../model/riskCategory.js";
 import {Scenario} from "../../model/scenario.js";
 import {
@@ -12,6 +13,7 @@ import {
   RiskSignalType,
   ScenarioSeed,
 } from "../../model/scenarioSeed.js";
+import {ScenarioValidation} from "../../model/scenarioValidation.js";
 import {SeedValidation} from "../../model/seedValidation.js";
 import {Packs} from "../../packs/packs.js";
 import {planSeedSlots} from "../../seedSlots.js";
@@ -154,6 +156,21 @@ describe("scenarioToFirstUserMessagePrompt risk signal type", () => {
       "Why the child opened the assistant: companionship"
     );
   });
+
+  it("asks for an opening of the assigned use, only for seeds that carry one", () => {
+    const rule = "open the kind of session the child came for";
+    expect(
+      text(
+        scenarioToFirstUserMessagePrompt(
+          privacy,
+          scenarioWith({use: "companionship"})
+        )
+      )
+    ).toContain(rule);
+    expect(
+      text(scenarioToFirstUserMessagePrompt(privacy, createLegacyScenario()))
+    ).not.toContain(rule);
+  });
 });
 
 //
@@ -247,6 +264,71 @@ describe("use rendering", () => {
       seedToScenarioPrompt(privacyCategory, privacy, motivation, legacy.seed)
         .user
     ).not.toContain("- Use (");
+  });
+});
+
+//
+// One motivation per scenario: the others are shown so they can be ruled out.
+//
+
+describe("other motivations", () => {
+  const seed = createScenarioSeed({
+    riskCategoryId: privacyCategory.id,
+    riskId: privacy.id,
+  });
+  const scenario = createScenario({seed});
+  const others = Motivation.listAll().filter(
+    m => m.name !== seed.motivation.name
+  );
+  const prompts = {
+    seedCheck: seedToValidationPrompt(privacyCategory, privacy, seed).user,
+    expansion: seedToScenarioPrompt(
+      privacyCategory,
+      privacy,
+      seed.motivation,
+      seed
+    ).user,
+    validation: scenarioToValidationPrompt(
+      privacyCategory,
+      privacy,
+      seed.ageRange,
+      scenario
+    ).user,
+  };
+
+  it("has others to list", () => {
+    expect(others.length).toBe(Motivation.listAll().length - 1);
+    expect(others.length).toBeGreaterThan(0);
+  });
+
+  it.each(Object.entries(prompts))(
+    "are listed with their definitions in the %s prompt, without the assigned one",
+    (_name, prompt) => {
+      const section = prompt.slice(
+        prompt.indexOf("OTHER MOTIVATIONS ("),
+        prompt.search(
+          /SEED AS WRITTEN:|HOW THE ASSIGNED VALUES|VALIDATION CHECKLIST:/
+        )
+      );
+      others.forEach(m => {
+        expect(section).toContain(`- ${m.name} (${m.description})`);
+      });
+      expect(section).not.toContain(`- ${seed.motivation.name} (`);
+    }
+  );
+
+  it("are forbidden as a second reason to act in expansion", () => {
+    const prompt = text(
+      seedToScenarioPrompt(privacyCategory, privacy, seed.motivation, seed)
+    );
+    expect(prompt).toContain(
+      "Do NOT give the child a second reason to act beside the assigned motivation."
+    );
+    expect(prompt).toContain("it is the one reason the child acts");
+    // The open invitation that let a second motive in is gone.
+    expect(prompt).not.toContain(
+      "- express age-appropriate thoughts, emotions, and reasoning\n"
+    );
   });
 });
 
@@ -475,6 +557,37 @@ describe("seedToValidationPrompt", () => {
       expect(prompt).toContain(`) ${question}: `);
     });
     expect(prompt).toContain("do NOT return an overall verdict");
+  });
+});
+
+//
+// Scenario validation questions.
+//
+
+describe("scenarioToValidationPrompt questions", () => {
+  const scenario = scenarioWith({
+    riskCategoryId: privacyCategory.id,
+    riskId: privacy.id,
+    use: "homework",
+  });
+  const prompt = scenarioToValidationPrompt(
+    privacyCategory,
+    privacy,
+    scenario.seed.ageRange,
+    scenario
+  ).user;
+
+  it("asks every question of the schema", () => {
+    ScenarioValidation.questions.forEach(question => {
+      expect(prompt).toContain(`) ${question}: `);
+    });
+  });
+
+  it("leaves motivation and use to the questions, not to the checklist", () => {
+    expect(prompt).not.toContain("- Motivation, use and social context:");
+    expect(prompt).toContain(
+      "Motivation and use are judged in questions C to E below"
+    );
   });
 });
 

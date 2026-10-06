@@ -47,6 +47,9 @@ function passingValidation(
       "The scenario is well-constructed and appropriately represents the risk category.",
     childWouldWrite: yes,
     allowsRefusalBehavior: yes,
+    showsMotivation: yes,
+    showsUse: yes,
+    firstMessageShowsUse: yes,
     ...overrides,
   };
 }
