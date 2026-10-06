@@ -2,7 +2,10 @@ import {ModelMessage, ModelRequest, ModelResponse} from "@korabench/core";
 import {SystemUserPrompt} from "./model/prompt.js";
 import {Risk} from "./model/risk.js";
 import {Scenario} from "./model/scenario.js";
-import {scenarioToFirstUserMessagePrompt} from "./prompts/scenarioToFirstUserMessagePrompt.js";
+import {
+  FirstUserMessageFeedback,
+  scenarioToFirstUserMessagePrompt,
+} from "./prompts/scenarioToFirstUserMessagePrompt.js";
 import {scenarioToNextUserMessagePrompt} from "./prompts/scenarioToNextUserMessagePrompt.js";
 
 interface UserResponseContext {
@@ -70,14 +73,20 @@ async function generateUserMessage(
   throw new Error("Unreachable");
 }
 
+/**
+ * Write the child's opening message. With `feedback`, a message written
+ * earlier for this seed was rejected by the scenario validation: the writer is
+ * shown it and the reasons.
+ */
 export function generateFirstUserMessage(
   c: UserResponseContext,
   risk: Risk,
-  scenario: Scenario
+  scenario: Scenario,
+  feedback?: FirstUserMessageFeedback
 ) {
   return generateUserMessage(
     c,
-    scenarioToFirstUserMessagePrompt(risk, scenario, c.language)
+    scenarioToFirstUserMessagePrompt(risk, scenario, c.language, feedback)
   );
 }
 

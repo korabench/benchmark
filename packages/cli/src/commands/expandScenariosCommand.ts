@@ -247,6 +247,9 @@ export async function expandScenariosCommand(
                 questions: ScenarioValidation.questionsOf(event.validation),
                 reasons: event.reasons,
                 ...(event.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
+                ...(event.firstMessageRewrite
+                  ? {firstMessageRewrite: true}
+                  : {}),
                 // The expansion model validates its own output.
                 generatorModel: label,
                 validatorModel: label,

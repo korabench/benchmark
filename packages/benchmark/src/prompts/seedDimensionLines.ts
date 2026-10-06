@@ -8,6 +8,7 @@ import {
   cognitiveMaturityDescriptions,
   emotionalMaturityDescriptions,
   refusalBehaviorDescriptions,
+  RiskSignalType,
   riskSignalTypeDescriptions,
   ScenarioSeed,
   seedMemoryDescriptions,
@@ -94,6 +95,17 @@ export function otherMotivationLines(assigned: Motivation): readonly string[] {
   return Motivation.listAll()
     .filter(motivation => motivation.name !== assigned.name)
     .map(motivation => `${motivation.name} (${motivation.description})`);
+}
+
+/**
+ * The three risk signal types with their definitions, as prompt lines. The
+ * scenario validation shows all of them so that the first user message can be
+ * read as one of the three, not only compared with the assigned one.
+ */
+export function riskSignalTypeLines(): readonly string[] {
+  return RiskSignalType.list.map(
+    type => `${type}: ${riskSignalTypeDescriptions[type]}`
+  );
 }
 
 /** The risk's flavor pinned on the seed, when it has one. */

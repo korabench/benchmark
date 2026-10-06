@@ -50,6 +50,7 @@ function passingValidation(
     showsMotivation: yes,
     showsUse: yes,
     firstMessageShowsUse: yes,
+    firstMessageShowsSignalType: yes,
     ...overrides,
   };
 }
@@ -108,6 +109,20 @@ function requestAt(
 function promptText(request: RecordedRequest): string {
   return request.messages.map(m => String(m.content)).join("\n");
 }
+
+/** The prompt of the nth request for a first user message. */
+function userPromptAt(context: ExpandScenarioContext, index: number): string {
+  const calls = (
+    context.getUserResponse as unknown as {mock: {calls: RecordedRequest[][]}}
+  ).mock.calls;
+  const request = calls[index]?.[0];
+  if (!request) {
+    throw new Error(`No user request recorded at index ${index}.`);
+  }
+  return promptText(request);
+}
+
+const no = {reason: "Clear problem here.", answer: "no" as const};
 
 //
 // Tests.
@@ -209,10 +224,11 @@ describe("kora.expandScenario", () => {
     ) => {
       const events: ScenarioValidationEvent[] = [];
       const context = {
+        // A scenario rejected on the child's voice alone is kept: the second
+        // attempt writes the message again and validates, without expanding.
         ...createExpandContext([
           validModelScenarioLight(),
           passingValidation({childWouldWrite: tooOld}),
-          validModelScenarioLight(),
           passingValidation({childWouldWrite: tooOld}),
         ]),
         onValidation: (event: ScenarioValidationEvent) => {
@@ -228,7 +244,7 @@ describe("kora.expandScenario", () => {
       return {
         outcome,
         events,
-        validationPrompts: [1, 3]
+        validationPrompts: [1, 2]
           .slice(0, events.length)
           .map(i => promptText(requestAt(context, i))),
       };
@@ -337,7 +353,12 @@ describe("kora.expandScenario", () => {
     expect(scenario!.firstUserMessage).toBe("hey can u help me with smth");
   });
 
-  it.each(ScenarioValidation.questions)(
+  const firstMessageQuestions: readonly string[] =
+    ScenarioValidation.firstMessageQuestions;
+
+  it.each(
+    ScenarioValidation.questions.filter(q => !firstMessageQuestions.includes(q))
+  )(
     "rejects a scenario whose checklist passes but %s is answered no",
     async question => {
       const events: ScenarioValidationEvent[] = [];
@@ -370,8 +391,140 @@ describe("kora.expandScenario", () => {
         `${question}: Clear problem here.`
       );
       expect(scenario!.firstUserMessage).toBe("Second message.");
+      // The scenario was rejected: it is expanded again, and the message
+      // writer, whose message was not at fault, is told nothing.
+      expect(context.getResponse).toHaveBeenCalledTimes(4);
+      expect(events.map(e => e.firstMessageRewrite)).toEqual([false, false]);
+      expect(userPromptAt(context, 1)).not.toContain("REJECTION REASONS");
     }
   );
+
+  describe("a rejection of the first user message alone", () => {
+    it.each(ScenarioValidation.firstMessageQuestions)(
+      "keeps the scenario and writes only the message again when %s is answered no",
+      async question => {
+        const events: ScenarioValidationEvent[] = [];
+        const context = {
+          ...createExpandContext(
+            [
+              validModelScenarioLight(),
+              passingValidation({[question]: no}),
+              passingValidation(),
+            ],
+            ["First message.", "Second message."]
+          ),
+          onValidation: (event: ScenarioValidationEvent) => {
+            events.push(event);
+          },
+        };
+
+        const [scenario] = await kora.expandScenario(
+          context,
+          createScenarioSeed()
+        );
+
+        // One expansion, two validations: no second expansion.
+        expect(context.getResponse).toHaveBeenCalledTimes(3);
+        expect(requestAt(context, 2).outputType).toBe(ScenarioValidation.io);
+        expect(events.map(e => [e.verdict, e.firstMessageRewrite])).toEqual([
+          ["fail", false],
+          ["pass", true],
+        ]);
+        expect(events[0]!.reasons).toBe(`${question}: Clear problem here.`);
+        expect(scenario!.narrative).toBe(validModelScenarioLight().narrative);
+        expect(scenario!.firstUserMessage).toBe("Second message.");
+
+        // The writer is shown the rejected message and why, the second time.
+        expect(userPromptAt(context, 0)).not.toContain("REJECTION REASONS");
+        expect(userPromptAt(context, 1)).toContain(
+          `- ${question}: Clear problem here.`
+        );
+        expect(userPromptAt(context, 1)).toContain(
+          "REJECTED MESSAGE:\n      First message."
+        );
+        // The validator is shown the new message.
+        expect(promptText(requestAt(context, 2))).toContain(
+          "): Second message."
+        );
+      }
+    );
+
+    it("gives up after the same number of attempts", async () => {
+      const seed = createScenarioSeed();
+      const context = createExpandContext(
+        [
+          validModelScenarioLight(),
+          passingValidation({firstMessageShowsSignalType: no}),
+          passingValidation({
+            firstMessageShowsSignalType: {
+              reason: "Still states it outright.",
+              answer: "no",
+            },
+          }),
+        ],
+        ["First message.", "Second message."]
+      );
+
+      const error = await kora.expandScenario(context, seed).then(
+        () => undefined,
+        (e: unknown) => e
+      );
+
+      expect(error).toBeInstanceOf(ScenarioValidationError);
+      expect((error as ScenarioValidationError).attempts).toBe(2);
+      expect((error as ScenarioValidationError).lastReasons).toBe(
+        "firstMessageShowsSignalType: Still states it outright."
+      );
+      expect(context.getResponse).toHaveBeenCalledTimes(3);
+    });
+
+    it("expands again when the scenario was rejected too, and still tells the message writer", async () => {
+      const events: ScenarioValidationEvent[] = [];
+      const context = {
+        ...createExpandContext(
+          [
+            validModelScenarioLight(),
+            passingValidation({showsMotivation: no, firstMessageShowsUse: no}),
+            validModelScenarioLight(),
+            passingValidation(),
+          ],
+          ["First message.", "Second message."]
+        ),
+        onValidation: (event: ScenarioValidationEvent) => {
+          events.push(event);
+        },
+      };
+
+      await kora.expandScenario(context, createScenarioSeed());
+
+      expect(context.getResponse).toHaveBeenCalledTimes(4);
+      expect(events.map(e => e.firstMessageRewrite)).toEqual([false, false]);
+      // The expansion is told everything; the message writer, its own part.
+      expect(promptText(requestAt(context, 2))).toContain(
+        "showsMotivation: Clear problem here."
+      );
+      expect(userPromptAt(context, 1)).toContain(
+        "- firstMessageShowsUse: Clear problem here."
+      );
+      expect(userPromptAt(context, 1)).not.toContain("showsMotivation");
+    });
+
+    it("expands again when the checklist failed, whatever the questions say", async () => {
+      const context = createExpandContext([
+        validModelScenarioLight(),
+        {
+          ...failingValidation("The narrative quotes the assistant's reply."),
+          childWouldWrite: no,
+        },
+        validModelScenarioLight(),
+        passingValidation(),
+      ]);
+
+      await kora.expandScenario(context, createScenarioSeed());
+
+      expect(context.getResponse).toHaveBeenCalledTimes(4);
+    });
+  });
 
   it("never writes a childMaturity onto the expanded scenario", async () => {
     const context = createExpandContext([

@@ -58,6 +58,10 @@ export interface ScenarioValidationEvent {
   /** Whether the child-voice check was relaxed for this verdict (temporary,
    * see `ScenarioValidation.relaxesChildVoice`). */
   childVoiceRelaxed: boolean;
+  /** Whether this attempt kept the scenario of the previous one and wrote
+   * only its first user message again, because that message alone had been
+   * rejected. */
+  firstMessageRewrite: boolean;
 }
 
 export interface ExpandScenarioOptions {

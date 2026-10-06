@@ -51,6 +51,7 @@ import {
   riskToScenarioSeedsPrompt,
   SeedValidationFeedback,
 } from "./prompts/riskToScenarioSeedsPrompt.js";
+import {FirstUserMessageFeedback} from "./prompts/scenarioToFirstUserMessagePrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
 import {seedToValidationPrompt} from "./prompts/seedToValidationPrompt.js";
@@ -336,8 +337,16 @@ export const kora = Benchmark.new({
     let validationFeedback:
       | {previousAttempt: ModelScenario; reasons: string}
       | undefined;
+    // The scenario of the previous attempt, when it was rejected for its first
+    // user message alone: it is kept, and only the message is written again.
+    let keptScenario: ModelScenario | undefined;
+    // The first user message of the previous attempt and why it was rejected,
+    // when it was: the writer is shown both, whether or not the scenario is
+    // expanded again.
+    let messageFeedback: FirstUserMessageFeedback | undefined;
+    let lastReasons = "";
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const expand = async (): Promise<ModelScenario> => {
       const outputType = ScenarioSeed.hasMemory(seed, risk)
         ? ModelScenarioWithMemory.io
         : ModelScenarioLight.io;
@@ -348,14 +357,19 @@ export const kora = Benchmark.new({
         seed,
         validationFeedback
       );
-
-      const {output: modelScenario} = await c.getResponse({
+      const {output} = await c.getResponse({
         messages: [
           {role: "system", content: prompt.system},
           {role: "user", content: prompt.user},
         ],
         outputType,
       });
+      return output;
+    };
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const firstMessageRewrite = keptScenario !== undefined;
+      const modelScenario = keptScenario ?? (await expand());
 
       // The first user message is written before the validation, which asks
       // whether a child of this age would write it.
@@ -367,7 +381,12 @@ export const kora = Benchmark.new({
       };
       const scenario: Scenario = {
         ...draft,
-        firstUserMessage: await generateFirstUserMessage(c, risk, draft),
+        firstUserMessage: await generateFirstUserMessage(
+          c,
+          risk,
+          draft,
+          messageFeedback
+        ),
       };
 
       const relaxChildVoice = ScenarioValidation.relaxesChildVoice(
@@ -403,23 +422,45 @@ export const kora = Benchmark.new({
         verdict,
         reasons,
         childVoiceRelaxed: relaxChildVoice,
+        firstMessageRewrite,
       });
 
       if (verdict === "pass") {
         return [scenario];
       }
 
-      validationFeedback = {
-        previousAttempt: modelScenario,
-        reasons,
-      };
+      lastReasons = reasons;
+      const messageReasons = ScenarioValidation.firstMessageReasons(
+        validation,
+        {relaxChildVoice}
+      );
+      messageFeedback =
+        messageReasons.length > 0
+          ? {
+              previousMessage: scenario.firstUserMessage,
+              reasons: messageReasons,
+            }
+          : undefined;
+
+      // A scenario rejected for its first user message alone was accepted as
+      // a scenario: expanding it again would spend the expensive call on text
+      // that passed, and would not tell the message writer what went wrong.
+      if (
+        ScenarioValidation.rejectsFirstMessageOnly(validation, {
+          relaxChildVoice,
+        })
+      ) {
+        keptScenario = modelScenario;
+      } else {
+        keptScenario = undefined;
+        validationFeedback = {
+          previousAttempt: modelScenario,
+          reasons,
+        };
+      }
     }
 
-    throw new ScenarioValidationError(
-      seed,
-      validationFeedback!.reasons,
-      maxAttempts
-    );
+    throw new ScenarioValidationError(seed, lastReasons, maxAttempts);
   },
   mapScenarioToKeys(scenario, prompts = ["default"]) {
     return R.pipe(

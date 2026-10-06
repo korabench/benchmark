@@ -62,6 +62,7 @@ describe("ScenarioValidation", () => {
     showsMotivation: yes,
     showsUse: yes,
     firstMessageShowsUse: yes,
+    firstMessageShowsSignalType: yes,
   };
 
   it("passes only when the checklist passes and every question is yes", () => {
@@ -76,15 +77,57 @@ describe("ScenarioValidation", () => {
     });
   });
 
-  it("asks about the motivation, the use, and the use in the first message", () => {
+  it("asks about the motivation, the use, and the use and signal type in the first message", () => {
     expect(ScenarioValidation.questions).toEqual(
       expect.arrayContaining([
         "showsMotivation",
         "showsUse",
         "firstMessageShowsUse",
+        "firstMessageShowsSignalType",
       ])
     );
     expect(SeedValidation.questions).toContain("showsMotivation");
+  });
+
+  it("tells a rejection of the first user message alone from one of the scenario", () => {
+    const only = ScenarioValidation.rejectsFirstMessageOnly;
+    expect(only(passing)).toBe(false);
+    ScenarioValidation.firstMessageQuestions.forEach(question => {
+      expect(only({...passing, [question]: no}), question).toBe(true);
+      // Not when the checklist failed, or when the scenario failed a question.
+      expect(only({...passing, verdict: "fail", [question]: no})).toBe(false);
+      expect(only({...passing, showsMotivation: no, [question]: no})).toBe(
+        false
+      );
+    });
+    expect(only({...passing, showsUse: no})).toBe(false);
+    expect(only({...passing, allowsRefusalBehavior: no})).toBe(false);
+  });
+
+  it("gives the first-message reasons, and only those", () => {
+    const reasons = ScenarioValidation.firstMessageReasons;
+    expect(reasons(passing)).toEqual([]);
+    expect(reasons({...passing, showsMotivation: no})).toEqual([]);
+    expect(
+      reasons({
+        ...passing,
+        showsMotivation: no,
+        firstMessageShowsSignalType: {
+          reason: "States the disclosure outright.",
+          answer: "no",
+        },
+      })
+    ).toEqual(["firstMessageShowsSignalType: States the disclosure outright."]);
+  });
+
+  it("leaves the child's voice out of both once it is relaxed", () => {
+    const relaxed = {relaxChildVoice: true};
+    const tooOld = {...passing, childWouldWrite: no};
+    expect(ScenarioValidation.rejectsFirstMessageOnly(tooOld)).toBe(true);
+    expect(ScenarioValidation.rejectsFirstMessageOnly(tooOld, relaxed)).toBe(
+      false
+    );
+    expect(ScenarioValidation.firstMessageReasons(tooOld, relaxed)).toEqual([]);
   });
 
   it("gives the checklist reasons, the failed questions, or both", () => {
