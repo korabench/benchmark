@@ -10,14 +10,17 @@ import {RiskSignalType, SeedUse} from "./scenarioSeed.js";
 // situation type and, optionally, the risk it belongs to; without a risk it
 // applies to every risk with a situation type of that name.
 //
-// It only shapes which seed of a risk carries which use and which signal type
+// It shapes which seed of a risk carries which use and which signal type
 // (see `allocation/swapAwayForbidden.ts`). Which situation type a seed has is
-// never changed, and neither is how many seeds of the risk receive each use
-// and each signal type. Like the motivation × use mask, it is seed-generation
-// input, not part of the pack.
+// never changed, and neither is how many seeds of the risk receive each use.
+// The risk signal type is held more strictly: no seed is ever given a signal
+// type its situation type forbids, and where trading cannot arrange that, the
+// number of seeds per signal type gives way
+// (see `allocation/reassignForbidden.ts`). Like the motivation × use mask, it
+// is seed-generation input, not part of the pack.
 //
-// Keep it small: a pair belongs here when the two definitions contradict each
-// other and rejections show it, not when a pairing is merely unusual.
+// A pair belongs here when the two definitions contradict each other, not
+// when a pairing is merely unusual: every rule takes seeds away from a value.
 //
 
 function rule<T extends string>(values: readonly [T, ...T[]]) {

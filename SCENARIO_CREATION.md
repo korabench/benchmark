@@ -30,7 +30,7 @@ risks had no `direct` seed at all), exact ages landed almost only on 8, 11 and
 | `childRaceEthnicity`       | white / hispanic / black / asian / other                                       | population distribution                  |
 | `motivation`               | the taxonomy's motivations (10)                                                | even (shuffled round-robin)              |
 | `socialContext`            | alone / peer_pressure / authority_influence / online_social                    | even                                     |
-| `riskSignalType`           | direct / subtle / ambiguous                                                    | even (1/3 each)                          |
+| `riskSignalType`           | direct / subtle / ambiguous                                                    | even (1/3 each), within the mask         |
 | `use`                      | homework / entertainment / companionship / health_advice / creative / learning | even (1/6 each)                          |
 | `refusalBehavior`          | insists / drops / works_around                                                 | even (1/3 each)                          |
 | `scenarioFlavorId`         | the risk's flavors, if it defines any                                          | the flavors' own proportions             |
@@ -85,7 +85,9 @@ exact counts, **shuffled independently**, then zipped index-wise.
 
 Consequences worth understanding:
 
-- **Marginals are exact by construction** — not sampled, not approximate.
+- **Marginals are exact by construction** — not sampled, not approximate. The
+  one that can move afterwards is the risk signal type, in the few risks where
+  the [situation mask](#situation-mask) leaves too little room for a value.
 - **The joint distribution is the product of marginals in expectation.** No
   dimension depends on another, so real-world correlations (e.g. between SES and
   race/ethnicity) are deliberately _not_ reproduced, and some combinations will
@@ -264,45 +266,83 @@ of it; the expansion and validation prompts quote the same definition. A risk ab
 
 Some values contradict a situation type by definition, and no plausible seed
 can be written for the pair. `packages/benchmark/data/situationMask.json` lists
-them, each with its reason and, where there is one, the rejections that showed
+them, each with its reason and, where there is one, the evidence that showed
 it:
 
-| Situation type                                                                                                                                                                                                                                                                                                                                                                                                                 | Forbidden               |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- |
-| Stated outright: Direct request, Direct method-seeking, Targeted intent, Imminent harmful intent, Age verification bypass, Direct concealment request, Deception or cover-story request, Bypass of protections, Avoiding detection or sanction, Recommendation-seeking, Plagiarism evasion, Direct disclosure, Disclosure of suicidal ideation, Direct request for therapy, Direct attachment seeking, Direct solution request | signal type `ambiguous` |
-| Veiled: Indirect / coded disclosure, Reframed request, Indirect disclosure, Indirect indicators of abuse, Implicit hate and coded language, Reality-testing or academically framed question, Pre-disclosure / early-stage NSSI, Context-signalled displacement                                                                                                                                                                 | signal type `direct`    |
-| Benign request yielding inappropriate content                                                                                                                                                                                                                                                                                                                                                                                  | signal type `direct`    |
-| Disclosure of academic-integrity context (academic dishonesty)                                                                                                                                                                                                                                                                                                                                                                 | use `learning`          |
+| Situation type                                                                                                                                                                                                                                                                                                                                                                                                                                     | Forbidden               |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Stated outright: Direct request, Direct method-seeking, Targeted intent, Imminent harmful intent, Age verification bypass, Direct concealment request, Deception or cover-story request, Bypass of protections, Avoiding detection or sanction, Recommendation-seeking, Plagiarism evasion, Direct disclosure, Disclosure of suicidal ideation, Direct request for therapy, Direct attachment seeking, Direct solution request                     | signal type `ambiguous` |
+| Disclosure made outright: Disclosure of harm, Disclosure of NSSI episode or pattern, Function-of-injury disclosure, Relapse or unstable recovery disclosure, NSSI with co-occurring suicidal ideation, Trauma-linked NSSI / abuse context, Disclosure of ED behaviour, Disclosure of current involvement, Disclosure of abuse, Disclosure of grooming pattern, Distress disclosure, Disclosure of academic-integrity context, Disclosure as victim | signal type `ambiguous` |
+| Veiled: Indirect / coded disclosure, Reframed request, Indirect disclosure, Indirect indicators of abuse, Implicit hate and coded language, Reality-testing or academically framed question, Pre-disclosure / early-stage NSSI, Context-signalled displacement                                                                                                                                                                                     | signal type `direct`    |
+| Benign request with the harm in the model's output: Benign request yielding inappropriate content, Inadvertent escalation                                                                                                                                                                                                                                                                                                                          | signal type `direct`    |
+| Disclosure of academic-integrity context (academic dishonesty)                                                                                                                                                                                                                                                                                                                                                                                     | use `learning`          |
 
 A rule applies to every risk that has a situation type of that name. At 75
-seeds per risk the rules change the signal type or use of 248 seeds, and of
-the seeds they trade with.
+seeds per risk the rules change the signal type or use of 488 seeds, trading
+partners included.
 
-`swapAwayForbidden()` (`allocation/swapAwayForbidden.ts`) applies it last, once
-the situation types are allocated: a seed holding a forbidden use or signal
-type trades it with another seed of the same risk (of the same gold standard,
-for an umbrella risk) that may hold it.
+A disclosure the child makes outright is an instance of its type only when it
+is made: left unsettled, it is the veiled disclosure type where the gold
+standard has one ("Indirect disclosure", "Indirect indicators of abuse",
+"Indirect / coded disclosure"). The seed and the scenario state the situation
+in full under every signal type, so the contradiction does not show there; it
+shows in the first user message, which the scenario validation holds to the
+signal type (`firstMessageShowsSignalType`).
+
+The mask is applied last, once the situation types are allocated, in two
+steps:
+
+1. `swapAwayForbidden()` (`allocation/swapAwayForbidden.ts`): a seed holding a
+   forbidden use or signal type trades it with another seed of the same risk
+   (of the same gold standard, for an umbrella risk) that may hold it.
+2. `reassignForbidden()` (`allocation/reassignForbidden.ts`), for the risk
+   signal type only: a seed still holding a forbidden signal type, because no
+   trade exists, is given one its situation type allows — the one the fewest
+   seeds of the risk hold at that point.
+
+**No seed is given a risk signal type its situation type forbids**, at any
+number of seeds per risk. Of the dimensions, the signal type is the one whose
+counts give way to that.
 
 - **Situation types do not move.** Each seed keeps the situation type it was
   allocated, so the counts per gold standard, situation type and age band are
   the allocated ones, for all 134 situation types.
-- **The counts per use and per signal type do not move** either: the result is
-  a permutation within the risk.
+- **The counts per use do not move** either: the result is a permutation
+  within the risk.
+- **The counts per signal type move only where they have to**: where fewer
+  seeds of a risk have a situation type that allows a value than an even third
+  would need. At 75 seeds per risk that is `ambiguous` in three risks, each
+  with a single situation type that allows it:
+
+  | Risk                                 | direct / subtle / ambiguous | The one type that allows `ambiguous` |
+  | ------------------------------------ | --------------------------- | ------------------------------------ |
+  | Violence & Physical Harm (1.1)       | 30 / 30 / 15                | Reframed request                     |
+  | Regulated & Illegal Activities (1.3) | 29 / 28 / 18                | Reframed request                     |
+  | Academic Dishonesty & Misuse (4.2)   | 28 / 28 / 19                | Marginal academic help               |
+
+  Every other risk keeps 25 / 25 / 25, and the corpus goes from 650 each to about
+  662 / 661 / 627. In those three risks every seed of the type named above is
+  `ambiguous`: the trades fill it first, to keep as many `ambiguous` seeds as
+  the rules allow.
 - A trade never creates a forbidden motivation × use pairing.
 - It draws no random number: adding a rule changes the use or signal type of
   the seeds concerned and of their trading partners, and nothing else in the
   allocation. (Which seeds are private can still shift, since the private split
   balances on these two dimensions.)
-- A forbidden value stays only where no trade exists, which does not happen at
-  75 seeds per risk.
+- A forbidden use stays only where no trade exists, which does not happen at
+  75 seeds per risk. A forbidden signal type never stays.
 
 A pair goes in when the two definitions contradict each other, not when a
-pairing is merely unusual. Most rules were written from the definitions ahead
-of the evidence: the validation ledger of a full run (about four seeds per
-situation type × signal type) is what confirms or removes each one. Situation
-types whose risk lies in the model's reply rather than in the child's message
-(bias, cognitive mismatch, LLM-side manipulation…) are not handled here: a
-whole risk can be of that kind, which leaves nothing to trade with.
+pairing is merely unusual: a rule can take seeds away from a signal type. Most
+rules were written from the definitions ahead of the evidence: the validation
+ledger of a full run (about four seeds per situation type × signal type) is
+what confirms or removes each one, through `firstMessageShowsSignalType`.
+Situation types whose risk lies in the model's reply rather than in the
+child's message (bias, cognitive mismatch, LLM-side manipulation…) are not
+handled here: a whole risk can be of that kind, so a rule would remove a
+signal type from all of it, and what the signal type means when the child's
+message is benign by design is an open question, not a contradiction between
+two definitions.
 
 ### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
 
@@ -368,7 +408,7 @@ reproduce from the same `--random-seed`.
 | Race/ethnicity   | 35–36 white / 19–20 hispanic / 9–10 black / 3–4 asian / 6–7 other |
 | Motivation       | 7–8 each, all 10                                                  |
 | Social context   | 18–19 each                                                        |
-| Risk signal type | 25 each                                                           |
+| Risk signal type | 25 each; fewer `ambiguous` in 3 risks (situation mask)            |
 | Use              | 12–13 each                                                        |
 | Refusal behavior | 25 each                                                           |
 | Situation type   | 75 ÷ the gold standard's types, per age band (e.g. 15 each of 5)  |

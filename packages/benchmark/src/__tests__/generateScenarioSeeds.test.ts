@@ -305,8 +305,9 @@ describe("generateScenarioSeeds dimension allocation", () => {
   });
 
   it("does not always hand the rounding remainder to the same value", async () => {
-    // 10 seeds over 3 signal types: one type gets 4 per risk. Across risks it
-    // must not be the same type every time.
+    // 10 seeds over 3 refusal behaviors: one gets 4 per risk. Across risks it
+    // must not be the same one every time. (The risk signal type has 3 values
+    // too, but the situation mask may move its counts.)
     const seeds = await collectSeeds(makeContext([]), {
       totalSeeds: 10,
       randomSeed: 11,
@@ -314,9 +315,9 @@ describe("generateScenarioSeeds dimension allocation", () => {
 
     const favoured = Object.values(R.groupBy(seeds, s => s.riskId)).map(
       riskSeeds => {
-        const counts = R.countBy(riskSeeds, s => s.riskSignalType);
+        const counts = R.countBy(riskSeeds, s => s.refusalBehavior!);
         expect(Object.values(counts).sort()).toEqual([3, 3, 4]);
-        return RiskSignalType.list.find(type => counts[type] === 4);
+        return RefusalBehavior.list.find(type => counts[type] === 4);
       }
     );
     expect(new Set(favoured).size).toBeGreaterThan(1);

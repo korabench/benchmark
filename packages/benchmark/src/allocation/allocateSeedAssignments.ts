@@ -28,6 +28,7 @@ import {
 } from "./allocateSituations.js";
 import {allocateUniform} from "./allocateUniform.js";
 import {pairUsesWithMotivations} from "./pairUsesWithMotivations.js";
+import {reassignForbidden} from "./reassignForbidden.js";
 import {shuffleWith} from "./rng.js";
 import {swapAwayForbidden} from "./swapAwayForbidden.js";
 
@@ -77,7 +78,9 @@ interface Args {
    * Situation type × use and × risk signal type mask. When given, the uses and
    * the signal types are reordered among the seeds so that no seed gets a
    * value forbidden for its situation type; situation types stay where they
-   * are, and the counts per use and per signal type are the same either way.
+   * are, and the counts per use are the same either way. No seed ever keeps a
+   * forbidden signal type: where reordering cannot place one, the seed is
+   * given an allowed signal type and the counts per signal type give way.
    */
   situationMask?: SituationMask;
 }
@@ -93,13 +96,17 @@ interface Args {
  * stays independent of every dimension other than motivation. The situation
  * type is the other: its counts are fixed per age band, so it depends on the
  * age band and on nothing else. Last, `situationMask` trades uses and risk
- * signal types between seeds to avoid the few values it forbids for a
- * situation type: the situation types do not move, and neither marginal
- * changes.
+ * signal types between seeds to avoid the values it forbids for a situation
+ * type: the situation types do not move, and the use marginal does not change.
+ * The risk signal type marginal is the one that gives way: a signal type no
+ * trade can place (too few seeds of the share have a situation type that
+ * allows it) is replaced by one the seed's situation type allows, so the
+ * share ends with fewer seeds of that signal type than an even third.
  *
  *  - age band, gender, SES, race/ethnicity: the population distribution
  *  - exact age: even within the assigned band
- *  - motivation, social context, risk signal type, use, refusal behavior: even
+ *  - motivation, social context, use, refusal behavior: even
+ *  - risk signal type: even, less what the situation mask leaves no room for
  *  - flavor: the risk's own flavor proportions, when it defines flavors
  *  - memory: the risk's `provideUserContext`, identical for every seed of the
  *    risk for now
@@ -180,16 +187,25 @@ function allocateShare(
             )
         )
       : uses;
+  // Trades first, so that the counts move as little as possible; then every
+  // signal type still forbidden is replaced. A seed never keeps a signal type
+  // its situation type contradicts.
   const maskedRiskSignalTypes =
     situations && situationMask
-      ? swapAwayForbidden(riskSignalTypes, (i, riskSignalType) =>
-          SituationMask.allowsRiskSignalType(
-            situationMask,
-            risk.id,
-            situations[i]!.situationType,
-            riskSignalType
-          )
-        )
+      ? (() => {
+          const allowsSignal = (i: number, riskSignalType: RiskSignalType) =>
+            SituationMask.allowsRiskSignalType(
+              situationMask,
+              risk.id,
+              situations[i]!.situationType,
+              riskSignalType
+            );
+          return reassignForbidden(
+            swapAwayForbidden(riskSignalTypes, allowsSignal),
+            RiskSignalType.list,
+            allowsSignal
+          );
+        })()
       : riskSignalTypes;
 
   return personas.map((persona, i) => {
