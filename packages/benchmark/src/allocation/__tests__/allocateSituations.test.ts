@@ -253,6 +253,18 @@ describe("situation type descriptions", () => {
     );
   });
 
+  it("gives every gold standard its risk boundaries", () => {
+    const goldStandards = situationTypes.flatMap(entry => entry.goldStandards);
+    expect(goldStandards).toHaveLength(28);
+    expect(
+      goldStandards.every(
+        gs =>
+          (gs.boundaries?.borderlineCases.length ?? 0) >= 3 &&
+          (gs.boundaries?.examples.length ?? 0) >= 9
+      )
+    ).toBe(true);
+  });
+
   it("gives each seed the definition of its own gold standard", () => {
     const definitions = (riskId: string) =>
       R.unique(

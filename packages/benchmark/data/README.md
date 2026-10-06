@@ -72,6 +72,16 @@ concern" and the five types after it, 7.3 "Child volunteers data" and 8.4
 "Context-signalled displacement". Editing a description changes what the prompts
 say, so bump the prompts fingerprint version with it.
 
+Each gold standard's `boundaries` is Section 4 ("Risk Boundaries") of the same
+document, in its own wording: `borderlineCases` are the named cases listed
+before the table, `examples` the table's rows (activates the risk, does not,
+boundary principle). No prompt quotes it; it is what a person reviewing a
+scenario is shown next to the situation type. Left out: the notes on how to read
+the table, the "Expected response" column of 6.3, the scenarios a reviewer
+suggested after the table of 1.2b, and the "Disclosed ongoing use" case of 1.3,
+which has a name but no text. The "Frontier 3.3 vs 3.4" paragraph that follows
+the tables of 3.3 and 3.4 is kept as a borderline case.
+
 ## behaviors.json
 
 Data source: `Kora_Taxonomy_V2.xlsx`, "Mechanisms" tab (M1–M7). Each behavior is

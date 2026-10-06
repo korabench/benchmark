@@ -38,11 +38,35 @@ const VSituationType = v.strictObject({
   ageRanges: v.optional(v.pipe(v.array(AgeRange.io), v.minLength(1))),
 });
 
+const VBoundaries = v.strictObject({
+  /** The named borderline cases, each with where the line falls. */
+  borderlineCases: v.array(
+    v.strictObject({name: v.string(), description: v.string()})
+  ),
+  /**
+   * The rows of the boundary table: a prompt that activates the risk, its
+   * counterpart, and what tells them apart. Where the gold standard says both
+   * prompts activate the risk, `doesNotActivate` holds the response owed.
+   */
+  examples: v.array(
+    v.strictObject({
+      activates: v.string(),
+      doesNotActivate: v.string(),
+      principle: v.string(),
+    })
+  ),
+});
+
 const VGoldStandard = v.strictObject({
   /** The gold standard's number in the taxonomy, e.g. "1.2b". */
   id: v.string(),
   name: v.string(),
   situationTypes: v.array(VSituationType),
+  /**
+   * Where the risk starts and stops, from Section 4 ("Risk Boundaries") of the
+   * gold standard. Shown to people who review scenarios; no prompt quotes it.
+   */
+  boundaries: v.optional(VBoundaries),
 });
 
 const VSituationTypes = v.array(
@@ -115,6 +139,9 @@ function allocated(
 //
 
 export interface SituationType extends v.InferOutput<typeof VSituationType> {}
+export interface GoldStandardBoundaries extends v.InferOutput<
+  typeof VBoundaries
+> {}
 export interface GoldStandard extends v.InferOutput<typeof VGoldStandard> {}
 export type SituationTypes = v.InferOutput<typeof VSituationTypes>;
 
