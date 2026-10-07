@@ -3,6 +3,7 @@ import {
   kora,
   Packs,
   relabelSignalType,
+  relabelUse,
   RiskTaxonomy,
   Scenario,
   ScenarioSeed,
@@ -193,11 +194,19 @@ export async function expandScenariosCommand(
     priorRows.filter(row => row.verdict === "fail"),
     row => row.key
   );
-  // Seeds an earlier run relabeled: the relabel is applied again, the same
+  // Seeds an earlier run relabeled: each relabel is applied again, the same
   // way, before their chain starts.
-  const priorRelabels = new Set(
-    priorRows.filter(row => row.relabeledFrom).map(row => row.key)
-  );
+  const priorRelabels = new Map<string, {signal: boolean; use: boolean}>();
+  for (const row of priorRows) {
+    const prior = priorRelabels.get(row.key) ?? {signal: false, use: false};
+    priorRelabels.set(row.key, {
+      signal:
+        prior.signal ||
+        row.relabeledFrom !== undefined ||
+        row.relabeled?.riskSignalType !== undefined,
+      use: prior.use || row.relabeled?.use !== undefined,
+    });
+  }
   const reportValidation = async () => {
     const report = buildPassRateReport({
       stage: "expansion",
@@ -230,12 +239,14 @@ export async function expandScenariosCommand(
           // Not yet processed.
         }
 
-        // A seed that stays stuck on the first-message signal type is
-        // relabeled once (`relabelSignalType`); a resumed run reads the
-        // relabel back from the ledger and goes on with the same seed.
-        let current: ScenarioSeed = priorRelabels.has(seed.id)
-          ? (relabelSignalType(seed) ?? seed)
-          : seed;
+        // A seed that stays stuck on the first-message signal type, or on a
+        // use the mask forbids, is relabeled once per dimension
+        // (`relabelSeed.ts`); a resumed run reads the relabels back from the
+        // ledger and goes on with the same seed.
+        const prior = priorRelabels.get(seed.id);
+        let current: ScenarioSeed = seed;
+        if (prior?.signal) current = relabelSignalType(current) ?? current;
+        if (prior?.use) current = relabelUse(current) ?? current;
         let rejections = priorRejections[seed.id] ?? 0;
 
         // The chain of expansion models, each tried until it exhausts its
@@ -243,9 +254,15 @@ export async function expandScenariosCommand(
         // error with whether every model was stuck on the signal type.
         const expandWithChain = async (): Promise<
           | {scenarios: readonly Scenario[]}
-          | {error: ScenarioValidationError; stuckOnSignalType: boolean}
+          | {
+              error: ScenarioValidationError;
+              stuckOnSignalType: boolean;
+              stuckOnUse: boolean;
+            }
+          | {thrown: unknown}
         > => {
           let stuckOnSignalType = true;
+          let stuckOnUse = true;
           for (let i = 0; i < expansionModels.length; i++) {
             const {label, model} = expansionModels[i]!;
             const context: ExpandScenarioContext = {
@@ -271,9 +288,7 @@ export async function expandScenariosCommand(
                   ...(event.firstMessageRewrite
                     ? {firstMessageRewrite: true}
                     : {}),
-                  ...(current.relabeled
-                    ? {relabeledFrom: current.relabeled.riskSignalType.from}
-                    : {}),
+                  ...(current.relabeled ? {relabeled: current.relabeled} : {}),
                   // The expansion model validates its own output.
                   generatorModel: label,
                   validatorModel: label,
@@ -305,11 +320,9 @@ export async function expandScenariosCommand(
                 error instanceof ScenarioValidationError
                   ? `validation failed (${error.lastReasons.slice(0, 200)})`
                   : `error (${error instanceof Error ? error.message.slice(0, 200) : String(error)})`;
-              if (
-                error instanceof ScenarioValidationError &&
-                !error.stuckOnSignalType
-              ) {
-                stuckOnSignalType = false;
+              if (error instanceof ScenarioValidationError) {
+                stuckOnSignalType &&= error.stuckOnSignalType;
+                stuckOnUse &&= error.stuckOnUse;
               }
 
               if (next) {
@@ -321,9 +334,12 @@ export async function expandScenariosCommand(
 
               // Last model exhausted.
               if (error instanceof ScenarioValidationError) {
-                return {error, stuckOnSignalType};
+                return {error, stuckOnSignalType, stuckOnUse};
               }
-              throw error;
+              // A thrown error (a model call that failed for good, a first
+              // message that kept its placeholders) fails this seed for the
+              // run, not the run: the next pass retries it.
+              return {thrown: error};
             }
           }
           throw new Error("No expansion model configured.");
@@ -340,6 +356,16 @@ export async function expandScenariosCommand(
             outcome = await expandWithChain();
           }
         }
+        if ("error" in outcome && outcome.stuckOnUse) {
+          const relabeled = relabelUse(current);
+          if (relabeled) {
+            console.error(
+              `\n[relabel] seed ${seed.id}: every attempt rejected the scenario on a use its situation type forbids; ${current.use} → ${relabeled.use}, trying again`
+            );
+            current = relabeled;
+            outcome = await expandWithChain();
+          }
+        }
 
         if ("scenarios" in outcome) {
           await fs.writeFile(
@@ -349,9 +375,19 @@ export async function expandScenariosCommand(
           progress.increment(true);
           return [];
         }
-        console.error(
-          `\nValidation failed for seed ${seed.id} (all models exhausted): ${outcome.error.lastReasons}`
-        );
+        if ("thrown" in outcome) {
+          const message =
+            outcome.thrown instanceof Error
+              ? outcome.thrown.message
+              : String(outcome.thrown);
+          console.error(
+            `\nExpansion failed for seed ${seed.id} (all models exhausted): ${message.slice(0, 300)}`
+          );
+        } else {
+          console.error(
+            `\nValidation failed for seed ${seed.id} (all models exhausted): ${outcome.error.lastReasons}`
+          );
+        }
         failureCount++;
         progress.increment(false);
         return [];

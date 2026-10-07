@@ -107,6 +107,15 @@ describe("ScenarioSeed (what is stored)", () => {
     expect(
       v.safeParse(ScenarioSeed.io, {
         ...seed,
+        relabeled: {
+          riskSignalType: {from: "ambiguous"},
+          use: {from: "learning"},
+        },
+      }).success
+    ).toBe(true);
+    expect(
+      v.safeParse(ScenarioSeed.io, {
+        ...seed,
         relabeled: {riskSignalType: {from: "loud"}},
       }).success
     ).toBe(false);

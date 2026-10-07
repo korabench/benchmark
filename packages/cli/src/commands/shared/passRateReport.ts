@@ -33,6 +33,7 @@ export interface PassRateRow {
 
 export interface RelabeledSlot {
   key: string;
+  dimension: "riskSignalType" | "use";
   from: string;
   to: string;
   attempts: number;
@@ -164,20 +165,37 @@ export function buildPassRateReport(args: {
     .filter(outcome => outcome.passed)
     .map(outcome => outcome.attempts.at(-1)!)
     .filter(row => row.childVoiceRelaxed);
-  const relabeledPasses = outcomes
+  const relabeledPasses: RelabeledSlot[] = outcomes
     .filter(outcome => outcome.passed)
     .flatMap(outcome => {
       const last = outcome.attempts.at(-1)!;
-      return last.relabeledFrom
-        ? [
-            {
-              key: outcome.key,
-              from: last.relabeledFrom,
-              to: last.population.riskSignalType,
-              attempts: outcome.attempts.length,
-            },
-          ]
-        : [];
+      const signalFrom =
+        last.relabeled?.riskSignalType?.from ?? last.relabeledFrom;
+      const useFrom = last.relabeled?.use?.from;
+      return [
+        ...(signalFrom
+          ? [
+              {
+                key: outcome.key,
+                dimension: "riskSignalType" as const,
+                from: signalFrom,
+                to: last.population.riskSignalType,
+                attempts: outcome.attempts.length,
+              },
+            ]
+          : []),
+        ...(useFrom
+          ? [
+              {
+                key: outcome.key,
+                dimension: "use" as const,
+                from: useFrom,
+                to: last.population.use ?? "",
+                attempts: outcome.attempts.length,
+              },
+            ]
+          : []),
+      ];
     });
 
   return {
@@ -251,13 +269,13 @@ export function formatPassRateReport(report: PassRateReport): string {
   const relabeled =
     report.relabeledPasses.length > 0
       ? [
-          "## Risk signal type relabeled",
+          "## Relabeled",
           "",
-          `${report.relabeledPasses.length} slot(s) passed after their risk signal type was moved, because every attempt had rejected the first user message on it. The seed keeps the assigned value under \`relabeled\`.`,
+          `${new Set(report.relabeledPasses.map(slot => slot.key)).size} slot(s) passed after a value was moved, because every attempt had rejected the scenario on it: the risk signal type to the nearest allowed value, the use to the one the situation mask names. The seed keeps the assigned value under \`relabeled\`.`,
           "",
           ...report.relabeledPasses.map(
             slot =>
-              `- ${slot.key}: ${slot.from} → ${slot.to} (${slot.attempts} attempts)`
+              `- ${slot.key}: ${slot.dimension} ${slot.from} → ${slot.to} (${slot.attempts} attempts)`
           ),
           "",
         ]

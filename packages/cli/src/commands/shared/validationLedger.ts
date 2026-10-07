@@ -1,6 +1,7 @@
 import {
   RiskSignalType,
   ScenarioSeed,
+  SeedUse,
   ValidationAnswer,
 } from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
@@ -63,9 +64,14 @@ export interface ValidationAttempt {
   /** Expansion stage: the scenario of the previous attempt was kept and only
    * its first user message was written again. Absent when not. */
   firstMessageRewrite?: true;
-  /** Expansion stage: the seed's risk signal type was relabeled before this
-   * attempt, from this assigned value (`relabelSignalType`). Absent when the
-   * seed carries its assigned value. */
+  /** Expansion stage: the values of the seed that were relabeled before this
+   * attempt, with the assigned value of each (`relabelSeed.ts`). Absent when
+   * the seed carries its assigned values. */
+  relabeled?: {
+    riskSignalType?: {from: RiskSignalType};
+    use?: {from: SeedUse};
+  };
+  /** Older ledgers: `relabeled.riskSignalType.from`. */
   relabeledFrom?: RiskSignalType;
   generatorModel: string;
   validatorModel: string;

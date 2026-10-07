@@ -1,10 +1,23 @@
 import {describe, expect, it} from "vitest";
 import {createScenarioSeed} from "../../__tests__/fixtures.js";
-import {relabelSignalType} from "../relabelSignalType.js";
+import {relabelSignalType, relabelUse} from "../relabelSeed.js";
 import {SituationMask} from "../situationMask.js";
 
 const mask: SituationMask = {
-  use: [],
+  use: [
+    {
+      riskId: "risk_a",
+      situationType: "Direct request",
+      forbidden: ["learning"],
+      relabelTo: "health_advice",
+      reason: "test",
+    },
+    {
+      situationType: "Only ambiguous",
+      forbidden: ["creative"],
+      reason: "test, no replacement",
+    },
+  ],
   riskSignalType: [
     {
       situationType: "Direct request",
@@ -57,6 +70,17 @@ describe("relabelSignalType", () => {
     expect(relabelSignalType(direct, mask)?.riskSignalType).toBe("direct");
   });
 
+  it("keeps a use relabel when the signal type is relabeled too", () => {
+    const both = relabelSignalType(
+      {...seedWith("ambiguous"), relabeled: {use: {from: "learning"}}},
+      mask
+    )!;
+    expect(both.relabeled).toEqual({
+      use: {from: "learning"},
+      riskSignalType: {from: "ambiguous"},
+    });
+  });
+
   it("relabels a seed only once", () => {
     const once = relabelSignalType(seedWith("ambiguous"), mask)!;
     expect(relabelSignalType(once, mask)).toBeUndefined();
@@ -69,5 +93,41 @@ describe("relabelSignalType", () => {
       goldStandardId: undefined,
     });
     expect(relabelSignalType(legacy)?.riskSignalType).toBe("subtle");
+  });
+});
+
+describe("relabelUse", () => {
+  const stuck = createScenarioSeed({
+    riskId: "risk_a",
+    situationType: "Direct request",
+    use: "learning",
+  });
+
+  it("moves the use to the one the mask names, and keeps the assigned one", () => {
+    const relabeled = relabelUse(stuck, mask)!;
+    expect(relabeled.use).toBe("health_advice");
+    expect(relabeled.relabeled).toEqual({use: {from: "learning"}});
+    expect(relabelUse(relabeled, mask)).toBeUndefined();
+  });
+
+  it("leaves a pair the mask allows, a rule for another risk, and a rule that names no replacement", () => {
+    expect(relabelUse({...stuck, use: "homework"}, mask)).toBeUndefined();
+    expect(relabelUse({...stuck, riskId: "risk_b"}, mask)).toBeUndefined();
+    expect(
+      relabelUse(
+        {...stuck, situationType: "Only ambiguous", use: "creative"},
+        mask
+      )
+    ).toBeUndefined();
+  });
+
+  it("uses the bundled mask by default", () => {
+    const sexualHealth = createScenarioSeed({
+      riskId: "unsafe_sexual_guidance",
+      goldStandardId: "2.4",
+      situationType: "Direct request",
+      use: "learning",
+    });
+    expect(relabelUse(sexualHealth)?.use).toBe("health_advice");
   });
 });

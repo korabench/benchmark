@@ -296,7 +296,9 @@ it:
 | Request that is the risky act, made outright: Decision delegation, Hands-on substitution, Credential sharing                                                                                                                                                                                                                                                                                                                                      | signal type `ambiguous` |
 | Veiled: Indirect / coded disclosure, Reframed request, Indirect disclosure, Indirect indicators of abuse, Implicit hate and coded language, Reality-testing or academically framed question, Pre-disclosure / early-stage NSSI, Context-signalled displacement                                                                                                                                                                                     | signal type `direct`    |
 | Benign request with the harm in the model's output: Benign request yielding inappropriate content, Inadvertent escalation                                                                                                                                                                                                                                                                                                                          | signal type `direct`    |
-| Disclosure of academic-integrity context (academic dishonesty)                                                                                                                                                                                                                                                                                                                                                                                     | use `learning`          |
+| Disclosure of academic-integrity context (academic dishonesty)                                                                                                                                                                                                                                                                                                                                                                                     | use `learning`, `creative` (relabel to `homework`) |
+| Sexual-health and mental-health seeking (2.4 Direct request, Unsafe-practice request, Distress disclosure; 3.2 Help-seeking blocked by stigma, Direct request for therapy; 6.1 Healthcare avoidance)                                                                                                                                                                                                                                                 | use `learning` (relabel to `health_advice`) |
+| Asks for a made thing or the answer (8.4 Hands-on substitution; 4.2 Direct request; 8.2 Direct solution request)                                                                                                                                                                                                                                                                                                                                   | use `learning` / `creative` / `companionship` (relabel to `creative` / `homework`) |
 
 A rule applies to every risk that has a situation type of that name. At 75
 seeds per risk the rules change the signal type or use of 488 seeds, trading
@@ -323,11 +325,14 @@ steps:
 
 **No seed is given a risk signal type its situation type forbids**, at any
 number of seeds per risk. Of the dimensions, the signal type is the one whose
-counts give way to that. It also gives way after allocation, in one case: a
-seed whose first user message every expansion attempt rejected on the signal
-type is relabeled once by `expand-scenarios`, to the nearest value its
-situation type allows, so that the corpus holds one scenario per seed (see
-README, "One scenario per seed"). The seed keeps the assigned value under
+counts give way to that. Values also give way after allocation, for a seed
+every expansion attempt rejects: `expand-scenarios` relabels its signal type
+to the nearest value its situation type allows, or its use to the one the
+rule names (`relabelTo`) when the mask forbids the pair, once per dimension,
+so that the corpus holds one scenario per seed (see README, "One scenario per
+seed"). A corpus allocated before a use rule still holds the pair, and that is
+where the use relabel applies; a use rule is written with the value the
+session is, from the use's scope. The seed keeps the assigned values under
 `relabeled`; the seeds file and its counts are untouched.
 
 - **Situation types do not move.** Each seed keeps the situation type it was

@@ -424,13 +424,16 @@ const VScenarioSeed = v.strictObject({
       })
     )
   ),
-  // Set by `expand-scenarios` when the seed's risk signal type was moved
-  // after every attempt rejected the first user message on it: the value the
-  // allocator assigned, so the corpus can be read against its plan. See
-  // `relabelSignalType.ts`. Absent when the seed carries its assigned value.
+  // Set by `expand-scenarios` when a value of the seed was moved after every
+  // attempt rejected the scenario on it: the value the allocator assigned,
+  // so the corpus can be read against its plan. The risk signal type moves
+  // to the nearest value the situation type allows, the use to the one the
+  // situation mask names. See `relabelSeed.ts`. Absent when the seed carries
+  // its assigned values.
   relabeled: v.optional(
     v.strictObject({
-      riskSignalType: v.strictObject({from: VRiskSignalType}),
+      riskSignalType: v.optional(v.strictObject({from: VRiskSignalType})),
+      use: v.optional(v.strictObject({from: VSeedUse})),
     })
   ),
   scenarioFlavorId: v.optional(

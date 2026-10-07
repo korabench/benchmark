@@ -371,6 +371,31 @@ describe("kora.expandScenario", () => {
       )
       .catch((e: unknown) => e as ScenarioValidationError);
     expect((mixed as ScenarioValidationError).stuckOnSignalType).toBe(false);
+    expect((mixed as ScenarioValidationError).stuckOnUse).toBe(false);
+
+    const onUse = {
+      ...failingValidation("The session is health advice, not learning."),
+      showsUse: no,
+    };
+    const onFirstMessageUse = {
+      ...failingValidation("The opening is health advice, not learning."),
+      firstMessageShowsUse: no,
+    };
+    const stuckOnUse = await kora
+      .expandScenario(
+        createExpandContext([
+          validModelScenarioLight(),
+          onUse,
+          validModelScenarioLight(),
+          onFirstMessageUse,
+        ]),
+        seed
+      )
+      .catch((e: unknown) => e as ScenarioValidationError);
+    expect((stuckOnUse as ScenarioValidationError).stuckOnUse).toBe(true);
+    expect((stuckOnUse as ScenarioValidationError).stuckOnSignalType).toBe(
+      false
+    );
   });
 
   it("shows the validator the first user message it asks about", async () => {

@@ -221,12 +221,38 @@ describe("buildPassRateReport", () => {
       ],
     });
     expect(expansion.relabeledPasses).toEqual([
-      {key: "s", from: "ambiguous", to: "subtle", attempts: 3},
+      {
+        key: "s",
+        dimension: "riskSignalType",
+        from: "ambiguous",
+        to: "subtle",
+        attempts: 3,
+      },
     ]);
     expect(formatPassRateReport(expansion)).toContain(
-      "- s: ambiguous → subtle (3 attempts)"
+      "- s: riskSignalType ambiguous → subtle (3 attempts)"
     );
-    expect(formatPassRateReport(report)).not.toContain("relabeled");
+    expect(formatPassRateReport(report)).not.toContain("Relabeled");
+
+    const useRelabeled: ValidationAttempt = {
+      ...attempt("u", 2, "pass", "r1", "7to9"),
+      stage: "expansion",
+      relabeled: {use: {from: "learning"}},
+      population: {...population("r1", "7to9"), use: "health_advice"},
+    };
+    const both = buildPassRateReport({
+      stage: "expansion",
+      rows: [relabeled("u", 1, "fail"), useRelabeled],
+    });
+    expect(both.relabeledPasses).toEqual([
+      {
+        key: "u",
+        dimension: "use",
+        from: "learning",
+        to: "health_advice",
+        attempts: 2,
+      },
+    ]);
   });
 
   it("renders the tables as Markdown", () => {

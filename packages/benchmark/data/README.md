@@ -47,7 +47,10 @@ situation type of that name. It trades uses and signal types between seeds of
 a risk: it never moves a situation type, and never changes how many seeds
 receive each use. A forbidden signal type is never kept: where no trade can
 place it, the seed gets an allowed one, and the risk ends with fewer seeds of
-that signal type than an even third. A pair belongs there
+that signal type than an even third. A use rule may name the use the
+session is (`relabelTo`): `expand-scenarios` moves a seed to it when the
+seed holds the forbidden use and every attempt rejected it on the use, which
+a corpus allocated before the rule does. A pair belongs there
 when the two definitions contradict each other; rules written from the
 definitions alone say so in their reason, until a validation ledger confirms
 them.

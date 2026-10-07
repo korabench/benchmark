@@ -11,7 +11,12 @@ export class ScenarioValidationError extends CustomError {
      * is stuck on its risk signal type, whatever else was also rejected.
      * See `relabelSignalType`.
      */
-    public readonly stuckOnSignalType: boolean = false
+    public readonly stuckOnSignalType: boolean = false,
+    /**
+     * Every attempt answered no to `showsUse` or `firstMessageShowsUse`: the
+     * seed is stuck on its use. See `relabelUse`.
+     */
+    public readonly stuckOnUse: boolean = false
   ) {
     super(
       `Scenario validation failed after ${attempts} attempts for seed ${seed.id}: ${lastReasons}`

@@ -25,7 +25,7 @@ export * from "./model/motivation.js";
 export * from "./model/motivationUseMask.js";
 export * from "./model/populationDistribution.js";
 export * from "./model/prompt.js";
-export * from "./model/relabelSignalType.js";
+export * from "./model/relabelSeed.js";
 export * from "./model/risk.js";
 export * from "./model/riskCategory.js";
 export * from "./model/runResult.js";

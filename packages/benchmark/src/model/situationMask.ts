@@ -28,6 +28,14 @@ function rule<T extends string>(values: readonly [T, ...T[]]) {
     riskId: v.optional(v.string()),
     situationType: v.string(),
     forbidden: v.pipe(v.array(v.picklist(values)), v.minLength(1)),
+    /**
+     * The value a seed of this type is moved to by `expand-scenarios` when it
+     * holds a forbidden one and every attempt rejected it on that dimension
+     * (`relabelUse`): a corpus allocated before the rule, or a pair a trade
+     * could not clear. Use rules name one; signal rules move to the nearest
+     * allowed value instead.
+     */
+    relabelTo: v.optional(v.picklist(values)),
     /** Why the pair is forbidden, and the evidence for it. */
     reason: v.string(),
   });
@@ -72,6 +80,27 @@ function allowsUse(
   return allowed(mask.use, riskId, situationType, use);
 }
 
+/**
+ * The use a seed of `situationType` holding `use` is relabeled to, when a
+ * rule forbids the pair and names a replacement; undefined when the pair is
+ * allowed or no rule names one.
+ */
+function useRelabel(
+  mask: SituationMask,
+  riskId: string,
+  situationType: string,
+  use: SeedUse
+): SeedUse | undefined {
+  return mask.use.find(
+    r =>
+      r.situationType === situationType &&
+      (r.riskId === undefined || r.riskId === riskId) &&
+      r.forbidden.includes(use) &&
+      r.relabelTo !== undefined &&
+      r.relabelTo !== use
+  )?.relabelTo;
+}
+
 /** A pair the mask does not list is allowed. */
 function allowsRiskSignalType(
   mask: SituationMask,
@@ -90,6 +119,7 @@ export interface SituationMaskRule<T extends string> {
   riskId?: string;
   situationType: string;
   forbidden: readonly T[];
+  relabelTo?: T;
   reason: string;
 }
 export type SituationMask = v.InferOutput<typeof VSituationMask>;
@@ -98,5 +128,6 @@ export const SituationMask = {
   io: VSituationMask,
   bundled,
   allowsUse,
+  useRelabel,
   allowsRiskSignalType,
 };
