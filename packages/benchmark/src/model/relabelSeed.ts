@@ -77,7 +77,7 @@ export function relabelUse(
   if (seed.relabeled?.use || seed.use === undefined || !seed.situationType) {
     return undefined;
   }
-  const to: SeedUse | undefined = SituationMask.useRelabel(
+  const to: SeedUse | undefined = SituationMask.relabeledUseFor(
     mask,
     seed.riskId,
     seed.situationType,

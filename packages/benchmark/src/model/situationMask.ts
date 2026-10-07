@@ -85,7 +85,7 @@ function allowsUse(
  * rule forbids the pair and names a replacement; undefined when the pair is
  * allowed or no rule names one.
  */
-function useRelabel(
+function relabeledUseFor(
   mask: SituationMask,
   riskId: string,
   situationType: string,
@@ -128,6 +128,6 @@ export const SituationMask = {
   io: VSituationMask,
   bundled,
   allowsUse,
-  useRelabel,
+  relabeledUseFor,
   allowsRiskSignalType,
 };
