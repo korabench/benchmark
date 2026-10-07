@@ -189,6 +189,22 @@ yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limite
 
 For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors _and_ `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
 
+### `seeds-report`
+
+Compares a seeds file with the allocation planned for the same options and random seed, and writes the comparison next to it as `<seeds>.allocation-report.md` (counts only, so it can be committed with the public seeds).
+
+```bash
+yarn kora seeds-report -i data/seeds-v7/seeds.jsonl --random-seed 42
+```
+
+| Argument / Option | Description |
+| --- | --- |
+| `-i, --input <path>` | The public seeds JSONL file (default: `data/scenarioSeeds.jsonl`); its `.private.` sibling is read with it |
+| `--random-seed <int>` | Required: the RNG seed the file was generated with, printed by `generate-seeds` |
+| `--total-seeds`, `--age-ranges`, `--risk-ids`, `--motivations`, `--distribution`, `--private-ratio` | The options the file was generated with, same defaults as `generate-seeds` |
+
+The report says whether every seed carries the values of its planned slot on the planned side of the split (per risk, as whole records), then lays out per dimension the planned and obtained counts of every value with the public/private split and the largest per-risk gap, per gold standard the situation types' planned / obtained counts in each age band, and how many seeds hold a pair a mask forbids. Run it at the commit that generated the file: the plan depends on the masks and the allocation code, and a later commit can pair the same counts differently.
+
 ### `expand-scenarios`
 
 Transforms seeds into fully fleshed-out scenarios with validation. Every verdict of the validation step is recorded in `<output>.validation.private.jsonl`, and the pass rates per risk and per age group are written to `<output>.validation-report.md` and `.json` and printed (see [Seed validation](#seed-validation) for the format).

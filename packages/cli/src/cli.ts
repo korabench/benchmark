@@ -17,6 +17,7 @@ import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {profileCommand} from "./commands/profileCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
 import {runCommand} from "./commands/runCommand.js";
+import {seedsReportCommand} from "./commands/seedsReportCommand.js";
 import {InputKind} from "./commands/shared/validateInputFile.js";
 import {statsCommand} from "./commands/statsCommand.js";
 import {validateCommand} from "./commands/validateCommand.js";
@@ -248,6 +249,72 @@ program
         privateRatio,
       }
     );
+  });
+
+program
+  .command("seeds-report")
+  .description(
+    "compare a seeds file (and its private sibling) with the allocation planned for the same options and random seed; writes <seeds>.allocation-report.md"
+  )
+  .option("-i, --input <path>", "public seeds JSONL file", defaultSeedsPath)
+  .requiredOption(
+    "--random-seed <int>",
+    "the RNG seed the file was generated with (printed by generate-seeds)"
+  )
+  .option(
+    "--total-seeds <count>",
+    `seeds per risk the file was generated with (default: ${DEFAULT_TOTAL_SEEDS})`
+  )
+  .option(
+    "--age-ranges <ranges>",
+    "comma-separated age ranges the file was generated with",
+    AgeRange.list.join(",")
+  )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs the file was generated with"
+  )
+  .option(
+    "--motivations <names>",
+    "comma-separated motivation names the file was generated with"
+  )
+  .option(
+    "--distribution <preset-or-path>",
+    "population-distribution preset or path the file was generated with",
+    PopulationDistribution.defaultPresetName
+  )
+  .option(
+    "--private-ratio <fraction>",
+    "private share the file was generated with",
+    String(DEFAULT_PRIVATE_RATIO)
+  )
+  .action(async opts => {
+    const randomSeed = parseInt(opts.randomSeed, 10);
+    if (!Number.isFinite(randomSeed)) {
+      throw new Error(
+        `--random-seed must be an integer (got: ${opts.randomSeed})`
+      );
+    }
+    return seedsReportCommand(program, opts.input, {
+      totalSeeds:
+        opts.totalSeeds !== undefined
+          ? parseInt(opts.totalSeeds, 10)
+          : undefined,
+      ageRanges: opts.ageRanges
+        .split(",")
+        .map((r: string) => v.parse(AgeRange.io, r.trim())),
+      riskIds: opts.riskIds
+        ?.split(",")
+        .map((id: string) => id.trim())
+        .filter((id: string) => id.length > 0),
+      motivations: opts.motivations
+        ?.split(",")
+        .map((name: string) => name.trim())
+        .filter((name: string) => name.length > 0),
+      distribution: await PopulationDistribution.resolve(opts.distribution),
+      randomSeed,
+      privateRatio: Number(opts.privateRatio),
+    });
   });
 
 program
