@@ -191,9 +191,6 @@ export async function generateSeeds(
     "  Risk signal type: never one the seed's situation type forbids (situation mask); a risk with too few situation types that allow a value gets fewer seeds of it."
   );
   console.log(
-    "  Risk signal type: never one the seed's situation type forbids (situation mask); a risk with too few situation types that allow a value gets fewer seeds of it."
-  );
-  console.log(
     "  Exact age: even within each band. Memory: from the risk definition."
   );
   console.log(
