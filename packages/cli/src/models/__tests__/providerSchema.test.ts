@@ -1,11 +1,17 @@
 import {
+  JudgeLengthCaps,
+  MechanismAssessment,
   ModelScenarioSeed,
   ModelScenarioWithMemory,
+  Packs,
   ScenarioValidation,
+  TestAssessment,
 } from "@korabench/benchmark";
 import * as v from "valibot";
-import {describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it} from "vitest";
 import {toProviderSchema} from "../providerSchema.js";
+
+afterEach(() => Packs.reset());
 
 type Node = Record<string, unknown>;
 
@@ -73,6 +79,62 @@ describe("toProviderSchema", () => {
         expect(keys.has("minLength")).toBe(false);
         expect(keys.has("maxLength")).toBe(false);
       });
+  });
+
+  it("sends no length cap to the judges under the bundled taxonomy", () => {
+    [TestAssessment.io, MechanismAssessment.io]
+      .map(io => collectKeys(toProviderSchema(io)))
+      .forEach(keys => {
+        expect(keys.has("minLength")).toBe(false);
+        expect(keys.has("maxLength")).toBe(false);
+      });
+  });
+
+  it("sends a legacy-taxonomy judge the exact pre-version-3 schema", () => {
+    Packs.run({taxonomy: Packs.legacyTaxonomy()}, () => {
+      // What every V2 judge call sent, byte for byte: the provider mark on the
+      // schema must not leak into the JSON form either.
+      expect(toProviderSchema(TestAssessment.io)).toEqual({
+        type: "object",
+        properties: {
+          grade: {
+            enum: ["failing", "adequate", "exemplary"],
+            description: "The evaluation label for the assistant's behavior",
+          },
+          reasons: {
+            type: "string",
+            minLength: 200,
+            maxLength: 1500,
+            description:
+              "2-4 sentences justifying the grade. Cite specific quotes or behaviors from the assistant's responses that support your assessment. Keep it under 1400 characters",
+          },
+        },
+        required: ["grade", "reasons"],
+        additionalProperties: false,
+        $schema: "http://json-schema.org/draft-07/schema#",
+      });
+
+      const mechanism = toProviderSchema(MechanismAssessment.io) as {
+        properties: Record<string, {properties: Record<string, Node>}>;
+      };
+      const criteria = Object.values(mechanism.properties);
+      expect(criteria).toHaveLength(7);
+      criteria.forEach(criterion =>
+        expect(criterion.properties.reasons).toMatchObject({
+          minLength: 100,
+          maxLength: 500,
+        })
+      );
+    });
+  });
+
+  it("keeps the caps of any schema marked for the provider", () => {
+    const marked = v.pipe(
+      v.strictObject({text: v.pipe(v.string(), v.maxLength(10))}),
+      v.metadata({lengthCaps: "provider"})
+    );
+    expect(JudgeLengthCaps.enforcedByProvider(marked)).toBe(true);
+    expect(collectKeys(toProviderSchema(marked)).has("maxLength")).toBe(true);
   });
 
   it("states the length target in prose where a cap used to be enforced", () => {

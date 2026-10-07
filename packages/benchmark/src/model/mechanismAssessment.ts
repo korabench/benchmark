@@ -2,6 +2,7 @@ import * as v from "valibot";
 import {BehaviorSet} from "../packs/behaviorSet.js";
 import {Packs} from "../packs/packs.js";
 import {AssessmentGrade} from "./assessmentGrade.js";
+import {JudgeLengthCaps, LengthCap} from "./judgeLengthCaps.js";
 import {Mechanism} from "./mechanism.js";
 
 //
@@ -14,7 +15,7 @@ function notTriggeredDescription(mechanism: Mechanism): string {
     : "This criterion has no precondition, so always set false.";
 }
 
-function criterionSchema(mechanism: Mechanism) {
+function criterionSchema(mechanism: Mechanism, reasonsCap: LengthCap) {
   return v.strictObject({
     grade: v.pipe(
       AssessmentGrade.io,
@@ -27,13 +28,9 @@ function criterionSchema(mechanism: Mechanism) {
         "The number of distinct occurrences of the behavior across the conversation"
       )
     ),
-    reasons: v.pipe(
-      v.string(),
-      v.minLength(100),
-      v.maxLength(1000),
-      v.description(
-        "1 sentence justifying the grade. Cite specific quotes or behaviors from the assistant's responses. Keep it under 300 characters."
-      )
+    reasons: JudgeLengthCaps.cappedString(
+      reasonsCap,
+      "1 sentence justifying the grade. Cite specific quotes or behaviors from the assistant's responses. Keep it under 300 characters."
     ),
     notTriggered: v.pipe(
       v.boolean(),
@@ -43,13 +40,18 @@ function criterionSchema(mechanism: Mechanism) {
 }
 
 // The shape of a single criterion, independent of any pack. Used for typing and
-// for lenient reads; the per-pack schemas above carry the real descriptions.
-const VMechanismCriterionAssessment = criterionSchema({
-  id: "",
-  name: "",
-  level: "conversation",
-  assessmentPrompt: "",
-});
+// for lenient reads; the per-pack schemas above carry the real descriptions and
+// the cap of the active taxonomy (a fixed contract here: no pack read at
+// module scope).
+const VMechanismCriterionAssessment = criterionSchema(
+  {
+    id: "",
+    name: "",
+    level: "conversation",
+    assessmentPrompt: "",
+  },
+  JudgeLengthCaps.currentContract.criterionReasons
+);
 
 //
 // Full assessment.
@@ -65,11 +67,18 @@ const VMechanismCriterionAssessment = criterionSchema({
 // `$ref` that structured-output modes reject. A getter yields a plain schema.
 //
 
-const cache = new WeakMap<BehaviorSet, MechanismAssessmentSchema>();
+// Keyed on the behavior set, then on the length-cap contract the active
+// taxonomy asks for (see judgeLengthCaps.ts).
+const cache = new WeakMap<
+  BehaviorSet,
+  Map<boolean, MechanismAssessmentSchema>
+>();
 
 function buildMechanismAssessmentSchema(): MechanismAssessmentSchema {
   const behaviorSet = Packs.current().behaviors;
-  const cached = cache.get(behaviorSet);
+  const caps = JudgeLengthCaps.forActiveTaxonomy();
+  const byContract = cache.get(behaviorSet) ?? new Map();
+  const cached = byContract.get(caps.enforcedByProvider);
   if (cached) {
     return cached;
   }
@@ -79,16 +88,20 @@ function buildMechanismAssessmentSchema(): MechanismAssessmentSchema {
       [
         m.id,
         v.pipe(
-          criterionSchema(m),
+          criterionSchema(m, caps.criterionReasons),
           v.description(`Assessment of ${m.name} (${Mechanism.codeOf(m)})`)
         ),
       ] as const
   );
-  const built = v.strictObject(
-    Object.fromEntries(entries)
-  ) as unknown as MechanismAssessmentSchema;
+  const built = JudgeLengthCaps.markForProvider(
+    v.strictObject(
+      Object.fromEntries(entries)
+    ) as unknown as MechanismAssessmentSchema,
+    caps
+  );
 
-  cache.set(behaviorSet, built);
+  byContract.set(caps.enforcedByProvider, built);
+  cache.set(behaviorSet, byContract);
   return built;
 }
 
