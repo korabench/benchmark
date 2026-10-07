@@ -31,6 +31,7 @@ export * from "./model/scenario.js";
 export * from "./model/scenarioFlavor.js";
 export * from "./model/scenarioKey.js";
 export * from "./model/scenarioPrompt.js";
+export * from "./model/relabelSignalType.js";
 export * from "./model/scenarioSeed.js";
 export * from "./model/scenarioSeedSlice.js";
 export * from "./model/scenarioValidation.js";

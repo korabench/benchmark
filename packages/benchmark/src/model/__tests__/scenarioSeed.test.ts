@@ -73,6 +73,7 @@ describe("ModelScenarioSeed (what the model writes)", () => {
     ["riskSignalType", "direct"],
     ["socialContext", "alone"],
     ["use", "homework"],
+    ["relabeled", {riskSignalType: {from: "ambiguous"}}],
     ["refusalBehavior", "insists"],
     ["childCognitiveMaturity", "medium"],
     ["childEmotionalMaturity", "medium"],
@@ -95,6 +96,20 @@ describe("ScenarioSeed (what is stored)", () => {
     const legacy = createLegacyScenarioSeed();
     expect(legacy.use).toBeUndefined();
     expect(v.safeParse(ScenarioSeed.io, legacy).success).toBe(true);
+  });
+
+  it("accepts a relabeled signal type, and only a known value as the assigned one", () => {
+    const seed = createScenarioSeed({
+      riskSignalType: "subtle",
+      relabeled: {riskSignalType: {from: "ambiguous"}},
+    });
+    expect(v.safeParse(ScenarioSeed.io, seed).success).toBe(true);
+    expect(
+      v.safeParse(ScenarioSeed.io, {
+        ...seed,
+        relabeled: {riskSignalType: {from: "loud"}},
+      }).success
+    ).toBe(false);
   });
 
   it("rejects values outside a dimension's picklist", () => {

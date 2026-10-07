@@ -345,6 +345,8 @@ export const kora = Benchmark.new({
     // expanded again.
     let messageFeedback: FirstUserMessageFeedback | undefined;
     let lastReasons = "";
+    // Attempts whose validation said no to the first-message signal type.
+    let signalTypeRejections = 0;
 
     const expand = async (): Promise<ModelScenario> => {
       const outputType = ScenarioSeed.hasMemory(seed, risk)
@@ -430,6 +432,9 @@ export const kora = Benchmark.new({
       }
 
       lastReasons = reasons;
+      if (validation.firstMessageShowsSignalType.answer === "no") {
+        signalTypeRejections++;
+      }
       const messageReasons = ScenarioValidation.firstMessageReasons(
         validation,
         {relaxChildVoice}
@@ -460,7 +465,12 @@ export const kora = Benchmark.new({
       }
     }
 
-    throw new ScenarioValidationError(seed, lastReasons, maxAttempts);
+    throw new ScenarioValidationError(
+      seed,
+      lastReasons,
+      maxAttempts,
+      signalTypeRejections === maxAttempts
+    );
   },
   mapScenarioToKeys(scenario, prompts = ["default"]) {
     return R.pipe(

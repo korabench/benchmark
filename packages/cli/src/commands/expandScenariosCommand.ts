@@ -2,6 +2,7 @@ import {
   ExpandScenarioContext,
   kora,
   Packs,
+  relabelSignalType,
   RiskTaxonomy,
   Scenario,
   ScenarioSeed,
@@ -185,11 +186,17 @@ export async function expandScenariosCommand(
   const paths = validationPathsFor(outputFilePath);
   const ledger = await openLedger(paths.ledger, {fresh});
   // Rejections of earlier runs count toward the child-voice relaxation.
+  const priorRows = (await readLedger(paths.ledger)).filter(
+    row => row.stage === "expansion"
+  );
   const priorRejections = R.countBy(
-    (await readLedger(paths.ledger)).filter(
-      row => row.stage === "expansion" && row.verdict === "fail"
-    ),
+    priorRows.filter(row => row.verdict === "fail"),
     row => row.key
+  );
+  // Seeds an earlier run relabeled: the relabel is applied again, the same
+  // way, before their chain starts.
+  const priorRelabels = new Set(
+    priorRows.filter(row => row.relabeledFrom).map(row => row.key)
   );
   const reportValidation = async () => {
     const report = buildPassRateReport({
@@ -223,86 +230,131 @@ export async function expandScenariosCommand(
           // Not yet processed.
         }
 
+        // A seed that stays stuck on the first-message signal type is
+        // relabeled once (`relabelSignalType`); a resumed run reads the
+        // relabel back from the ledger and goes on with the same seed.
+        let current: ScenarioSeed = priorRelabels.has(seed.id)
+          ? (relabelSignalType(seed) ?? seed)
+          : seed;
         let rejections = priorRejections[seed.id] ?? 0;
-        let lastError: unknown;
-        for (let i = 0; i < expansionModels.length; i++) {
-          const {label, model} = expansionModels[i]!;
-          const context: ExpandScenarioContext = {
-            language,
-            getResponse: async request => ({
-              output: await model.getStructuredResponse(request),
-            }),
-            getUserResponse: async request => ({
-              output: await userModel.getTextResponse(request),
-            }),
-            onValidation: event => {
-              if (event.verdict === "fail") {
-                rejections++;
-              }
-              return ledger.record({
-                stage: "expansion",
-                key: seed.id,
-                seedId: seed.id,
-                verdict: event.verdict,
-                questions: ScenarioValidation.questionsOf(event.validation),
-                reasons: event.reasons,
-                ...(event.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
-                ...(event.firstMessageRewrite
-                  ? {firstMessageRewrite: true}
-                  : {}),
-                // The expansion model validates its own output.
-                generatorModel: label,
-                validatorModel: label,
-                ...(event.verdict === "fail"
-                  ? {
-                      rejected: {
-                        shortTitle: event.scenario.shortTitle,
-                        narrative: event.scenario.narrative,
-                        firstUserMessage: event.scenario.firstUserMessage,
-                      },
-                    }
-                  : {}),
-                population: populationRowOf(seed, privateSeedIds.has(seed.id)),
+
+        // The chain of expansion models, each tried until it exhausts its
+        // attempts. Resolves to the scenarios, or to the last validation
+        // error with whether every model was stuck on the signal type.
+        const expandWithChain = async (): Promise<
+          | {scenarios: readonly Scenario[]}
+          | {error: ScenarioValidationError; stuckOnSignalType: boolean}
+        > => {
+          let stuckOnSignalType = true;
+          for (let i = 0; i < expansionModels.length; i++) {
+            const {label, model} = expansionModels[i]!;
+            const context: ExpandScenarioContext = {
+              language,
+              getResponse: async request => ({
+                output: await model.getStructuredResponse(request),
+              }),
+              getUserResponse: async request => ({
+                output: await userModel.getTextResponse(request),
+              }),
+              onValidation: event => {
+                if (event.verdict === "fail") {
+                  rejections++;
+                }
+                return ledger.record({
+                  stage: "expansion",
+                  key: seed.id,
+                  seedId: seed.id,
+                  verdict: event.verdict,
+                  questions: ScenarioValidation.questionsOf(event.validation),
+                  reasons: event.reasons,
+                  ...(event.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
+                  ...(event.firstMessageRewrite
+                    ? {firstMessageRewrite: true}
+                    : {}),
+                  ...(current.relabeled
+                    ? {relabeledFrom: current.relabeled.riskSignalType.from}
+                    : {}),
+                  // The expansion model validates its own output.
+                  generatorModel: label,
+                  validatorModel: label,
+                  ...(event.verdict === "fail"
+                    ? {
+                        rejected: {
+                          shortTitle: event.scenario.shortTitle,
+                          narrative: event.scenario.narrative,
+                          firstUserMessage: event.scenario.firstUserMessage,
+                        },
+                      }
+                    : {}),
+                  population: populationRowOf(
+                    current,
+                    privateSeedIds.has(seed.id)
+                  ),
+                });
+              },
+            };
+
+            try {
+              const scenarios = await kora.expandScenario(context, current, {
+                priorRejections: rejections,
               });
-            },
-          };
+              return {scenarios};
+            } catch (error) {
+              const next = expansionModels[i + 1];
+              const reason =
+                error instanceof ScenarioValidationError
+                  ? `validation failed (${error.lastReasons.slice(0, 200)})`
+                  : `error (${error instanceof Error ? error.message.slice(0, 200) : String(error)})`;
+              if (
+                error instanceof ScenarioValidationError &&
+                !error.stuckOnSignalType
+              ) {
+                stuckOnSignalType = false;
+              }
 
-          try {
-            const scenarios = await kora.expandScenario(context, seed, {
-              priorRejections: rejections,
-            });
-            await fs.writeFile(tempFile, JSON.stringify(scenarios, null, 2));
-            progress.increment(true);
-            return [];
-          } catch (error) {
-            lastError = error;
-            const next = expansionModels[i + 1];
-            const reason =
-              error instanceof ScenarioValidationError
-                ? `validation failed (${error.lastReasons.slice(0, 200)})`
-                : `error (${error instanceof Error ? error.message.slice(0, 200) : String(error)})`;
+              if (next) {
+                console.error(
+                  `[fallback] expandScenario on ${label} for seed ${seed.id}: ${reason}; trying ${next.label}`
+                );
+                continue;
+              }
 
-            if (next) {
-              console.error(
-                `[fallback] expandScenario on ${label} for seed ${seed.id}: ${reason}; trying ${next.label}`
-              );
-              continue;
+              // Last model exhausted.
+              if (error instanceof ScenarioValidationError) {
+                return {error, stuckOnSignalType};
+              }
+              throw error;
             }
+          }
+          throw new Error("No expansion model configured.");
+        };
 
-            // Last model exhausted.
-            if (error instanceof ScenarioValidationError) {
-              console.error(
-                `\nValidation failed for seed ${seed.id} (all models exhausted): ${error.lastReasons}`
-              );
-              failureCount++;
-              progress.increment(false);
-              return [];
-            }
-            throw error;
+        let outcome = await expandWithChain();
+        if ("error" in outcome && outcome.stuckOnSignalType) {
+          const relabeled = relabelSignalType(current);
+          if (relabeled) {
+            console.error(
+              `\n[relabel] seed ${seed.id}: every attempt rejected the first user message on the risk signal type; ${current.riskSignalType} → ${relabeled.riskSignalType}, trying again`
+            );
+            current = relabeled;
+            outcome = await expandWithChain();
           }
         }
 
-        throw lastError;
+        if ("scenarios" in outcome) {
+          await fs.writeFile(
+            tempFile,
+            JSON.stringify(outcome.scenarios, null, 2)
+          );
+          progress.increment(true);
+          return [];
+        }
+        console.error(
+          `\nValidation failed for seed ${seed.id} (all models exhausted): ${outcome.error.lastReasons}`
+        );
+        failureCount++;
+        progress.increment(false);
+        return [];
       },
       readSeedsFromFiles(seedPaths, riskIdFilter)
     )

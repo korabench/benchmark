@@ -323,7 +323,12 @@ steps:
 
 **No seed is given a risk signal type its situation type forbids**, at any
 number of seeds per risk. Of the dimensions, the signal type is the one whose
-counts give way to that.
+counts give way to that. It also gives way after allocation, in one case: a
+seed whose first user message every expansion attempt rejected on the signal
+type is relabeled once by `expand-scenarios`, to the nearest value its
+situation type allows, so that the corpus holds one scenario per seed (see
+README, "One scenario per seed"). The seed keeps the assigned value under
+`relabeled`; the seeds file and its counts are untouched.
 
 - **Situation types do not move.** Each seed keeps the situation type it was
   allocated, so the counts per gold standard, situation type and age band are

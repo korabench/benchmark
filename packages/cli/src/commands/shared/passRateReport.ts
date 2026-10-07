@@ -31,6 +31,13 @@ export interface PassRateRow {
   meanAttempts: number;
 }
 
+export interface RelabeledSlot {
+  key: string;
+  from: string;
+  to: string;
+  attempts: number;
+}
+
 export interface StuckSlot {
   key: string;
   attempts: number;
@@ -52,6 +59,9 @@ export interface PassRateReport {
   childVoiceRelaxedPasses: number;
   /** Of those, slots that passed only because of it: the question said no. */
   childVoiceWaivedPasses: number;
+  /** Slots whose pass came after their risk signal type was relabeled, with
+   * the assigned value and the one they passed with. */
+  relabeledPasses: readonly RelabeledSlot[];
   stuck: readonly StuckSlot[];
 }
 
@@ -154,6 +164,21 @@ export function buildPassRateReport(args: {
     .filter(outcome => outcome.passed)
     .map(outcome => outcome.attempts.at(-1)!)
     .filter(row => row.childVoiceRelaxed);
+  const relabeledPasses = outcomes
+    .filter(outcome => outcome.passed)
+    .flatMap(outcome => {
+      const last = outcome.attempts.at(-1)!;
+      return last.relabeledFrom
+        ? [
+            {
+              key: outcome.key,
+              from: last.relabeledFrom,
+              to: last.population.riskSignalType,
+              attempts: outcome.attempts.length,
+            },
+          ]
+        : [];
+    });
 
   return {
     stage: args.stage,
@@ -175,6 +200,7 @@ export function buildPassRateReport(args: {
     childVoiceWaivedPasses: relaxedPasses.filter(
       row => row.questions?.childWouldWrite?.answer === "no"
     ).length,
+    relabeledPasses,
     stuck,
   };
 }
@@ -222,6 +248,20 @@ export function formatPassRateReport(report: PassRateReport): string {
           "",
         ]
       : [];
+  const relabeled =
+    report.relabeledPasses.length > 0
+      ? [
+          "## Risk signal type relabeled",
+          "",
+          `${report.relabeledPasses.length} slot(s) passed after their risk signal type was moved, because every attempt had rejected the first user message on it. The seed keeps the assigned value under \`relabeled\`.`,
+          "",
+          ...report.relabeledPasses.map(
+            slot =>
+              `- ${slot.key}: ${slot.from} → ${slot.to} (${slot.attempts} attempts)`
+          ),
+          "",
+        ]
+      : [];
   const stuck =
     report.stuck.length > 0
       ? [
@@ -253,6 +293,7 @@ export function formatPassRateReport(report: PassRateReport): string {
     "",
     ...failedQuestions,
     ...relaxed,
+    ...relabeled,
     ...stuck,
   ].join("\n");
 }

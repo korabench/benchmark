@@ -1,4 +1,8 @@
-import {ScenarioSeed, ValidationAnswer} from "@korabench/benchmark";
+import {
+  RiskSignalType,
+  ScenarioSeed,
+  ValidationAnswer,
+} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as R from "remeda";
@@ -59,6 +63,10 @@ export interface ValidationAttempt {
   /** Expansion stage: the scenario of the previous attempt was kept and only
    * its first user message was written again. Absent when not. */
   firstMessageRewrite?: true;
+  /** Expansion stage: the seed's risk signal type was relabeled before this
+   * attempt, from this assigned value (`relabelSignalType`). Absent when the
+   * seed carries its assigned value. */
+  relabeledFrom?: RiskSignalType;
   generatorModel: string;
   validatorModel: string;
   /** The text that was rejected; absent on a pass. */

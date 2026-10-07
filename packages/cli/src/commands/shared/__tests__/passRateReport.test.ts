@@ -200,6 +200,35 @@ describe("buildPassRateReport", () => {
     expect(formatPassRateReport(report)).not.toContain("Child-voice");
   });
 
+  it("lists the slots that passed after their risk signal type was relabeled", () => {
+    const relabeled = (
+      key: string,
+      n: number,
+      verdict: "pass" | "fail",
+      from?: "ambiguous"
+    ): ValidationAttempt => ({
+      ...attempt(key, n, verdict, "r1", "7to9"),
+      stage: "expansion",
+      ...(from ? {relabeledFrom: from} : {}),
+    });
+    const expansion = buildPassRateReport({
+      stage: "expansion",
+      rows: [
+        relabeled("s", 1, "fail"),
+        relabeled("s", 2, "fail"),
+        relabeled("s", 3, "pass", "ambiguous"),
+        relabeled("t", 1, "pass"),
+      ],
+    });
+    expect(expansion.relabeledPasses).toEqual([
+      {key: "s", from: "ambiguous", to: "subtle", attempts: 3},
+    ]);
+    expect(formatPassRateReport(expansion)).toContain(
+      "- s: ambiguous → subtle (3 attempts)"
+    );
+    expect(formatPassRateReport(report)).not.toContain("relabeled");
+  });
+
   it("renders the tables as Markdown", () => {
     const markdown = formatPassRateReport(report);
     expect(markdown).toContain("# Seed plausibility check: pass rates");

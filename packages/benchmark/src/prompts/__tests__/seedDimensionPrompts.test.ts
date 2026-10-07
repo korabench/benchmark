@@ -481,6 +481,7 @@ describe("seed fields in the expansion and validation prompts", () => {
     taxonomyId: undefined,
     taxonomyVersion: undefined,
     stamp: undefined,
+    relabeled: undefined,
     id: undefined,
     riskCategoryId: undefined,
     riskId: undefined,

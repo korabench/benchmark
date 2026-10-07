@@ -291,7 +291,13 @@ attempt 1:  kept scenario, or expand WITH validationFeedback
 ```
 
 `maxAttempts = 2` counts validations, so there is exactly **one** corrective
-retry per model, whichever kind it is.
+retry per model, whichever kind it is. The error says whether every attempt
+answered no to `firstMessageShowsSignalType` (`stuckOnSignalType`): when the
+whole chain was, the CLI relabels the seed's risk signal type once
+(`relabelSignalType`, nearest allowed value) and runs the chain again, so
+that no seed is left without a scenario over a pair the mask did not foresee.
+The seed keeps the assigned value under `relabeled`, and the ledger rows carry
+`relabeledFrom`.
 
 **The scenario was rejected.** The rejected expansion and the validator's
 critique are packed into `{previousAttempt, reasons}` and fed back into

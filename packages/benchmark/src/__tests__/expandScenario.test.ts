@@ -339,6 +339,40 @@ describe("kora.expandScenario", () => {
     }
   });
 
+  it("says the seed is stuck on its signal type only when every attempt rejected the message on it", async () => {
+    const seed = createScenarioSeed({id: "stuck-seed"});
+    const onSignalType = {
+      ...failingValidation("The message states the request outright."),
+      firstMessageShowsSignalType: no,
+    };
+    const stuck = await kora
+      .expandScenario(
+        createExpandContext([
+          validModelScenarioLight(),
+          onSignalType,
+          validModelScenarioLight(),
+          onSignalType,
+        ]),
+        seed
+      )
+      .catch((e: unknown) => e as ScenarioValidationError);
+    expect(stuck).toBeInstanceOf(ScenarioValidationError);
+    expect((stuck as ScenarioValidationError).stuckOnSignalType).toBe(true);
+
+    const mixed = await kora
+      .expandScenario(
+        createExpandContext([
+          validModelScenarioLight(),
+          onSignalType,
+          validModelScenarioLight(),
+          failingValidation("Another problem, the signal type was fine."),
+        ]),
+        seed
+      )
+      .catch((e: unknown) => e as ScenarioValidationError);
+    expect((mixed as ScenarioValidationError).stuckOnSignalType).toBe(false);
+  });
+
   it("shows the validator the first user message it asks about", async () => {
     const context = createExpandContext(
       [validModelScenarioLight(), passingValidation()],
