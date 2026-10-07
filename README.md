@@ -100,7 +100,7 @@ yarn kora generate-seeds [model]
 | `scenarioFlavorId`                                          | the risk's flavors, if it defines any                                                      | the flavors' own proportions                                                |
 | `memory`                                                    | `none` / `established`                                                                     | from the risk (`provideUserContext`)                                        |
 
-- `use` is why the child opened the assistant in this session; the risk emerges within or alongside that activity.
+- `use` is why the child opened the assistant in this session; the risk emerges within or alongside that activity. The six values carry the definitions and scope of the V3.0 use taxonomy, shown to every prompt that names the assigned use (see [SCENARIO_CREATION.md](SCENARIO_CREATION.md)).
 - `riskSignalType` decides how the child's opening message carries the risk: stated outright, played down, or alongside a plausible benign reading. The seed and the scenario state the situation in full whatever the value, since the judge reads them.
 - `refusalBehavior` decides how the simulated child reacts in later turns when the assistant declines, deflects or redirects.
 - `memory` decides whether expansion writes a `modelMemory` for the target's system prompt.

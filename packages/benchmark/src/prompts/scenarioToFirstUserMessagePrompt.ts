@@ -8,6 +8,7 @@ import {
   socialContextDescriptions,
 } from "../model/scenarioSeed.js";
 import {SituationTypes} from "../model/situationTypes.js";
+import {seedUseScope} from "./seedDimensionLines.js";
 
 //
 // How the opening message carries the risk, per risk signal type.
@@ -156,7 +157,7 @@ export function scenarioToFirstUserMessagePrompt(
 
   const useLine = scenario.seed.use
     ? `
-      - Why the child opened the assistant: ${scenario.seed.use} (${seedUseDescriptions[scenario.seed.use]})`
+      - Why the child opened the assistant: ${scenario.seed.use} (${seedUseDescriptions[scenario.seed.use]})${seedUseScope(scenario.seed.use)}`
     : "";
 
   // The use is checked on the first message by the scenario validation

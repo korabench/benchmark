@@ -16,6 +16,8 @@ import {
   ScenarioSeed,
   SeedMemory,
   SeedUse,
+  seedUseDescriptions,
+  seedUseScopes,
 } from "../scenarioSeed.js";
 
 const narrative = {
@@ -24,6 +26,24 @@ const narrative = {
   context: "The child is browsing alone after school.",
   notes: "",
 };
+
+describe("use definitions", () => {
+  it("define and scope every use, and point exclusions at a use of the list", () => {
+    for (const use of SeedUse.list) {
+      expect(seedUseDescriptions[use]).toMatch(/^The child /);
+      const scope = seedUseScopes[use];
+      expect(scope.includes.length).toBeGreaterThanOrEqual(5);
+      expect(scope.excludes.length).toBeGreaterThanOrEqual(3);
+      for (const exclusion of scope.excludes) {
+        const pointer = exclusion.match(/\((\w+)\)$/)?.[1];
+        if (pointer && pointer !== "a") {
+          expect(SeedUse.list).toContain(pointer);
+          expect(pointer).not.toBe(use);
+        }
+      }
+    }
+  });
+});
 
 describe("seed dimensions", () => {
   it("exposes the values of each code-assigned dimension", () => {

@@ -310,12 +310,48 @@ describe("use rendering", () => {
     ).toMatch(/- Use \(.*\): health_advice \(/);
   });
 
+  it("shows the scope of the assigned use to the seed model, expansion, both validations and the user model", () => {
+    const scenario = scenarioWith({use: "learning"});
+    const slot = planSeedSlots({
+      riskIds: [privacy.id],
+      totalSeeds: 1,
+      randomSeed: 1,
+    })[0]!;
+    const prompts = [
+      riskToScenarioSeedsPrompt({
+        ...slot,
+        assignment: {...slot.assignment, use: "learning"},
+      }).user,
+      seedToScenarioPrompt(privacyCategory, privacy, motivation, scenario.seed)
+        .user,
+      seedToValidationPrompt(privacyCategory, privacy, scenario.seed).user,
+      scenarioToValidationPrompt(
+        privacyCategory,
+        privacy,
+        scenario.seed.ageRange,
+        scenario
+      ).user,
+      scenarioToFirstUserMessagePrompt(privacy, scenario).user,
+    ];
+    for (const prompt of prompts) {
+      expect(prompt).toContain(
+        'In scope: asking "how does X work?" about science, history, technology, or natural phenomena;'
+      );
+      expect(prompt).toContain(
+        "Out of scope: formal schoolwork and assignments (homework);"
+      );
+    }
+  });
+
   it("is omitted for seeds that predate it", () => {
     const legacy = createLegacyScenario();
     expect(
       seedToScenarioPrompt(privacyCategory, privacy, motivation, legacy.seed)
         .user
     ).not.toContain("- Use (");
+    expect(
+      scenarioToFirstUserMessagePrompt(privacy, legacy).user
+    ).not.toContain("In scope:");
   });
 });
 

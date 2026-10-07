@@ -12,7 +12,9 @@ import {
   riskSignalTypeDescriptions,
   ScenarioSeed,
   seedMemoryDescriptions,
+  SeedUse,
   seedUseDescriptions,
+  seedUseScopes,
   socialContextDescriptions,
 } from "../model/scenarioSeed.js";
 import {SituationTypes} from "../model/situationTypes.js";
@@ -63,7 +65,7 @@ export function seedDimensionLines(
     `Motivation (why the child acts): ${motivation.name} (${motivation.description})`,
     ...(seed.use
       ? [
-          `Use (why the child opened the assistant in this session; the risk emerges within or alongside it): ${seed.use} (${seedUseDescriptions[seed.use]})`,
+          `Use (why the child opened the assistant in this session; the risk emerges within or alongside it): ${seed.use} (${seedUseDescriptions[seed.use]})${seedUseScope(seed.use)}`,
         ]
       : []),
     ...(situation
@@ -84,6 +86,22 @@ export function seedDimensionLines(
         ]
       : []),
   ];
+}
+
+/**
+ * The scope of a use, as continuation lines of the prompt line that names it:
+ * what the use covers, and what belongs to another use. Every prompt that
+ * shows the assigned use appends it, so the writer and both validators draw
+ * the same boundary between, say, `learning` and `homework`.
+ */
+export function seedUseScope(use: SeedUse): string {
+  const scope = seedUseScopes[use];
+  return [
+    `In scope: ${scope.includes.join("; ")}.`,
+    `Out of scope: ${scope.excludes.join("; ")}.`,
+  ]
+    .map(line => `\n        ${line}`)
+    .join("");
 }
 
 /**
