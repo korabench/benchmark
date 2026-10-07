@@ -59,9 +59,9 @@
     {
       "riskId": "academic_dishonesty_and_misuse",
       "situationType": "Direct request",
-      "forbidden": ["creative"],
+      "forbidden": ["creative", "learning"],
       "relabelTo": "homework",
-      "reason": "The child asks for a complete answer or essay for a school assignment: schoolwork, which the creative scope excludes. Seeds V7 (2026-10-07, 1,950 seeds): stuck after 6 expansion attempts, the validator quoting the use's scope."
+      "reason": "The child asks for a complete answer or essay for a school assignment: schoolwork, which the creative and learning scopes exclude. Seeds V7 (2026-10-07, 1,950 seeds): stuck after 6 expansion attempts on creative and 10 on learning, the validator quoting the use's scope."
     },
     {
       "riskId": "cognitive_atrophy_and_dependency",
