@@ -1,9 +1,10 @@
 import {ModelMessage} from "@korabench/core";
 import {describe, expect, it} from "vitest";
 import {
-  createLegacyScenario,
+  createMinimalScenario,
   createScenario,
   createScenarioSeed,
+  flavoredRisk,
 } from "../../__tests__/fixtures.js";
 import {Motivation} from "../../model/motivation.js";
 import {RiskCategory} from "../../model/riskCategory.js";
@@ -16,7 +17,6 @@ import {
 } from "../../model/scenarioSeed.js";
 import {ScenarioValidation} from "../../model/scenarioValidation.js";
 import {SeedValidation} from "../../model/seedValidation.js";
-import {Packs} from "../../packs/packs.js";
 import {planSeedSlots} from "../../seedSlots.js";
 import {conversationToAssessmentPrompt} from "../conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "../conversationToMechanismAssessmentPrompt.js";
@@ -87,7 +87,11 @@ describe("scenarioToNextUserMessagePrompt refusal behavior", () => {
 
   it("keeps the open-ended wording for scenarios without a refusal behavior", () => {
     const prompt = text(
-      scenarioToNextUserMessagePrompt(privacy, createLegacyScenario(), messages)
+      scenarioToNextUserMessagePrompt(
+        privacy,
+        createMinimalScenario(),
+        messages
+      )
     );
 
     expect(prompt).toContain("the child may persist, soften, or rephrase");
@@ -220,13 +224,13 @@ describe("scenarioToFirstUserMessagePrompt risk signal type", () => {
       )
     ).toContain(rule);
     expect(
-      text(scenarioToFirstUserMessagePrompt(privacy, createLegacyScenario()))
+      text(scenarioToFirstUserMessagePrompt(privacy, createMinimalScenario()))
     ).not.toContain(rule);
   });
 });
 
 //
-// Maturity is gone for new data and preserved for legacy data.
+// Maturity is no longer a dimension.
 //
 
 describe("maturity rendering", () => {
@@ -262,28 +266,6 @@ describe("maturity rendering", () => {
     expect(
       conversationToMechanismAssessmentPrompt(scenario, messages).user
     ).not.toContain("Child Maturity");
-  });
-
-  it("is still rendered for a legacy scenario", () => {
-    const legacy = createLegacyScenario();
-    const [expansion, validation, first, next] = renderAll(legacy);
-
-    expect(expansion).toContain("- Child Cognitive Maturity: medium (");
-    expect(expansion).toContain("- Child Emotional Maturity: low (");
-    expect(validation).toContain("- Child Cognitive Maturity: medium (");
-    for (const prompt of [first!, next!]) {
-      expect(prompt).toContain("- Cognitive Maturity: medium");
-      expect(prompt).toContain("- Emotional Maturity: low");
-      expect(prompt).toContain(
-        `- Expanded Maturity Description:\n        ${legacy.childMaturity}`
-      );
-    }
-    expect(
-      conversationToAssessmentPrompt(privacy, legacy, messages).user
-    ).toContain(`- Child Maturity:\n        ${legacy.childMaturity}`);
-    expect(
-      conversationToMechanismAssessmentPrompt(legacy, messages).user
-    ).toContain(`- Child Maturity: ${legacy.childMaturity}`);
   });
 });
 
@@ -344,13 +326,13 @@ describe("use rendering", () => {
   });
 
   it("is omitted for seeds that predate it", () => {
-    const legacy = createLegacyScenario();
+    const minimal = createMinimalScenario();
     expect(
-      seedToScenarioPrompt(privacyCategory, privacy, motivation, legacy.seed)
+      seedToScenarioPrompt(privacyCategory, privacy, motivation, minimal.seed)
         .user
     ).not.toContain("- Use (");
     expect(
-      scenarioToFirstUserMessagePrompt(privacy, legacy).user
+      scenarioToFirstUserMessagePrompt(privacy, minimal).user
     ).not.toContain("In scope:");
   });
 });
@@ -425,11 +407,8 @@ describe("other motivations", () => {
 //
 
 describe("seed fields in the expansion and validation prompts", () => {
-  // The flavor comes from the legacy privacy risk: no bundled risk defines
-  // flavors any more.
-  const legacyPrivacy = Packs.legacyTaxonomy()
-    .categories.flatMap(c => c.risks)
-    .find(r => r.id === privacy.id)!;
+  // No bundled risk defines flavors any more; a pack still may.
+  const flavoredPrivacy = flavoredRisk();
 
   const seed = createScenarioSeed({
     riskCategoryId: privacyCategory.id,
@@ -476,8 +455,6 @@ describe("seed fields in the expansion and validation prompts", () => {
     scenarioFlavorId: "- Flavor id: d_authority",
     goldStandardId: "(within 7.3, ",
     situationType: "): Account / data flow (within",
-    childCognitiveMaturity: undefined,
-    childEmotionalMaturity: undefined,
     taxonomyId: undefined,
     taxonomyVersion: undefined,
     stamp: undefined,
@@ -490,13 +467,13 @@ describe("seed fields in the expansion and validation prompts", () => {
   const prompts = {
     expansion: seedToScenarioPrompt(
       privacyCategory,
-      legacyPrivacy,
+      flavoredPrivacy,
       seed.motivation,
       seed
     ).user,
     validation: scenarioToValidationPrompt(
       privacyCategory,
-      legacyPrivacy,
+      flavoredPrivacy,
       seed.ageRange,
       scenario
     ).user,
@@ -597,7 +574,7 @@ describe("scenarioToFirstUserMessagePrompt seed dimensions", () => {
   it("omits situation type and memory for seeds that predate them", () => {
     const prompt = scenarioToFirstUserMessagePrompt(
       privacy,
-      createLegacyScenario()
+      createMinimalScenario()
     ).user;
     expect(prompt).not.toContain("Situation type");
     expect(prompt).not.toContain("- Memory:");

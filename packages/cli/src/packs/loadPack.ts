@@ -11,8 +11,6 @@ import * as path from "node:path";
 //
 
 const BUNDLED_NAME = "kora";
-/** The taxonomy before the gold standards' harm statements replaced its risk descriptions. */
-const LEGACY_TAXONOMY_NAME = "kora-legacy";
 
 function isPath(spec: string): boolean {
   return (
@@ -50,8 +48,7 @@ function unknownPack(
 export function resolveTaxonomy(spec: string): RiskTaxonomy {
   if (!isPath(spec)) {
     if (spec === BUNDLED_NAME) return Packs.bundled().taxonomy;
-    if (spec === LEGACY_TAXONOMY_NAME) return Packs.legacyTaxonomy();
-    throw unknownPack(spec, "taxonomy", [BUNDLED_NAME, LEGACY_TAXONOMY_NAME]);
+    throw unknownPack(spec, "taxonomy", [BUNDLED_NAME]);
   }
   // A custom taxonomy must be the full {id, version, categories} envelope — no
   // sniffing for the bare-array shape the bundled data file happens to use.

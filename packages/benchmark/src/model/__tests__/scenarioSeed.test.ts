@@ -2,8 +2,7 @@ import * as R from "remeda";
 import * as v from "valibot";
 import {describe, expect, it} from "vitest";
 import {
-  createLegacyScenario,
-  createLegacyScenarioSeed,
+  createMinimalScenarioSeed,
   createScenario,
   createScenarioSeed,
 } from "../../__tests__/fixtures.js";
@@ -88,14 +87,21 @@ describe("ScenarioSeed (what is stored)", () => {
   it("accepts a seed carrying every assigned dimension", () => {
     const seed = createScenarioSeed({scenarioFlavorId: "b_gradual"});
     expect(v.safeParse(ScenarioSeed.io, seed).success).toBe(true);
-    expect(seed.childCognitiveMaturity).toBeUndefined();
-    expect(seed.childEmotionalMaturity).toBeUndefined();
   });
 
-  it("still accepts a legacy seed: maturity levels, no use, refusal behavior, memory or SES", () => {
-    const legacy = createLegacyScenarioSeed();
-    expect(legacy.use).toBeUndefined();
-    expect(v.safeParse(ScenarioSeed.io, legacy).success).toBe(true);
+  it("accepts a seed without the optional dimensions", () => {
+    const minimal = createMinimalScenarioSeed();
+    expect(minimal.use).toBeUndefined();
+    expect(v.safeParse(ScenarioSeed.io, minimal).success).toBe(true);
+  });
+
+  it("rejects the maturity levels V2 seeds carried", () => {
+    expect(
+      v.safeParse(ScenarioSeed.io, {
+        ...createScenarioSeed(),
+        childCognitiveMaturity: "medium",
+      }).success
+    ).toBe(false);
   });
 
   it("accepts a relabeled signal type, and only a known value as the assigned one", () => {
@@ -137,7 +143,7 @@ describe("ScenarioSeed (what is stored)", () => {
     }
   });
 
-  it("requires the dimensions legacy corpora already carried", () => {
+  it("requires the dimensions every corpus carries", () => {
     const withoutSignal = R.omit(createScenarioSeed(), ["riskSignalType"]);
     const withoutAge = R.omit(createScenarioSeed(), ["childAge"]);
     expect(v.safeParse(ScenarioSeed.io, withoutSignal).success).toBe(false);
@@ -164,24 +170,27 @@ describe("ScenarioSeed.hasMemory", () => {
   });
 
   it("falls back to the risk for seeds that predate the dimension", () => {
-    expect(ScenarioSeed.hasMemory(createLegacyScenarioSeed(), plainRisk)).toBe(
+    expect(ScenarioSeed.hasMemory(createMinimalScenarioSeed(), plainRisk)).toBe(
       false
     );
-    expect(ScenarioSeed.hasMemory(createLegacyScenarioSeed(), memoryRisk)).toBe(
-      true
-    );
+    expect(
+      ScenarioSeed.hasMemory(createMinimalScenarioSeed(), memoryRisk)
+    ).toBe(true);
   });
 });
 
 describe("Scenario", () => {
-  it("accepts a scenario without childMaturity", () => {
-    const scenario = createScenario();
-    expect(scenario.childMaturity).toBeUndefined();
-    expect(v.safeParse(Scenario.io, scenario).success).toBe(true);
+  it("accepts a scenario", () => {
+    expect(v.safeParse(Scenario.io, createScenario()).success).toBe(true);
   });
 
-  it("still accepts a legacy scenario carrying childMaturity", () => {
-    expect(v.safeParse(Scenario.io, createLegacyScenario()).success).toBe(true);
+  it("rejects the childMaturity V2 scenarios carried", () => {
+    expect(
+      v.safeParse(Scenario.io, {
+        ...createScenario(),
+        childMaturity: "A child with moderate emotional development.",
+      }).success
+    ).toBe(false);
   });
 
   it("does not let the expansion model write a childMaturity", () => {

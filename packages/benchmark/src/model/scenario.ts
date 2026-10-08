@@ -69,13 +69,6 @@ const VModelScenario = v.strictObject({
 
 const VScenario = v.strictObject({
   ...VModelScenario.entries,
-  /**
-   * @deprecated Prose elaboration of the seed's maturity levels. Maturity is no
-   * longer a dimension, so expansion never writes this; it remains so corpora
-   * expanded before its removal still parse, and prompts render it only when
-   * it is present.
-   */
-  childMaturity: v.optional(v.string()),
   seed: ScenarioSeed.io,
   firstUserMessage: v.string(),
   /** Provenance of the expanding run. Optional: older corpora carry none. */

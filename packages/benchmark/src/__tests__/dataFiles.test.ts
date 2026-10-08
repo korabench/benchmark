@@ -34,10 +34,9 @@ function fileExists(filePath: string): boolean {
   }
 }
 
-// The shipped corpus was generated against the legacy taxonomy, whose privacy
-// risk defines the scenario flavors its seeds carry.
-function checkAgainstLegacyTaxonomy(seed: ScenarioSeed) {
-  return Packs.run({taxonomy: Packs.legacyTaxonomy()}, () =>
+// No corpus is shipped yet; these run against one placed under data/.
+function checkAgainstBundledTaxonomy(seed: ScenarioSeed) {
+  return Packs.run({taxonomy: Packs.bundled().taxonomy}, () =>
     Conformance.checkRiskRef(seed)
   );
 }
@@ -69,11 +68,11 @@ describe("scenarioSeeds.jsonl", () => {
   // Shape alone is not enough: riskCategoryId/riskId are plain strings, so a
   // seed can parse cleanly and still reference a risk the taxonomy dropped.
   it.skipIf(!fileExists(filePath))(
-    "every seed resolves against the legacy taxonomy",
+    "every seed resolves against the bundled taxonomy",
     async () => {
       for await (const {lineNumber, line} of readJsonlLines(filePath)) {
         const seed = v.parse(ScenarioSeed.io, JSON.parse(line));
-        const issue = checkAgainstLegacyTaxonomy(seed);
+        const issue = checkAgainstBundledTaxonomy(seed);
         expect(issue, `Line ${lineNumber}: ${issue?.detail}`).toBeUndefined();
       }
     }
@@ -101,11 +100,11 @@ describe("scenarios.jsonl", () => {
   );
 
   it.skipIf(!fileExists(filePath))(
-    "every scenario resolves against the legacy taxonomy",
+    "every scenario resolves against the bundled taxonomy",
     async () => {
       for await (const {lineNumber, line} of readJsonlLines(filePath)) {
         const {seed} = v.parse(Scenario.io, JSON.parse(line));
-        const issue = checkAgainstLegacyTaxonomy(seed);
+        const issue = checkAgainstBundledTaxonomy(seed);
         expect(issue, `Line ${lineNumber}: ${issue?.detail}`).toBeUndefined();
       }
     }

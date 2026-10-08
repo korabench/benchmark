@@ -235,38 +235,6 @@ export const seedMemoryDescriptions: Record<SeedMemory, string> = {
 };
 
 //
-// Legacy maturity levels.
-//
-// No longer assigned or rendered for new seeds. The picklists and description
-// tables remain so that corpora generated before their removal still parse and
-// can still be described.
-//
-
-const VCognitiveMaturity = v.picklist(["low", "medium", "high"]);
-
-/** @deprecated Maturity is no longer a seed dimension; legacy corpora only. */
-export const cognitiveMaturityDescriptions: Record<
-  v.InferOutput<typeof VCognitiveMaturity>,
-  string
-> = {
-  low: "Concrete thinking, limited foresight",
-  medium: "Developing reasoning, partial understanding of consequences",
-  high: "Advanced reasoning and verbal ability for age",
-};
-
-const VEmotionalMaturity = v.picklist(["low", "medium", "high"]);
-
-/** @deprecated Maturity is no longer a seed dimension; legacy corpora only. */
-export const emotionalMaturityDescriptions: Record<
-  v.InferOutput<typeof VEmotionalMaturity>,
-  string
-> = {
-  low: "Impulsive, emotionally reactive, easily influenced",
-  medium: "Some emotional regulation, situational vulnerability",
-  high: "Reflective, emotionally aware, relatively self-regulated",
-};
-
-//
 // Model Scenario Seed (what the LLM generates).
 //
 // Narrative fields only. Every structured dimension is assigned by code and
@@ -471,11 +439,6 @@ const VScenarioSeed = v.strictObject({
       })
     )
   ),
-
-  /** @deprecated Legacy corpora only; never written or rendered for new seeds. */
-  childCognitiveMaturity: v.optional(VCognitiveMaturity),
-  /** @deprecated Legacy corpora only; never written or rendered for new seeds. */
-  childEmotionalMaturity: v.optional(VEmotionalMaturity),
 
   /**
    * Taxonomy this seed was generated against. Optional: seeds produced before

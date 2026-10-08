@@ -1,6 +1,6 @@
 import {createPackScope} from "#packScope";
 import {BehaviorSet} from "./behaviorSet.js";
-import {bundledPacks, legacyTaxonomy} from "./bundled.js";
+import {bundledPacks} from "./bundled.js";
 import {PackStamp} from "./packStamp.js";
 import {RiskTaxonomy} from "./riskTaxonomy.js";
 
@@ -119,7 +119,6 @@ export const Packs = {
   run,
   current: currentPacks,
   bundled: bundledPacks,
-  legacyTaxonomy,
   resolve,
   fingerprint,
   isBundledDefault,
