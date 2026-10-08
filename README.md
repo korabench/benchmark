@@ -120,7 +120,7 @@ At `--total-seeds 60`, the `us-children-2020` preset produces per-risk marginals
 
 Each seed is also assigned a **situation type**: one of the ways its risk shows up in a conversation ("Direct request", "Reframed request", "Disclosure of harm", ...), as listed by the risk's gold standard in `packages/benchmark/data/situationTypes.json`. Within each age band, a risk's seeds are split evenly across its situation types (multi-turn drift types excepted, which receive none); self-harm, an umbrella over three gold standards (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), first splits its seeds evenly across the three. Each situation type comes with its definition from the gold standard, which the seed prompt quotes so that the `coreBehavior` the model writes is one concrete case of it. The seed stores `goldStandardId` and `situationType`, and the seed, expansion and validation prompts all pin the situation type with that definition. A situation type defined for a given age (8.1: "Direct request from young child" for 7–9, "Adolescent infantilisation" for 13–17) only goes to seeds of that age band. At the default 75 seeds per risk the counts are those of the V3.0 allocation workbook, except for 8.1, where the workbook spreads those two types over every age.
 
-A taxonomy may also define per-risk **scenario flavors**. No bundled risk does any more (situation types took over that role, and conversations are 3 or 8 turns long); the legacy taxonomy still defines them for Privacy 7.3 (`a_direct` / `b_gradual` / `d_authority` / `e_fictional`). When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
+A taxonomy may also define per-risk **scenario flavors**. No bundled risk does any more (situation types took over that role, and conversations are 3 or 8 turns long); up to V2, Privacy 7.3 defined four (`a_direct` / `b_gradual` / `d_authority` / `e_fictional`), and a custom taxonomy still can. When present, flavors are allocated via the same largest-remainder method as demographics, one flavor is pinned per seed in both the seed-generation and seed-expansion prompts, and `scenarioFlavorId` is stored on the seed. A flavor can override `risk.conversationLength` (e.g. `b_gradual` requires 4 turns) — the override is honored at run time. Risks without `scenarioFlavors` are unaffected.
 
 Dimensions are assigned independently of one another, so some combinations are unusual. Apart from the situation type, whose counts are fixed per age band, the one exception is motivation × use: within each risk the uses are reordered among the seeds so that no seed gets a pairing forbidden by the V3.0 mask in `packages/benchmark/data/motivationUseMask.json` (Identity Exploration × `homework`, Efficiency / Shortcut Seeking × `entertainment` or `companionship`), which leaves the per-risk counts of every use and every motivation unchanged. A second mask, `packages/benchmark/data/situationMask.json`, lists the uses and risk signal types that contradict a situation type (a type stated outright, such as "Direct request", "Direct disclosure" or any disclosure the child makes outright, with an `ambiguous` signal; a veiled type, such as "Reframed request" or "Indirect / coded disclosure", or a benign request whose harm comes from the model's output, with a `direct` one; the academic-integrity disclosure with the `learning` use): those values are traded between seeds of the same risk, so no situation type moves and the per-risk counts of every use are unchanged. The risk signal type is held more strictly, and its counts are the ones that give way: no seed keeps a signal type its situation type forbids, so where a risk has too few situation types that allow a value, the seeds left over get an allowed one. At 75 seeds per risk this takes `ambiguous` from 25 seeds to 15 for violence, 18 for regulated activities and 19 for academic dishonesty, and leaves every other risk at 25 each. No other combination is excluded up front; a seed whose combination yields nothing plausible is caught by the [seed validation](#seed-validation) below. See [SCENARIO_CREATION.md](SCENARIO_CREATION.md) for the allocation in detail, and for how corpora generated before this design (including `data/scenarioSeeds.jsonl`) are still read.
 
@@ -568,6 +568,12 @@ under an older edition, check out its tag and run that CLI, e.g.
 `git checkout 2.2.0 && yarn && yarn kora run <model>` for V2 (`3.0.0` and later
 are V3). A checkout runs exactly one edition; there is no flag to switch.
 
+No scenario corpus ships with V3 yet. The V2 corpus (`data/scenarioSeeds.jsonl`,
+`data/scenarios.jsonl` with its 781 scenarios, and the 104-scenario native
+subset `data/104-scenario-apps.strict.jsonl`) is at tag `2.2.0`: V3 rejects the
+maturity fields it carries. Commands keep their `data/` defaults, so until a
+corpus is shipped, generate one or pass `-i`.
+
 Hosted infrastructure that runs several editions side by side vendors each one
 as its own copy of the package and evaluates every run under the edition it
 was created with.
@@ -643,7 +649,7 @@ yarn workspace @korabench/apps-web-runner smoke \
 
 **5. Run the benchmark:**
 
-The default input is `data/scenarios.jsonl` (the full 781-scenario corpus used for the public leaderboard runs — also the default for API/gateway models). Web targets can take this directly:
+The default input is `data/scenarios.jsonl`, also the default for API/gateway models; no corpus ships with V3 yet (see [Editions](#editions)), so generate one there or pass `-i`. Web targets take a full corpus directly:
 
 ```bash
 cd /path/to/kora-benchmark
@@ -674,7 +680,7 @@ yarn kora run kora-app-gemini \
   -o data/gemini-smoke.json
 ```
 
-`--limit 2` caps the run at two scenarios so you can sanity-check end-to-end (session opens, turns flow, judges produce scores, results write to disk) before committing to the full 781-scenario corpus.
+`--limit 2` caps the run at two scenarios so you can sanity-check end-to-end (session opens, turns flow, judges produce scores, results write to disk) before committing to the full corpus.
 
 ### Native-runner (Android apps)
 
@@ -716,14 +722,14 @@ yarn dev   # tsx watch --env-file=../../.env src/server.ts on :7200
 
 **4. Run the benchmark:**
 
-Native targets currently use a **temporary** reduced corpus, `data/104-scenario-apps.strict.jsonl` (104 scenarios), instead of the full `data/scenarios.jsonl`. The full corpus parses fine; the reduced file exists only to keep scenarios short enough for the on-device app's input window (e.g. Tako's). Once that constraint is lifted, native runs should switch to `data/scenarios.jsonl` like the web targets.
+Native targets need scenarios short enough for the on-device app's input window (e.g. Tako's). Under V2 they ran a reduced corpus of 104 such scenarios, `data/104-scenario-apps.strict.jsonl`, at tag `2.2.0`; pass a corpus that fits with `-i`. Once that constraint is lifted, native runs should take the full corpus like the web targets.
 
 ```bash
 cd /path/to/kora-benchmark
 yarn kora run kora-app-tiktok-android \
   --concurrency 1 \
   --cooldown 60 \
-  -i data/104-scenario-apps.strict.jsonl \
+  -i data/<short-scenarios>.jsonl \
   -o data/tiktok-android-run.json
 ```
 
@@ -774,7 +780,7 @@ supplied. Any command accepts a different one:
 yarn kora --taxonomy ./packs/my-taxonomy.json run gpt-4o
 ```
 
-Two names are registered: `kora`, the default, and `kora-legacy`, the taxonomy as it was before each risk's description was replaced by the harm statement of its gold standard (`packages/benchmark/data/risks.legacy.json`, stamped `kora@2`). Use `--taxonomy kora-legacy` to reproduce or extend the results produced with those descriptions. The corpus shipped under `data/` (`scenarioSeeds.jsonl`, `scenarios.jsonl`) was generated against it and needs it: its privacy seeds carry flavors that the default taxonomy no longer defines.
+One name is registered: `kora`, the default. The taxonomy V2 was graded with, from before each risk's description was replaced by the harm statement of its gold standard (`kora@2`), is at tag `2.2.0`, under the name `kora-legacy`.
 
 `KORA_TAXONOMY` sets the same thing from the environment. A taxonomy file is the
 full envelope — the bundled `risks.json` is a bare array of categories and is
@@ -953,7 +959,7 @@ data/                                Scenario pipeline output (seeds, scenarios,
 scripts/                             Operator tooling (manual run completion — see scripts/README.md)
 packages/
   benchmark/
-    data/                            Bundled pack: risks.json (and risks.legacy.json, the version 2 descriptions), behaviors.json, motivations.json, plus motivationUseMask.json, situationMask.json and situationTypes.json (see data/README.md)
+    data/                            Bundled pack: risks.json, behaviors.json, motivations.json, plus motivationUseMask.json, situationMask.json and situationTypes.json (see data/README.md)
     src/                             Core benchmark logic
       packs/                         Pack model, scoping and taxonomy conformance
       profiles/                      Evaluation profile model (schema, hash)

@@ -21,6 +21,7 @@ import {
 import {SeedValidation} from "../model/seedValidation.js";
 import {Packs} from "../packs/packs.js";
 import {planSeedSlots} from "../seedSlots.js";
+import {flavoredTaxonomy} from "./fixtures.js";
 
 //
 // Fixtures.
@@ -355,8 +356,6 @@ describe("generateScenarioSeeds dimension allocation", () => {
     expect(seeds.some(s => s.childAge !== 17)).toBe(true);
     expect(new Set(seeds.map(s => s.socialContext)).size).toBe(4);
     for (const seed of seeds) {
-      expect(seed.childCognitiveMaturity).toBeUndefined();
-      expect(seed.childEmotionalMaturity).toBeUndefined();
       // Strict schema: a stray model-provided key would fail here.
       expect(v.safeParse(ScenarioSeed.io, seed).success).toBe(true);
     }
@@ -559,12 +558,12 @@ describe("generateScenarioSeeds dimension allocation", () => {
 //
 
 describe("generateScenarioSeeds scenario-flavor allocation", () => {
-  // No bundled risk defines flavors any more; the legacy privacy risk does.
-  const withLegacyTaxonomy = <T>(fn: () => T): T =>
-    Packs.run({taxonomy: Packs.legacyTaxonomy()}, fn);
+  // No bundled risk defines flavors any more; a pack still may.
+  const withFlavoredTaxonomy = <T>(fn: () => T): T =>
+    Packs.run({taxonomy: flavoredTaxonomy()}, fn);
 
-  it("matches the per-risk flavor marginals when the risk defines flavors (legacy 7.3)", async () => {
-    const seeds = await withLegacyTaxonomy(() =>
+  it("matches the per-risk flavor marginals when the risk defines flavors", async () => {
+    const seeds = await withFlavoredTaxonomy(() =>
       collectSeeds(makeContext([]), {
         distribution: census,
         totalSeeds: 20,
@@ -585,7 +584,7 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
   it("threads each pinned flavor into its own LLM prompt", async () => {
     const calls: Call[] = [];
 
-    await withLegacyTaxonomy(() =>
+    await withFlavoredTaxonomy(() =>
       collectSeeds(makeContext(calls), {
         distribution: census,
         totalSeeds: 20,

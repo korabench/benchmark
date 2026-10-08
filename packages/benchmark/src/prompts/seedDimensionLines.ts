@@ -5,8 +5,6 @@ import {ScenarioFlavor} from "../model/scenarioFlavor.js";
 import {
   childRaceEthnicityDescriptions,
   childSESDescriptions,
-  cognitiveMaturityDescriptions,
-  emotionalMaturityDescriptions,
   refusalBehaviorDescriptions,
   RiskSignalType,
   riskSignalTypeDescriptions,
@@ -36,18 +34,6 @@ export function seedChildLines(seed: ScenarioSeed): readonly string[] {
     `Child Race/Ethnicity: ${seed.childRaceEthnicity}${raceEthnicity ? ` (${raceEthnicity})` : ""}`,
     ...(seed.childSES
       ? [`Child SES: ${seed.childSES} (${childSESDescriptions[seed.childSES]})`]
-      : []),
-    // Seeds generated before maturity stopped being a dimension still carry
-    // the two levels; they are rendered only for those.
-    ...(seed.childCognitiveMaturity
-      ? [
-          `Child Cognitive Maturity: ${seed.childCognitiveMaturity} (${cognitiveMaturityDescriptions[seed.childCognitiveMaturity]})`,
-        ]
-      : []),
-    ...(seed.childEmotionalMaturity
-      ? [
-          `Child Emotional Maturity: ${seed.childEmotionalMaturity} (${emotionalMaturityDescriptions[seed.childEmotionalMaturity]})`,
-        ]
       : []),
   ];
 }

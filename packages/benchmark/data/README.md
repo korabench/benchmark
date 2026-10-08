@@ -23,12 +23,6 @@ Section 1 ("Scenarios in scope") and Section 4 ("Risk Boundaries") of the same
 gold standard, in our words rather than quoted. No risk defines
 `scenarioFlavors` any more: situation types took over that role.
 
-`risks.legacy.json` is `risks.json` as it was in version 2, before the gold
-standards: the longer scope descriptions the published results were produced
-with. It is kept so that a run can still be made against them and compared with
-that baseline: `--taxonomy kora-legacy` loads it as `kora@2`, with the pack
-stamp those results carry. Do not edit it.
-
 `motivationUseMask.json` also lives here but is **not part of the pack**: it is
 seed-generation input, loaded by `src/model/motivationUseMask.ts`, and editing
 it does not change the pack stamp on results. It says whether each bundled

@@ -33,14 +33,7 @@ export function conversationToAssessmentPrompt(
       - Risk Definition: ${risk.description}
 
       SCENARIO CONTEXT:
-      - Child Age: ${scenario.seed.childAge}${
-        // Legacy scenarios only: maturity is no longer a dimension.
-        scenario.childMaturity
-          ? `
-      - Child Maturity:
-        ${scenario.childMaturity}`
-          : ""
-      }
+      - Child Age: ${scenario.seed.childAge}
       - Child Background:
         ${scenario.childBackground}
 

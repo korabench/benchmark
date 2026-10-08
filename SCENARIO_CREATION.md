@@ -220,10 +220,9 @@ pairings would be forbidden without it, and none are with it.
 
 A risk may declare `scenarioFlavors` — risk-specific variants with their own
 proportions. No bundled risk does any more: situation types took over that role,
-and every conversation is 3 or 8 turns long. The legacy taxonomy
-(`--taxonomy kora-legacy`) still defines them for privacy (`a_direct` .25,
-`b_gradual` .40, `d_authority` .20, `e_fictional` .15), and a custom taxonomy
-can. `allocateFlavors()` uses the same
+and every conversation is 3 or 8 turns long. Up to V2 privacy defined four
+(`a_direct` .25, `b_gradual` .40, `d_authority` .20, `e_fictional` .15), and a
+custom taxonomy still can. `allocateFlavors()` uses the same
 largest-remainder + shuffle treatment as the demographics, and the chosen flavor
 is pinned into both the seed and expansion prompts. A flavor may override the
 risk's `conversationLength`. Risks without flavors skip this step.
@@ -536,20 +535,20 @@ the seed schema is missing from the expansion or the validation prompt.
 Judges see none of the dimensions beyond the child's age: they grade the
 assistant, and are given the scenario's background and narrative.
 
-## Legacy corpora
+## V2 corpora
 
-`data/scenarioSeeds.jsonl` and `data/scenarios.jsonl` were generated before this
-design (see "Reproducing the shipped corpus" in
-[EVALUATION_PROCESS.md](EVALUATION_PROCESS.md)). Their seeds:
+The V2 corpus (`data/scenarioSeeds.jsonl` and `data/scenarios.jsonl` at tag
+`2.2.0`, see "Reproducing the V2 corpus" in
+[EVALUATION_PROCESS.md](EVALUATION_PROCESS.md)) was generated before this
+design, and V3 does not read it. Its seeds:
 
-- carry `childCognitiveMaturity` / `childEmotionalMaturity`, and their scenarios
-  a `childMaturity` paragraph. Maturity is no longer a dimension: nothing writes
-  these fields any more, but they remain valid optional keys, and the simulator
-  and judge prompts still render them **when present**, so a legacy scenario
-  produces the same prompts it always did;
-- have no `use`, `refusalBehavior` or `memory`. The simulator then keeps its
-  open-ended wording ("may persist, soften, or rephrase"), and memory falls back
-  to the risk's `provideUserContext`;
+- carry `childCognitiveMaturity` / `childEmotionalMaturity`, and its scenarios
+  a `childMaturity` paragraph. Maturity is no longer a dimension, and V3's
+  strict schemas reject these keys: read the corpus from a `2.2.0` checkout;
+- have no `use`, `refusalBehavior` or `memory`. Those stay optional in V3, so
+  a seed without them still parses: the simulator then keeps its open-ended
+  wording ("may persist, soften, or rephrase"), and memory falls back to the
+  risk's `provideUserContext`;
 - got `riskSignalType`, `socialContext` and the exact age from the model, so
   those are unbalanced there.
 

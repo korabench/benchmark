@@ -9,7 +9,7 @@ import {
 import {ScenarioValidation} from "../model/scenarioValidation.js";
 import {ScenarioValidationError} from "../model/scenarioValidationError.js";
 import {
-  createLegacyScenarioSeed,
+  createMinimalScenarioSeed,
   createScenarioSeed,
   testRiskCategoryId,
   testRiskId,
@@ -585,15 +585,14 @@ describe("kora.expandScenario", () => {
     });
   });
 
-  it("never writes a childMaturity onto the expanded scenario", async () => {
+  it("asks the expansion model for no maturity", async () => {
     const context = createExpandContext([
       validModelScenarioLight(),
       passingValidation(),
     ]);
 
-    const [scenario] = await kora.expandScenario(context, createScenarioSeed());
+    await kora.expandScenario(context, createScenarioSeed());
 
-    expect(scenario!.childMaturity).toBeUndefined();
     const request = requestAt(context, 0);
     expect(request.outputType).toBe(ModelScenarioLight.io);
     expect(promptText(request)).not.toMatch(/maturity/i);
@@ -645,7 +644,7 @@ describe("kora.expandScenario", () => {
     });
 
     it("falls back to the risk's provideUserContext for seeds without a memory", async () => {
-      const seed = createLegacyScenarioSeed(memoryRisk);
+      const seed = createMinimalScenarioSeed(memoryRisk);
       const context = createExpandContext(
         [scenarioWithMemory, passingValidation()],
         ["Hey, I need to talk about something private."]

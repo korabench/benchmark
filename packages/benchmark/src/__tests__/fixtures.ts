@@ -1,6 +1,9 @@
 import {Motivation} from "../model/motivation.js";
+import {Risk} from "../model/risk.js";
 import {Scenario} from "../model/scenario.js";
 import {ScenarioSeed} from "../model/scenarioSeed.js";
+import {Packs} from "../packs/packs.js";
+import {RiskTaxonomy} from "../packs/riskTaxonomy.js";
 
 //
 // Shared test data.
@@ -45,14 +48,14 @@ export function createScenarioSeed(
 }
 
 /**
- * A seed as corpora generated before the dimension rework carry it: maturity
- * levels chosen by the model, and no use, refusal behavior or memory.
+ * A seed carrying none of the optional dimensions: no use, refusal behavior,
+ * memory, SES or situation type.
  */
-export function createLegacyScenarioSeed(
+export function createMinimalScenarioSeed(
   overrides: Partial<ScenarioSeed> = {}
 ): ScenarioSeed {
   return {
-    id: "seed-legacy",
+    id: "seed-minimal",
     riskCategoryId: testRiskCategoryId,
     riskId: testRiskId,
     ageRange: testAgeRange,
@@ -60,8 +63,6 @@ export function createLegacyScenarioSeed(
     childAge: 11,
     childGender: "female",
     childRaceEthnicity: "white",
-    childCognitiveMaturity: "medium",
-    childEmotionalMaturity: "low",
     shortTitle: "Test seed title",
     riskSignalType: "subtle",
     coreBehavior:
@@ -88,14 +89,52 @@ export function createScenario(overrides: Partial<Scenario> = {}): Scenario {
   };
 }
 
-/** A scenario expanded before maturity stopped being a dimension. */
-export function createLegacyScenario(
+/** A scenario on a seed carrying none of the optional dimensions. */
+export function createMinimalScenario(
   overrides: Partial<Scenario> = {}
 ): Scenario {
-  return createScenario({
-    childMaturity:
-      "A child with moderate emotional development and typical cognitive abilities for their age.",
-    seed: createLegacyScenarioSeed(),
-    ...overrides,
+  return createScenario({seed: createMinimalScenarioSeed(), ...overrides});
+}
+
+//
+// A taxonomy whose privacy risk defines scenario flavors. No bundled risk does
+// any more (situation types took over), but a pack still may.
+//
+
+export const flavoredRiskId = "privacy_and_personal_data_protection";
+
+const scenarioFlavors = [
+  {id: "a_direct", proportion: 0.25, description: "Direct sharing."},
+  {
+    id: "b_gradual",
+    proportion: 0.4,
+    conversationLength: 4,
+    description: "Gradual accumulation across turns.",
+  },
+  {id: "d_authority", proportion: 0.2, description: "Authority pressure."},
+  {id: "e_fictional", proportion: 0.15, description: "Fictional framing."},
+];
+
+export function flavoredTaxonomy(): RiskTaxonomy {
+  const bundled = Packs.bundled().taxonomy;
+  return RiskTaxonomy.parse({
+    ...bundled,
+    categories: bundled.categories.map(category => ({
+      ...category,
+      risks: category.risks.map(risk =>
+        risk.id === flavoredRiskId ? {...risk, scenarioFlavors} : risk
+      ),
+    })),
   });
+}
+
+/** The flavored privacy risk of `flavoredTaxonomy()`. */
+export function flavoredRisk(): Risk {
+  const risk = flavoredTaxonomy()
+    .categories.flatMap(c => c.risks)
+    .find(r => r.id === flavoredRiskId);
+  if (!risk) {
+    throw new Error(`Risk ${flavoredRiskId} is not in the bundled taxonomy.`);
+  }
+  return risk;
 }

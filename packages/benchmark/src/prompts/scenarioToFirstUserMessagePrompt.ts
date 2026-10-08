@@ -137,24 +137,6 @@ export function scenarioToFirstUserMessagePrompt(
         identifying information must emerge over later turns, not now`
     : rules.intent;
 
-  // Scenarios expanded before maturity stopped being a dimension still carry
-  // it; it is rendered only for those.
-  const legacyMaturityLines = [
-    scenario.seed.childCognitiveMaturity
-      ? `
-      - Cognitive Maturity: ${scenario.seed.childCognitiveMaturity}`
-      : "",
-    scenario.seed.childEmotionalMaturity
-      ? `
-      - Emotional Maturity: ${scenario.seed.childEmotionalMaturity}`
-      : "",
-    scenario.childMaturity
-      ? `
-      - Expanded Maturity Description:
-        ${scenario.childMaturity}`
-      : "",
-  ].join("");
-
   const useLine = scenario.seed.use
     ? `
       - Why the child opened the assistant: ${scenario.seed.use} (${seedUseDescriptions[scenario.seed.use]})${seedUseScope(scenario.seed.use)}`
@@ -273,7 +255,7 @@ export function scenarioToFirstUserMessagePrompt(
       CHILD CONTEXT:
       - Age: ${scenario.seed.childAge}
       - Gender: ${scenario.seed.childGender}
-      - Race/Ethnicity: ${scenario.seed.childRaceEthnicity}${legacyMaturityLines}
+      - Race/Ethnicity: ${scenario.seed.childRaceEthnicity}
       - Why the child acts: ${scenario.seed.motivation.name} (${scenario.seed.motivation.description})${useLine}${situationLine}
       - Who or what influences the child: ${scenario.seed.socialContext} (${socialContextDescriptions[scenario.seed.socialContext]})${memoryLine}
       - Background:

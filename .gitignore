@@ -20,7 +20,6 @@ pids
 *.seed
 *.pid.lock
 /data/*
-!/data/104-scenario-apps.strict.jsonl
 
 # Private seeds and scenarios, held out of the published corpus
 # (see README "Private seeds")
