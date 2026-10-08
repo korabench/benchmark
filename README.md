@@ -559,6 +559,19 @@ over; there is no bypass flag). Result files also record `served`: the model
 ids the provider reported for the user, judge and target calls, the only
 evidence of which snapshot actually answered.
 
+### Editions
+
+An edition of the benchmark is a tagged revision of this repository: its
+prompts, record schemas, judges and default packs together. The edition is the
+`prompts.version` a stamp carries (`2` for KORA V2). To generate or evaluate
+under an older edition, check out its tag and run that CLI, e.g.
+`git checkout 2.2.0 && yarn && yarn kora run <model>` for V2 (`3.0.0` and later
+are V3). A checkout runs exactly one edition; there is no flag to switch.
+
+Hosted infrastructure that runs several editions side by side vendors each one
+as its own copy of the package and evaluates every run under the edition it
+was created with.
+
 ## Running against real apps (web-runner / native-runner)
 
 Two custom-model adapters route to the sibling [`kora-apps`](https://github.com/korabench/apps) repo so the benchmark can target real product UIs (ChatGPT.com, TikTok's Tako, …) instead of API models. Both runners speak the same HTTP contract (`POST /sessions`, `POST /sessions/:id/turn`, `DELETE /sessions/:id`); only the underlying transport differs.
