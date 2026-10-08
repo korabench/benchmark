@@ -1,4 +1,5 @@
 import {Scenario} from "@korabench/benchmark";
+import {createCustomHttpModel, isCustomHttpSlug} from "./customHttpModel.js";
 import {Model} from "./model.js";
 import {
   createNativeRunnerModel,
@@ -24,12 +25,20 @@ export async function createCustomModel(
     const apiKey = process.env.WEB_RUNNER_API_KEY;
     return createWebRunnerModel({modelSlug, webRunnerUrl, apiKey});
   }
+  if (isCustomHttpSlug(modelSlug)) {
+    return createCustomHttpModel({
+      modelSlug,
+      model: process.env.CUSTOM_HTTP_MODEL,
+      apiKey: process.env.CUSTOM_HTTP_API_KEY,
+    });
+  }
 
   return {
     async getTextResponse() {
       throw new Error(
         `Custom model "${modelSlug}" is not implemented. ` +
-          `Provide an implementation in customModel.ts.`
+          `Provide an implementation in customModel.ts, or use ` +
+          `"custom-http:<url>" for an OpenAI-compatible endpoint.`
       );
     },
 
