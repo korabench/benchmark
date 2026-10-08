@@ -39,7 +39,7 @@ export function printProfile(effective: EffectiveProfile, path?: string): void {
   Role.list.forEach(role => {
     const specs = Role.specsOf(effective.roles, role);
     specs.forEach((spec, index) => {
-      const head = index === 0 ? `${role}:`.padEnd(15) : "".padEnd(15);
+      const head = index === 0 ? `${role}:`.padEnd(16) : "".padEnd(16);
       console.log(`  ${head}${formatSpec(spec)}`);
     });
   });

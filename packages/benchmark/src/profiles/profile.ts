@@ -23,6 +23,11 @@ const VChain = v.pipe(v.array(ModelSpec.io), v.minLength(1));
 const VProfileRoles = v.strictObject({
   /** Seed generation (`generate-seeds`). Fallback chain. */
   seeds: VChain,
+  /**
+   * Seed plausibility check (`generate-seeds`). Fallback chain; falls back to
+   * `judges`, so that the model writing a seed is not the one checking it.
+   */
+  seedValidation: v.optional(VChain),
   /** Scenario expansion and validation (`expand-scenarios`). Fallback chain. */
   expansion: VChain,
   /** First user message during expansion. Fallback chain. */
@@ -45,6 +50,7 @@ const VProfile = v.strictObject({
 
 const ROLE_LIST = [
   "seeds",
+  "seedValidation",
   "expansion",
   "expansionUser",
   "user",
@@ -127,10 +133,14 @@ function parse(data: unknown, options: ParseOptions): Profile {
   return profile;
 }
 
-/** Every role filled in: `continueUser` defaults to `user`. */
+/**
+ * Every role filled in: `continueUser` defaults to `user`, `seedValidation` to
+ * `judges`.
+ */
 function effectiveRoles(roles: ProfileRoles): EffectiveRoles {
   return {
     ...roles,
+    seedValidation: roles.seedValidation ?? roles.judges,
     continueUser: roles.continueUser ?? roles.user,
   };
 }

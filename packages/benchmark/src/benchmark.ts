@@ -8,12 +8,83 @@ import {
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
+import {Scenario} from "./model/scenario.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
+import {ScenarioSeed} from "./model/scenarioSeed.js";
+import {ScenarioValidation} from "./model/scenarioValidation.js";
+import {SeedValidation, SeedValidationVerdict} from "./model/seedValidation.js";
+
+/** One verdict of the seed plausibility check. */
+export interface SeedValidationEvent {
+  /** Key of the slot the seed was written for. */
+  key: string;
+  /** 1-based, within this call of `generateScenarioSeeds`. */
+  attempt: number;
+  maxAttempts: number;
+  /** The seed that was checked; the one kept when `verdict` is "pass". */
+  seed: ScenarioSeed;
+  isPrivate: boolean;
+  validation: SeedValidation;
+  verdict: SeedValidationVerdict;
+  /** How often the slot had been rejected when this seed was written, earlier
+   * runs included (see `GenerateSeedsOptions.priorRejections`). */
+  rejections: number;
+}
+
+/** What a seed is being written for, passed along with the request. */
+export interface SeedWriteInfo {
+  key: string;
+  /**
+   * How often the slot was already rejected by the plausibility check, earlier
+   * runs included. Lets the caller hand a rejected slot to another model: one
+   * that sanitises a risk away tends to do it again when asked to rewrite.
+   */
+  rejections: number;
+}
+
+/** One verdict of the scenario validation step. */
+export interface ScenarioValidationEvent {
+  seed: ScenarioSeed;
+  /** 1-based, within this call of `expandScenario`. */
+  attempt: number;
+  maxAttempts: number;
+  /** The scenario that was checked, with its first user message. */
+  scenario: Scenario;
+  validation: ScenarioValidation;
+  /** Derived: the checklist passed and every question was answered yes. */
+  verdict: "pass" | "fail";
+  /** The checklist reasons and the reason of every question answered no. */
+  reasons: string;
+  /** Whether the child-voice check was relaxed for this verdict (temporary,
+   * see `ScenarioValidation.relaxesChildVoice`). */
+  childVoiceRelaxed: boolean;
+  /** Whether this attempt kept the scenario of the previous one and wrote
+   * only its first user message again, because that message alone had been
+   * rejected. */
+  firstMessageRewrite: boolean;
+}
+
+export interface ExpandScenarioOptions {
+  /** How often the scenario of this seed was already rejected, in earlier
+   * calls. Counts toward the child-voice relaxation. */
+  priorRejections?: number;
+}
 
 export interface GenerateSeedsContext {
   getResponse: <T>(
+    request: TypedModelRequest<T>,
+    info?: SeedWriteInfo
+  ) => Promise<TypedModelResponse<T>>;
+  /**
+   * The model checking each seed's plausibility. When set, a rejected seed is
+   * regenerated for the same slot, with the rejection reasons, until it passes
+   * or the attempts run out. Undefined skips the check.
+   */
+  getValidationResponse?: <T>(
     request: TypedModelRequest<T>
   ) => Promise<TypedModelResponse<T>>;
+  /** Called after every verdict of the plausibility check, pass or fail. */
+  onValidation?: (event: SeedValidationEvent) => void | Promise<void>;
 }
 
 export interface ExpandScenarioContext {
@@ -25,6 +96,8 @@ export interface ExpandScenarioContext {
    * scenario itself stays English; only the generated first user message is
    * translated. Undefined keeps the default English. */
   language?: string;
+  /** Called after every verdict of the validation step, pass or fail. */
+  onValidation?: (event: ScenarioValidationEvent) => void | Promise<void>;
 }
 
 export interface JudgeModel {
@@ -55,16 +128,48 @@ export interface TestContext {
 export interface GenerationEvent<T> {
   total: number;
   items: readonly T[];
+  /**
+   * True when `items` are held out as private: they must be stored apart from
+   * the public items and never published.
+   */
+  private?: boolean;
+  /** Key of the seed slot `items` fills, for seed generation. */
+  key?: string;
 }
 
 export interface GenerateSeedsOptions {
-  seedsPerTask?: number;
+  /** Seeds to generate per risk. Defaults to `DEFAULT_TOTAL_SEEDS`. */
   totalSeeds?: number;
+  /** Restricts and renormalizes the age dimension of `distribution`. */
   ageRanges?: AgeRange[];
   riskIds?: readonly string[];
+  /** Restricts the motivations seeds are spread over. */
   motivations?: readonly string[];
+  /** Target population. Defaults to `PopulationDistribution.default()`. */
   distribution?: PopulationDistribution;
+  /** Makes every allocation reproducible. */
   randomSeed?: number;
+  /**
+   * Share of each risk's seeds held out as private, between 0 and 1. Defaults
+   * to `DEFAULT_PRIVATE_RATIO`; 0 keeps every seed public.
+   */
+  privateRatio?: number;
+  /**
+   * Slots to leave out: already filled by an earlier run of the same plan.
+   * See `planSeedSlots` for the keys.
+   */
+  skipSlotKeys?: ReadonlySet<string>;
+  /**
+   * Seeds written per slot before giving up on it, when the plausibility
+   * check is on. Defaults to `DEFAULT_SEED_VALIDATION_ATTEMPTS`. A slot that
+   * runs out yields no seed.
+   */
+  maxValidationAttempts?: number;
+  /**
+   * Rejections each slot already had in earlier runs, by slot key. Added to
+   * the count reported in `SeedWriteInfo.rejections`.
+   */
+  priorRejections?: Readonly<Record<string, number>>;
 }
 
 export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
@@ -86,7 +191,8 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
   ): AsyncGenerator<GenerationEvent<TScenarioSeed>>;
   expandScenario(
     c: ExpandScenarioContext,
-    seed: TScenarioSeed
+    seed: TScenarioSeed,
+    options?: ExpandScenarioOptions
   ): Promise<readonly TScenario[]>;
   mapScenarioToKeys(
     scenario: TScenario,

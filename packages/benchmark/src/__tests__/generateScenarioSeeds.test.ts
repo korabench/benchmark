@@ -1,9 +1,26 @@
 import * as R from "remeda";
+import * as v from "valibot";
 import {describe, expect, it} from "vitest";
-import {GenerateSeedsContext} from "../benchmark.js";
-import {kora} from "../kora.js";
+import {
+  GenerateSeedsContext,
+  SeedValidationEvent,
+  SeedWriteInfo,
+} from "../benchmark.js";
+import {DEFAULT_TOTAL_SEEDS, kora} from "../kora.js";
+import {AgeRange} from "../model/ageRange.js";
 import {populationDistributionPresets} from "../model/populationDistributionPresets.js";
-import {ModelScenarioSeed, ScenarioSeed} from "../model/scenarioSeed.js";
+import {RiskCategory} from "../model/riskCategory.js";
+import {
+  ModelScenarioSeed,
+  RefusalBehavior,
+  RiskSignalType,
+  ScenarioSeed,
+  SeedUse,
+  SocialContext,
+} from "../model/scenarioSeed.js";
+import {SeedValidation} from "../model/seedValidation.js";
+import {Packs} from "../packs/packs.js";
+import {planSeedSlots} from "../seedSlots.js";
 
 //
 // Fixtures.
@@ -11,15 +28,8 @@ import {ModelScenarioSeed, ScenarioSeed} from "../model/scenarioSeed.js";
 
 function makeFakeSeed(): ModelScenarioSeed {
   return {
-    childAge: 8,
-    childGender: "male",
-    childRaceEthnicity: "white",
-    childCognitiveMaturity: "medium",
-    childEmotionalMaturity: "medium",
     shortTitle: "Test seed",
-    riskSignalType: "subtle",
     coreBehavior: "Core behavior description for the test fixture.",
-    socialContext: "alone",
     context:
       "Context describing the situation in which the child is interacting.",
     notes: "",
@@ -30,204 +40,10 @@ interface Call {
   userPrompt: string;
 }
 
-function makeContext(calls: Call[]): GenerateSeedsContext {
-  return {
-    getResponse: async request => {
-      const userMessage = request.messages.find(m => m.role === "user");
-      calls.push({
-        userPrompt:
-          typeof userMessage?.content === "string" ? userMessage.content : "",
-      });
-      return {output: {seeds: [makeFakeSeed()]} as never};
-    },
-  };
-}
-
-async function runSeeds(
-  context: GenerateSeedsContext,
-  options?: Parameters<typeof kora.generateScenarioSeeds>[1]
-) {
-  const generator = kora.generateScenarioSeeds(context, options);
-  for await (const event of generator) {
-    void event;
-  }
-}
-
-async function collectSeeds(
-  context: GenerateSeedsContext,
-  options?: Parameters<typeof kora.generateScenarioSeeds>[1]
-): Promise<ScenarioSeed[]> {
-  const seeds: ScenarioSeed[] = [];
-  for await (const event of kora.generateScenarioSeeds(context, options)) {
-    seeds.push(...event.items);
-  }
-  return seeds;
-}
-
-//
-// Tests.
-//
-
-describe("generateScenarioSeeds riskIds filter", () => {
-  it("restricts generation to the specified risk IDs", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      seedsPerTask: 1,
-      ageRanges: ["7to9"],
-      riskIds: ["privacy_and_personal_data_protection"],
-    });
-
-    // 1 risk × 1 age × 10 motivations = 10 tasks.
-    expect(calls).toHaveLength(10);
-    expect(
-      calls.every(c =>
-        c.userPrompt.includes("Privacy & Personal Data Protection")
-      )
-    ).toBe(true);
-  });
-
-  it("supports multiple risk IDs", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      seedsPerTask: 1,
-      ageRanges: ["7to9"],
-      riskIds: [
-        "privacy_and_personal_data_protection",
-        "sensorimotor_displacement",
-      ],
-    });
-
-    // 2 risks × 1 age × 10 motivations = 20 tasks.
-    expect(calls).toHaveLength(20);
-  });
-
-  it("throws on unknown risk IDs", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await expect(
-      runSeeds(context, {
-        seedsPerTask: 1,
-        ageRanges: ["7to9"],
-        riskIds: ["not_a_real_risk"],
-      })
-    ).rejects.toThrow(
-      /Unknown risk IDs for taxonomy "kora@2": not_a_real_risk/
-    );
-  });
-
-  it("processes all risks when riskIds is omitted", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      seedsPerTask: 1,
-      ageRanges: ["7to9"],
-    });
-
-    // Full taxonomy: 25 risks × 1 age × 10 motivations = 250 tasks.
-    expect(calls.length).toBeGreaterThan(100);
-  });
-
-  it("restricts generation to the specified motivation", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      seedsPerTask: 1,
-      ageRanges: ["7to9"],
-      riskIds: ["privacy_and_personal_data_protection"],
-      motivations: ["Curiosity / Exploration"],
-    });
-
-    // 1 risk × 1 age × 1 motivation = 1 task.
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.userPrompt).toContain("Curiosity / Exploration");
-  });
-
-  it("throws on unknown motivation names", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await expect(
-      runSeeds(context, {
-        seedsPerTask: 1,
-        ageRanges: ["7to9"],
-        motivations: ["Not A Real Motivation"],
-      })
-    ).rejects.toThrow(/Unknown motivation names: Not A Real Motivation/);
-  });
-});
-
-describe("generateScenarioSeeds totalSeeds sampling", () => {
-  it("samples totalSeeds distinct (age, motivation) combos per risk", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      totalSeeds: 5,
-      riskIds: ["privacy_and_personal_data_protection"],
-    });
-
-    // totalSeeds=5 → 5 tasks, one seed each.
-    expect(calls).toHaveLength(5);
-  });
-
-  it("applies totalSeeds per risk when multiple risks are given", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await runSeeds(context, {
-      totalSeeds: 3,
-      riskIds: [
-        "privacy_and_personal_data_protection",
-        "sensorimotor_displacement",
-      ],
-    });
-
-    // 3 per risk × 2 risks = 6 tasks.
-    expect(calls).toHaveLength(6);
-  });
-
-  it("throws when totalSeeds exceeds the number of combos", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await expect(
-      runSeeds(context, {
-        totalSeeds: 31,
-        riskIds: ["privacy_and_personal_data_protection"],
-      })
-    ).rejects.toThrow(/--total-seeds \(31\) exceeds/);
-  });
-
-  it("rejects setting both seedsPerTask and totalSeeds", async () => {
-    const calls: Call[] = [];
-    const context = makeContext(calls);
-
-    await expect(
-      runSeeds(context, {
-        seedsPerTask: 2,
-        totalSeeds: 5,
-        riskIds: ["privacy_and_personal_data_protection"],
-      })
-    ).rejects.toThrow(/mutually exclusive/);
-  });
-});
-
-//
-// Distribution-mode tests.
-//
-
-const census = populationDistributionPresets["us-census-2020"]!;
-
-function makeReturn(
-  seed: ModelScenarioSeed,
-  calls: Call[]
+/** A fake seed model that records every prompt and always answers `output`. */
+function makeContext(
+  calls: Call[],
+  output: unknown = makeFakeSeed()
 ): GenerateSeedsContext {
   return {
     getResponse: async request => {
@@ -236,192 +52,526 @@ function makeReturn(
         userPrompt:
           typeof userMessage?.content === "string" ? userMessage.content : "",
       });
-      return {output: {seeds: [seed]} as never};
+      return {output: output as never};
     },
   };
 }
 
-describe("generateScenarioSeeds distribution mode", () => {
-  it("fires exactly `totalSeeds` LLM calls per risk with pinned demographics", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
+type Options = Parameters<typeof kora.generateScenarioSeeds>[1];
 
-    const seeds = await collectSeeds(context, {
+async function collectSeeds(
+  context: GenerateSeedsContext,
+  options?: Options
+): Promise<ScenarioSeed[]> {
+  const seeds: ScenarioSeed[] = [];
+  for await (const event of kora.generateScenarioSeeds(context, options)) {
+    seeds.push(...event.items);
+  }
+  return seeds;
+}
+
+const census = populationDistributionPresets["us-children-2020"]!;
+const privacy = "privacy_and_personal_data_protection";
+const riskCount = RiskCategory.listAll().flatMap(c => c.risks).length;
+
+/** Sorted per-value counts, e.g. [8, 8, 8, 9, 9, 9, 9]. */
+function sortedCounts<T>(items: readonly T[], key: (item: T) => string) {
+  return Object.values(R.countBy(items, key)).sort((a, b) => a - b);
+}
+
+//
+// Filters and defaults.
+//
+
+describe("generateScenarioSeeds filters", () => {
+  it("restricts generation to the specified risk IDs", async () => {
+    const calls: Call[] = [];
+
+    const seeds = await collectSeeds(makeContext(calls), {
+      totalSeeds: 10,
+      riskIds: [privacy],
+    });
+
+    // One model call per seed.
+    expect(calls).toHaveLength(10);
+    expect(seeds).toHaveLength(10);
+    expect(
+      calls.every(c =>
+        c.userPrompt.includes("Privacy & Personal Data Protection")
+      )
+    ).toBe(true);
+  });
+
+  it("applies totalSeeds per risk when multiple risks are given", async () => {
+    const calls: Call[] = [];
+
+    const seeds = await collectSeeds(makeContext(calls), {
+      totalSeeds: 3,
+      riskIds: [privacy, "sensorimotor_displacement"],
+    });
+
+    expect(calls).toHaveLength(6);
+    expect(R.countBy(seeds, s => s.riskId)).toEqual({
+      [privacy]: 3,
+      sensorimotor_displacement: 3,
+    });
+  });
+
+  it("throws on unknown risk IDs", async () => {
+    await expect(
+      collectSeeds(makeContext([]), {
+        totalSeeds: 1,
+        riskIds: ["not_a_real_risk"],
+      })
+    ).rejects.toThrow(
+      /Unknown risk IDs for taxonomy "kora@3": not_a_real_risk/
+    );
+  });
+
+  it("processes all risks when riskIds is omitted", async () => {
+    const calls: Call[] = [];
+
+    await collectSeeds(makeContext(calls), {totalSeeds: 2});
+
+    expect(calls).toHaveLength(2 * riskCount);
+  });
+
+  it("spreads seeds over the specified motivations only", async () => {
+    const calls: Call[] = [];
+
+    const seeds = await collectSeeds(makeContext(calls), {
+      totalSeeds: 4,
+      riskIds: [privacy],
+      motivations: ["Curiosity / Exploration"],
+    });
+
+    expect(seeds).toHaveLength(4);
+    expect(
+      seeds.every(s => s.motivation.name === "Curiosity / Exploration")
+    ).toBe(true);
+    expect(
+      calls.every(c => c.userPrompt.includes("Curiosity / Exploration"))
+    ).toBe(true);
+  });
+
+  it("throws on unknown motivation names", async () => {
+    await expect(
+      collectSeeds(makeContext([]), {
+        totalSeeds: 1,
+        motivations: ["Not A Real Motivation"],
+      })
+    ).rejects.toThrow(/Unknown motivation names: Not A Real Motivation/);
+  });
+
+  it("rejects a totalSeeds that is not a non-negative integer", async () => {
+    await expect(
+      collectSeeds(makeContext([]), {totalSeeds: Number.NaN})
+    ).rejects.toThrow(/--total-seeds must be a non-negative integer/);
+    await expect(
+      collectSeeds(makeContext([]), {totalSeeds: -1})
+    ).rejects.toThrow(/--total-seeds must be a non-negative integer/);
+  });
+
+  it("defaults to DEFAULT_TOTAL_SEEDS per risk and the census distribution", async () => {
+    const calls: Call[] = [];
+
+    const seeds = await collectSeeds(makeContext(calls), {
+      riskIds: [privacy],
+      randomSeed: 5,
+    });
+
+    expect(DEFAULT_TOTAL_SEEDS).toBe(75);
+    expect(seeds).toHaveLength(75);
+    // us-children-2020 at 75: each count is floor(75 * p) or one more.
+    const ages = R.countBy(seeds, s => s.ageRange);
+    expect([20, 21]).toContain(ages["7to9"]);
+    expect([20, 21]).toContain(ages["10to12"]);
+    expect([34, 35]).toContain(ages["13to17"]);
+    const genders = R.countBy(seeds, s => s.childGender);
+    expect([36, 37]).toContain(genders.girl);
+    expect([38, 39]).toContain(genders.boy);
+  });
+});
+
+//
+// Every dimension is allocated by code.
+//
+
+describe("generateScenarioSeeds dimension allocation", () => {
+  it("fires exactly `totalSeeds` model calls per risk, each with its assignment", async () => {
+    const calls: Call[] = [];
+
+    const seeds = await collectSeeds(makeContext(calls), {
       distribution: census,
       totalSeeds: 60,
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 1,
     });
 
     expect(calls).toHaveLength(60);
     expect(seeds).toHaveLength(60);
-    expect(calls.every(c => c.userPrompt.includes("PINNED DEMOGRAPHICS"))).toBe(
+    expect(calls.every(c => c.userPrompt.includes("ASSIGNED CHILD"))).toBe(
       true
     );
   });
 
-  it("overwrites LLM demographic drift with the pinned values", async () => {
-    // Fake LLM always returns gender="male" & race="white", which the allocator
-    // should overwrite.
-    const calls: Call[] = [];
-    const context = makeReturn(
-      {...makeFakeSeed(), childGender: "male", childRaceEthnicity: "white"},
-      calls
-    );
-
-    const seeds = await collectSeeds(context, {
+  it("matches the population marginals for age band, gender, SES and race", async () => {
+    const seeds = await collectSeeds(makeContext([]), {
       distribution: census,
       totalSeeds: 60,
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 42,
     });
 
-    expect(R.countBy(seeds, s => s.ageRange)).toEqual({
-      "7to9": 16,
-      "10to12": 16,
-      "13to17": 28,
-    });
-    expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 30, boy: 30});
-    expect(R.countBy(seeds, s => s.childSES!)).toEqual({
-      low: 17,
-      middle: 28,
-      high: 15,
-    });
-    expect(R.countBy(seeds, s => s.childRaceEthnicity)).toEqual({
-      white: 31,
-      hispanic: 15,
-      black: 8,
-      asian: 3,
-      other: 3,
-    });
+    // Each count is floor(60 * p) or one more; which values get the +1 is
+    // random by design so the remainder is not always on the same value.
+    const withinRounding = (
+      counts: Record<string, number>,
+      proportions: Record<string, number>
+    ) => {
+      expect(R.sum(Object.values(counts))).toBe(60);
+      Object.entries(proportions).forEach(([key, p]) => {
+        const floor = Math.floor(p * 60);
+        expect([floor, floor + 1]).toContain(counts[key] ?? 0);
+      });
+    };
+    withinRounding(
+      R.countBy(seeds, s => s.ageRange),
+      census.ageRange
+    );
+    withinRounding(
+      R.countBy(seeds, s => s.childGender),
+      census.gender
+    );
+    withinRounding(
+      R.countBy(seeds, s => s.childSES!),
+      census.ses
+    );
+    withinRounding(
+      R.countBy(seeds, s => s.childRaceEthnicity),
+      census.raceEthnicity
+    );
   });
 
-  it("clamps childAge to the pinned band even if the LLM drifts", async () => {
-    const calls: Call[] = [];
-    // LLM returns age=17 regardless — must be clamped to the pinned band.
-    const context = makeReturn({...makeFakeSeed(), childAge: 17}, calls);
-
-    const seeds = await collectSeeds(context, {
+  it("spreads exact ages evenly over every year of each band", async () => {
+    const seeds = await collectSeeds(makeContext([]), {
       distribution: census,
       totalSeeds: 60,
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 3,
     });
 
-    for (const s of seeds) {
-      if (s.ageRange === "7to9") expect(s.childAge).toBeLessThanOrEqual(9);
-      if (s.ageRange === "10to12") expect([10, 11, 12]).toContain(s.childAge);
+    for (const band of AgeRange.list) {
+      const inBand = seeds.filter(s => s.ageRange === band);
+      const counts = R.countBy(inBand, s => String(s.childAge));
+      // Every year of the band is used, and only those years.
+      expect(
+        Object.keys(counts)
+          .map(Number)
+          .sort((a, b) => a - b)
+      ).toEqual([...AgeRange.years(band)]);
+      const values = Object.values(counts);
+      expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
     }
   });
 
-  it("cycles motivations evenly (60 seeds / 10 motivations = 6 each)", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
-
-    const seeds = await collectSeeds(context, {
+  it("allocates motivation, social context, signal type, use and refusal behavior evenly", async () => {
+    const seeds = await collectSeeds(makeContext([]), {
       distribution: census,
       totalSeeds: 60,
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 1,
     });
 
-    const counts = R.countBy(seeds, s => s.motivation.name);
-    const values = Object.values(counts);
-    expect(values.every(v => v === 6)).toBe(true);
-    expect(values).toHaveLength(10);
+    // 60 / 10 motivations.
+    expect(sortedCounts(seeds, s => s.motivation.name)).toEqual(
+      Array.from({length: 10}, () => 6)
+    );
+    // 60 / 4.
+    expect(R.countBy(seeds, s => s.socialContext)).toEqual(
+      Object.fromEntries(SocialContext.list.map(value => [value, 15]))
+    );
+    // 60 / 3.
+    expect(R.countBy(seeds, s => s.riskSignalType)).toEqual(
+      Object.fromEntries(RiskSignalType.list.map(value => [value, 20]))
+    );
+    expect(R.countBy(seeds, s => s.refusalBehavior!)).toEqual(
+      Object.fromEntries(RefusalBehavior.list.map(value => [value, 20]))
+    );
+    // 60 / 6.
+    expect(R.countBy(seeds, s => s.use!)).toEqual(
+      Object.fromEntries(SeedUse.list.map(value => [value, 10]))
+    );
   });
 
-  it("throws when distribution is set without totalSeeds", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
+  it("does not always hand the rounding remainder to the same value", async () => {
+    // 10 seeds over 3 refusal behaviors: one gets 4 per risk. Across risks it
+    // must not be the same one every time. (The risk signal type has 3 values
+    // too, but the situation mask may move its counts.)
+    const seeds = await collectSeeds(makeContext([]), {
+      totalSeeds: 10,
+      randomSeed: 11,
+    });
 
-    await expect(
-      runSeeds(context, {
-        distribution: census,
-        riskIds: ["privacy_and_personal_data_protection"],
-      })
-    ).rejects.toThrow(/--distribution requires --total-seeds/);
+    const favoured = Object.values(R.groupBy(seeds, s => s.riskId)).map(
+      riskSeeds => {
+        const counts = R.countBy(riskSeeds, s => s.refusalBehavior!);
+        expect(Object.values(counts).sort()).toEqual([3, 3, 4]);
+        return RefusalBehavior.list.find(type => counts[type] === 4);
+      }
+    );
+    expect(new Set(favoured).size).toBeGreaterThan(1);
   });
 
-  it("throws when distribution is combined with seedsPerTask", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
+  it("takes no dimension from the model, whatever it returns", async () => {
+    // A model that ignores its schema and returns dimensions of its own.
+    const rogue = {
+      ...makeFakeSeed(),
+      childAge: 17,
+      childGender: "male",
+      childRaceEthnicity: "white",
+      riskSignalType: "direct",
+      socialContext: "alone",
+      use: "homework",
+      refusalBehavior: "insists",
+      childCognitiveMaturity: "medium",
+      childEmotionalMaturity: "medium",
+    };
 
-    await expect(
-      runSeeds(context, {
-        distribution: census,
-        totalSeeds: 10,
-        seedsPerTask: 3,
-        riskIds: ["privacy_and_personal_data_protection"],
-      })
-    ).rejects.toThrow(/mutually exclusive/);
+    const seeds = await collectSeeds(makeContext([], rogue), {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: [privacy],
+      randomSeed: 7,
+    });
+
+    expect(R.countBy(seeds, s => s.riskSignalType)).toEqual({
+      direct: 20,
+      subtle: 20,
+      ambiguous: 20,
+    });
+    // 48.8/51.2 over 60: 29-30 girls, whatever the model answered.
+    expect([29, 30]).toContain(R.countBy(seeds, s => s.childGender).girl);
+    expect(seeds.some(s => s.childAge !== 17)).toBe(true);
+    expect(new Set(seeds.map(s => s.socialContext)).size).toBe(4);
+    for (const seed of seeds) {
+      expect(seed.childCognitiveMaturity).toBeUndefined();
+      expect(seed.childEmotionalMaturity).toBeUndefined();
+      // Strict schema: a stray model-provided key would fail here.
+      expect(v.safeParse(ScenarioSeed.io, seed).success).toBe(true);
+    }
   });
 
-  it("honors --age-ranges by restricting to that band (100% of personas)", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
+  it("sets memory from the risk definition", async () => {
+    const seeds = await collectSeeds(makeContext([]), {
+      totalSeeds: 3,
+      riskIds: [privacy, "grooming_and_manipulation"],
+      randomSeed: 1,
+    });
 
-    const seeds = await collectSeeds(context, {
+    const memoryOf = (riskId: string) =>
+      new Set(seeds.filter(s => s.riskId === riskId).map(s => s.memory));
+    expect(memoryOf(privacy)).toEqual(new Set(["none"]));
+    expect(memoryOf("grooming_and_manipulation")).toEqual(
+      new Set(["established"])
+    );
+  });
+
+  it("renders the assigned signal type, use and social context, but not the refusal behavior", async () => {
+    const calls: Call[] = [];
+
+    await collectSeeds(makeContext(calls), {
+      distribution: census,
+      totalSeeds: 60,
+      riskIds: [privacy],
+      randomSeed: 1,
+    });
+
+    expect(calls.filter(c => c.userPrompt.includes("- subtle: "))).toHaveLength(
+      20
+    );
+    expect(
+      calls.filter(c => c.userPrompt.includes("- peer_pressure: "))
+    ).toHaveLength(15);
+    expect(
+      calls.filter(c => c.userPrompt.includes("- companionship: ")).length
+    ).toBeGreaterThanOrEqual(8);
+    // The refusal behavior drives later turns; it must not shape the seed.
+    expect(
+      calls.some(
+        c =>
+          c.userPrompt.includes("insists") ||
+          c.userPrompt.includes("works_around")
+      )
+    ).toBe(false);
+  });
+
+  it("honors ageRanges by restricting to that band (100% of seeds)", async () => {
+    const seeds = await collectSeeds(makeContext([]), {
       distribution: census,
       totalSeeds: 30,
       ageRanges: ["10to12"],
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 9,
     });
 
     expect(seeds).toHaveLength(30);
     expect(seeds.every(s => s.ageRange === "10to12")).toBe(true);
+    expect(seeds.every(s => [10, 11, 12].includes(s.childAge))).toBe(true);
     // Other dimensions still match the preset marginals.
     expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 15, boy: 15});
   });
 
-  it("is reproducible across runs with the same randomSeed", async () => {
-    const callsA: Call[] = [];
-    const callsB: Call[] = [];
-    const ctxA = makeReturn(makeFakeSeed(), callsA);
-    const ctxB = makeReturn(makeFakeSeed(), callsB);
+  it("holds out the same 30% of every risk's seeds as private by default", async () => {
+    const events: {riskId: string; isPrivate: boolean}[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+      totalSeeds: 75,
+      randomSeed: 3,
+    })) {
+      events.push(
+        ...event.items.map(seed => ({
+          riskId: seed.riskId,
+          isPrivate: event.private === true,
+        }))
+      );
+    }
 
-    const a = await collectSeeds(ctxA, {
+    const privateCounts = R.pipe(
+      events,
+      R.groupBy(e => e.riskId),
+      R.mapValues(group => group.filter(e => e.isPrivate).length)
+    );
+    expect(Object.keys(privateCounts)).toHaveLength(riskCount);
+    expect(R.unique(Object.values(privateCounts))).toEqual([23]);
+  });
+
+  it("gives public and private seeds the same distribution on every dimension", async () => {
+    const seeds: {seed: ScenarioSeed; isPrivate: boolean}[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+      totalSeeds: 75,
+      randomSeed: 3,
+    })) {
+      seeds.push(
+        ...event.items.map(seed => ({seed, isPrivate: event.private === true}))
+      );
+    }
+    const share = seeds.filter(s => s.isPrivate).length / seeds.length;
+    const dimensions: ((seed: ScenarioSeed) => string | number | undefined)[] =
+      [
+        s => s.ageRange,
+        s => s.childAge,
+        s => s.childGender,
+        s => s.childRaceEthnicity,
+        s => s.childSES,
+        s => s.motivation.name,
+        s => s.socialContext,
+        s => s.riskSignalType,
+        s => s.use,
+        s => s.refusalBehavior,
+      ];
+
+    const gaps = dimensions.flatMap(dimension =>
+      Object.values(R.groupBy(seeds, s => String(dimension(s.seed)))).map(
+        group =>
+          Math.abs(group.filter(s => s.isPrivate).length - group.length * share)
+      )
+    );
+    // Every value holds out the overall private share, to within two seeds.
+    expect(Math.max(...gaps)).toBeLessThan(2);
+
+    // Every situation type keeps a public seed.
+    const publicBySituation = R.pipe(
+      seeds,
+      R.groupBy(s => `${s.seed.goldStandardId}|${s.seed.situationType}`),
+      R.mapValues(group => group.filter(s => !s.isPrivate).length)
+    );
+    expect(Math.min(...Object.values(publicBySituation))).toBeGreaterThan(0);
+  });
+
+  it("keeps every seed public at privateRatio 0, with the same assignments", async () => {
+    const collect = async (privateRatio: number) => {
+      const out: {use?: string; childAge: number; isPrivate: boolean}[] = [];
+      for await (const event of kora.generateScenarioSeeds(makeContext([]), {
+        totalSeeds: 12,
+        randomSeed: 9,
+        privateRatio,
+      })) {
+        out.push(
+          ...event.items.map(seed => ({
+            use: seed.use,
+            childAge: seed.childAge,
+            isPrivate: event.private === true,
+          }))
+        );
+      }
+      return out;
+    };
+    const dims = (seeds: Awaited<ReturnType<typeof collect>>) =>
+      seeds.map(s => `${s.use}/${s.childAge}`).sort();
+
+    const allPublic = await collect(0);
+    const split = await collect(0.5);
+    expect(allPublic.some(s => s.isPrivate)).toBe(false);
+    expect(split.filter(s => s.isPrivate)).toHaveLength(split.length / 2);
+    expect(dims(split)).toEqual(dims(allPublic));
+  });
+
+  it("rejects a privateRatio outside [0, 1]", async () => {
+    await expect(
+      collectSeeds(makeContext([]), {privateRatio: 1.5})
+    ).rejects.toThrow(/private-ratio/);
+  });
+
+  it("is reproducible across runs with the same randomSeed", async () => {
+    const options: Options = {
       distribution: census,
       totalSeeds: 30,
-      riskIds: ["privacy_and_personal_data_protection"],
+      riskIds: [privacy],
       randomSeed: 77,
-    });
-    const b = await collectSeeds(ctxB, {
-      distribution: census,
-      totalSeeds: 30,
-      riskIds: ["privacy_and_personal_data_protection"],
-      randomSeed: 77,
-    });
+    };
+
+    const a = await collectSeeds(makeContext([]), options);
+    const b = await collectSeeds(makeContext([]), options);
+    const c = await collectSeeds(makeContext([]), {...options, randomSeed: 78});
 
     const tuples = (ss: ScenarioSeed[]) =>
       ss.map(s => [
         s.ageRange,
+        s.childAge,
         s.childGender,
         s.childSES,
         s.childRaceEthnicity,
         s.motivation.name,
+        s.socialContext,
+        s.riskSignalType,
+        s.use,
+        s.refusalBehavior,
+        s.memory,
         s.scenarioFlavorId,
       ]);
     expect(tuples(a)).toEqual(tuples(b));
+    expect(tuples(a)).not.toEqual(tuples(c));
   });
 });
 
 //
-// Flavor-distribution tests.
+// Flavor allocation.
 //
 
 describe("generateScenarioSeeds scenario-flavor allocation", () => {
-  it("matches the per-risk flavor marginals when the risk defines flavors (7.3)", async () => {
-    const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
+  // No bundled risk defines flavors any more; the legacy privacy risk does.
+  const withLegacyTaxonomy = <T>(fn: () => T): T =>
+    Packs.run({taxonomy: Packs.legacyTaxonomy()}, fn);
 
-    const seeds = await collectSeeds(context, {
-      distribution: census,
-      totalSeeds: 20,
-      riskIds: ["privacy_and_personal_data_protection"],
-      randomSeed: 1,
-    });
+  it("matches the per-risk flavor marginals when the risk defines flavors (legacy 7.3)", async () => {
+    const seeds = await withLegacyTaxonomy(() =>
+      collectSeeds(makeContext([]), {
+        distribution: census,
+        totalSeeds: 20,
+        riskIds: [privacy],
+        randomSeed: 1,
+      })
+    );
 
     expect(seeds).toHaveLength(20);
     expect(R.countBy(seeds, s => s.scenarioFlavorId!)).toEqual({
@@ -434,14 +584,15 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
 
   it("threads each pinned flavor into its own LLM prompt", async () => {
     const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
 
-    await collectSeeds(context, {
-      distribution: census,
-      totalSeeds: 20,
-      riskIds: ["privacy_and_personal_data_protection"],
-      randomSeed: 1,
-    });
+    await withLegacyTaxonomy(() =>
+      collectSeeds(makeContext(calls), {
+        distribution: census,
+        totalSeeds: 20,
+        riskIds: [privacy],
+        randomSeed: 1,
+      })
+    );
 
     expect(
       calls.every(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))
@@ -453,9 +604,8 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
 
   it("leaves scenarioFlavorId undefined for risks without flavors", async () => {
     const calls: Call[] = [];
-    const context = makeReturn(makeFakeSeed(), calls);
 
-    const seeds = await collectSeeds(context, {
+    const seeds = await collectSeeds(makeContext(calls), {
       distribution: census,
       totalSeeds: 10,
       riskIds: ["sensorimotor_displacement"],
@@ -467,5 +617,176 @@ describe("generateScenarioSeeds scenario-flavor allocation", () => {
     expect(
       calls.some(c => c.userPrompt.includes("PINNED SCENARIO FLAVOR"))
     ).toBe(false);
+  });
+});
+
+//
+// Plausibility check.
+//
+
+function makeValidation(rejected: boolean): SeedValidation {
+  const yes = {reason: "Fine as written.", answer: "yes" as const};
+  return {
+    plausibleForChild: yes,
+    matchesSituation: rejected
+      ? {reason: "Not an instance of the situation type.", answer: "no"}
+      : yes,
+    showsMotivation: yes,
+    showsUse: yes,
+    addressesAI: yes,
+  };
+}
+
+function userPromptOf(request: {
+  messages: readonly {role: string; content: unknown}[];
+}): string {
+  return String(request.messages.find(m => m.role === "user")?.content ?? "");
+}
+
+/**
+ * A seed model that writes a "BAD" core behavior until it is given feedback
+ * (or always, with `alwaysBad`), and a validator that rejects exactly those.
+ * Both decide from the prompt: calls of different slots interleave.
+ */
+function makeCheckedContext(options: {alwaysBad?: boolean} = {}) {
+  const seedPrompts: string[] = [];
+  const writes: SeedWriteInfo[] = [];
+  const events: SeedValidationEvent[] = [];
+  const context: GenerateSeedsContext = {
+    getResponse: async (request, info) => {
+      const prompt = userPromptOf(request);
+      seedPrompts.push(prompt);
+      if (info) writes.push(info);
+      const bad = options.alwaysBad || !prompt.includes("REJECTION REASONS");
+      return {
+        output: {
+          ...makeFakeSeed(),
+          coreBehavior: `${bad ? "BAD" : "GOOD"} core behavior for the fixture.`,
+        } as never,
+      };
+    },
+    getValidationResponse: async request => ({
+      output: makeValidation(
+        userPromptOf(request).includes("Core Behavior: BAD")
+      ) as never,
+    }),
+    onValidation: event => {
+      events.push(event);
+    },
+  };
+  return {context, seedPrompts, writes, events};
+}
+
+describe("generateScenarioSeeds plausibility check", () => {
+  const options: Options = {
+    riskIds: [privacy],
+    totalSeeds: 6,
+    randomSeed: 7,
+    distribution: census,
+  };
+
+  it("makes one call per seed and reports slot keys without a validator", async () => {
+    const calls: Call[] = [];
+    const keys: (string | undefined)[] = [];
+    for await (const event of kora.generateScenarioSeeds(
+      makeContext(calls),
+      options
+    )) {
+      if (event.items.length > 0) keys.push(event.key);
+    }
+    expect(calls).toHaveLength(6);
+    expect([...keys].sort()).toEqual(
+      planSeedSlots(options).map(slot => slot.key)
+    );
+  });
+
+  it("writes a rejected seed again for the same slot, with the reasons", async () => {
+    const {context, seedPrompts, events} = makeCheckedContext();
+    const plain = await collectSeeds(makeContext([]), options);
+    const seeds = await collectSeeds(context, options);
+
+    expect(seeds).toHaveLength(6);
+    expect(seeds.every(s => s.coreBehavior.startsWith("GOOD"))).toBe(true);
+    expect(seedPrompts).toHaveLength(12);
+    expect(
+      seedPrompts.filter(p =>
+        p.includes("matchesSituation: Not an instance of the situation type.")
+      )
+    ).toHaveLength(6);
+
+    // Nothing but the narrative moved: the planned population is obtained.
+    const dimensions = (s: ScenarioSeed) =>
+      JSON.stringify(R.omit(s, ["id", "coreBehavior"]));
+    expect(seeds.map(dimensions).sort()).toEqual(plain.map(dimensions).sort());
+
+    const byKey = R.groupBy(events, e => e.key);
+    expect(Object.keys(byKey)).toHaveLength(6);
+    Object.values(byKey).forEach(slotEvents => {
+      expect(slotEvents.map(e => [e.attempt, e.verdict])).toEqual([
+        [1, "fail"],
+        [2, "pass"],
+      ]);
+    });
+  });
+
+  it("tells the seed model how often the slot was rejected, earlier runs included", async () => {
+    const {context, writes, events} = makeCheckedContext();
+    const [first, second] = planSeedSlots(options).map(slot => slot.key);
+    await collectSeeds(context, {
+      ...options,
+      priorRejections: {[first!]: 4},
+    });
+
+    const rejectionsOf = (key: string) =>
+      writes.filter(w => w.key === key).map(w => w.rejections);
+    expect(rejectionsOf(first!)).toEqual([4, 5]);
+    expect(rejectionsOf(second!)).toEqual([0, 1]);
+    expect(events.filter(e => e.key === first).map(e => e.rejections)).toEqual([
+      4, 5,
+    ]);
+  });
+
+  it("gives up on a slot after the attempt cap and yields nothing for it", async () => {
+    const {context, seedPrompts, events} = makeCheckedContext({
+      alwaysBad: true,
+    });
+    const seeds = await collectSeeds(context, {
+      ...options,
+      maxValidationAttempts: 2,
+    });
+    expect(seeds).toHaveLength(0);
+    expect(seedPrompts).toHaveLength(12);
+    expect(events.every(e => e.verdict === "fail")).toBe(true);
+    expect(events.map(e => e.maxAttempts)).toEqual(Array(12).fill(2));
+  });
+
+  it("skips the slots it is told are already filled", async () => {
+    const slots = planSeedSlots(options);
+    const skipped = new Set(slots.slice(0, 4).map(slot => slot.key));
+    const calls: Call[] = [];
+    const keys: (string | undefined)[] = [];
+    for await (const event of kora.generateScenarioSeeds(makeContext(calls), {
+      ...options,
+      skipSlotKeys: skipped,
+    })) {
+      expect(event.total).toBe(6);
+      if (event.items.length > 0) keys.push(event.key);
+    }
+    expect(calls).toHaveLength(2);
+    expect([...keys].sort()).toEqual(slots.slice(4).map(slot => slot.key));
+  });
+
+  it("lets a validator error through without recording a verdict", async () => {
+    const {context, events} = makeCheckedContext();
+    const failing: GenerateSeedsContext = {
+      ...context,
+      getValidationResponse: async () => {
+        throw new Error("validator unavailable");
+      },
+    };
+    await expect(collectSeeds(failing, options)).rejects.toThrow(
+      "validator unavailable"
+    );
+    expect(events).toHaveLength(0);
   });
 });

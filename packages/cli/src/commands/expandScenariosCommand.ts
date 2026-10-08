@@ -2,9 +2,12 @@ import {
   ExpandScenarioContext,
   kora,
   Packs,
+  relabelSignalType,
+  relabelUse,
   RiskTaxonomy,
   Scenario,
   ScenarioSeed,
+  ScenarioValidation,
   ScenarioValidationError,
   Stamp,
 } from "@korabench/benchmark";
@@ -12,6 +15,7 @@ import {Script} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import * as R from "remeda";
 import {consume, flatTransform} from "streaming-iterables";
 import * as v from "valibot";
 import {Program} from "../cli.js";
@@ -31,8 +35,20 @@ import {
   hasCachedFiles,
   listCachedFiles,
 } from "./shared/cacheStamp.js";
+import {
+  buildPassRateReport,
+  formatPassRateReport,
+  writePassRateReport,
+} from "./shared/passRateReport.js";
+import {isPrivatePath, privatePathFor} from "./shared/privatePath.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
 import {assertInputConforms} from "./shared/validateInputFile.js";
+import {
+  openLedger,
+  populationRowOf,
+  readLedger,
+  validationPathsFor,
+} from "./shared/validationLedger.js";
 
 async function* readSeedsFromJsonl(
   filePath: string,
@@ -49,16 +65,43 @@ async function* readSeedsFromJsonl(
   }
 }
 
-async function countSeeds(
-  filePath: string,
+/** The seeds of every file in turn. */
+async function* readSeedsFromFiles(
+  filePaths: readonly string[],
   riskIdFilter?: ReadonlySet<string>
-): Promise<number> {
-  let count = 0;
-  for await (const seed of readSeedsFromJsonl(filePath, riskIdFilter)) {
-    void seed;
-    count++;
+): AsyncGenerator<ScenarioSeed> {
+  for (const filePath of filePaths) {
+    yield* readSeedsFromJsonl(filePath, riskIdFilter);
   }
-  return count;
+}
+
+async function readSeedIds(
+  filePaths: readonly string[],
+  riskIdFilter?: ReadonlySet<string>
+): Promise<string[]> {
+  const ids: string[] = [];
+  for await (const seed of readSeedsFromFiles(filePaths, riskIdFilter)) {
+    ids.push(seed.id);
+  }
+  return ids;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return fs.access(filePath).then(
+    () => true,
+    () => false
+  );
+}
+
+/**
+ * The private seed files read along with `seedsFilePath`: the file itself when
+ * it is private, else its private sibling when there is one.
+ */
+async function privateSeedFiles(seedsFilePath: string): Promise<string[]> {
+  const privatePath = privatePathFor(seedsFilePath);
+  return isPrivatePath(seedsFilePath) || (await fileExists(privatePath))
+    ? [privatePath]
+    : [];
 }
 
 export async function expandScenariosCommand(
@@ -77,10 +120,25 @@ export async function expandScenariosCommand(
     `Expanding scenarios using ${chainLabel(roles.expansion)} (user: ${chainLabel(roles.expansionUser)})...`
   );
   const riskIdFilter = resolveRiskIdFilter(riskIds);
-  const seedCount = await assertInputConforms(seedsFilePath, "seeds");
-  console.log(
-    `Validated ${seedCount} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  // Private seeds expand into private scenarios: both stay out of the published
+  // corpus, in files git ignores.
+  const privateSeedPaths = await privateSeedFiles(seedsFilePath);
+  const seedPaths = R.unique([seedsFilePath, ...privateSeedPaths]);
+  const privateOutputFilePath = privatePathFor(outputFilePath);
+  const seedCounts = await Promise.all(
+    seedPaths.map(filePath => assertInputConforms(filePath, "seeds"))
   );
+  console.log(
+    `Validated ${R.sum(seedCounts)} seed(s) against taxonomy "${RiskTaxonomy.label(Packs.current().taxonomy)}".`
+  );
+  const privateSeedIds = new Set(
+    await readSeedIds(privateSeedPaths, riskIdFilter)
+  );
+  if (privateSeedPaths.length > 0) {
+    console.log(
+      `Private seeds: ${privateSeedIds.size} from ${privateSeedPaths.join(", ")} → ${privateOutputFilePath} (git-ignored)`
+    );
+  }
   const stamp = await buildRunStamp({
     effective,
     modelsJsonPath,
@@ -112,15 +170,56 @@ export async function expandScenariosCommand(
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
 
   // Clear output file if no process in progress (no temp files)
-  if (!(await hasCachedFiles(tempDir))) {
+  const fresh = !(await hasCachedFiles(tempDir));
+  if (fresh) {
     await fs.mkdir(outputDir, {recursive: true});
     await fs.writeFile(outputFilePath, "");
+    if (privateSeedPaths.length > 0) {
+      await fs.writeFile(privateOutputFilePath, "");
+    }
   }
 
   await fs.mkdir(tempDir, {recursive: true});
   await assertResumable(tempDir, stamp);
 
-  const totalSeeds = await countSeeds(seedsFilePath, riskIdFilter);
+  // Every verdict of the validation step is recorded, including a rejection
+  // followed by a retry that passes, so that the pass rate can be reported.
+  const paths = validationPathsFor(outputFilePath);
+  const ledger = await openLedger(paths.ledger, {fresh});
+  // Rejections of earlier runs count toward the child-voice relaxation.
+  const priorRows = (await readLedger(paths.ledger)).filter(
+    row => row.stage === "expansion"
+  );
+  const priorRejections = R.countBy(
+    priorRows.filter(row => row.verdict === "fail"),
+    row => row.key
+  );
+  // Seeds an earlier run relabeled: each relabel is applied again, the same
+  // way, before their chain starts.
+  const priorRelabels = new Map<string, {signal: boolean; use: boolean}>();
+  for (const row of priorRows) {
+    const prior = priorRelabels.get(row.key) ?? {signal: false, use: false};
+    priorRelabels.set(row.key, {
+      signal:
+        prior.signal ||
+        row.relabeledFrom !== undefined ||
+        row.relabeled?.riskSignalType !== undefined,
+      use: prior.use || row.relabeled?.use !== undefined,
+    });
+  }
+  const reportValidation = async () => {
+    const report = buildPassRateReport({
+      stage: "expansion",
+      rows: await readLedger(paths.ledger),
+    });
+    await writePassRateReport(paths, report);
+    console.log(`\n${formatPassRateReport(report)}`);
+    console.log(
+      `Report → ${paths.reportMd} (and .json); every verdict → ${paths.ledger}`
+    );
+  };
+
+  const totalSeeds = (await readSeedIds(seedPaths, riskIdFilter)).length;
   const progress = Script.progress(totalSeeds, text =>
     process.stdout.write(text)
   );
@@ -140,59 +239,165 @@ export async function expandScenariosCommand(
           // Not yet processed.
         }
 
-        let lastError: unknown;
-        for (let i = 0; i < expansionModels.length; i++) {
-          const {label, model} = expansionModels[i]!;
-          const context: ExpandScenarioContext = {
-            language,
-            getResponse: async request => ({
-              output: await model.getStructuredResponse(request),
-            }),
-            getUserResponse: async request => ({
-              output: await userModel.getTextResponse(request),
-            }),
-          };
+        // A seed that stays stuck on the first-message signal type, or on a
+        // use the mask forbids, is relabeled once per dimension
+        // (`relabelSeed.ts`); a resumed run reads the relabels back from the
+        // ledger and goes on with the same seed.
+        const prior = priorRelabels.get(seed.id);
+        let current: ScenarioSeed = seed;
+        if (prior?.signal) current = relabelSignalType(current) ?? current;
+        if (prior?.use) current = relabelUse(current) ?? current;
+        let rejections = priorRejections[seed.id] ?? 0;
 
-          try {
-            const scenarios = await kora.expandScenario(context, seed);
-            await fs.writeFile(tempFile, JSON.stringify(scenarios, null, 2));
-            progress.increment(true);
-            return [];
-          } catch (error) {
-            lastError = error;
-            const next = expansionModels[i + 1];
-            const reason =
-              error instanceof ScenarioValidationError
-                ? `validation failed (${error.lastReasons.slice(0, 200)})`
-                : `error (${error instanceof Error ? error.message.slice(0, 200) : String(error)})`;
-
-            if (next) {
-              console.error(
-                `[fallback] expandScenario on ${label} for seed ${seed.id}: ${reason}; trying ${next.label}`
-              );
-              continue;
+        // The chain of expansion models, each tried until it exhausts its
+        // attempts. Resolves to the scenarios, or to the last validation
+        // error with whether every model was stuck on the signal type.
+        const expandWithChain = async (): Promise<
+          | {scenarios: readonly Scenario[]}
+          | {
+              error: ScenarioValidationError;
+              stuckOnSignalType: boolean;
+              stuckOnUse: boolean;
             }
+          | {thrown: unknown}
+        > => {
+          let stuckOnSignalType = true;
+          let stuckOnUse = true;
+          for (let i = 0; i < expansionModels.length; i++) {
+            const {label, model} = expansionModels[i]!;
+            const context: ExpandScenarioContext = {
+              language,
+              getResponse: async request => ({
+                output: await model.getStructuredResponse(request),
+              }),
+              getUserResponse: async request => ({
+                output: await userModel.getTextResponse(request),
+              }),
+              onValidation: event => {
+                if (event.verdict === "fail") {
+                  rejections++;
+                }
+                return ledger.record({
+                  stage: "expansion",
+                  key: seed.id,
+                  seedId: seed.id,
+                  verdict: event.verdict,
+                  questions: ScenarioValidation.questionsOf(event.validation),
+                  reasons: event.reasons,
+                  ...(event.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
+                  ...(event.firstMessageRewrite
+                    ? {firstMessageRewrite: true}
+                    : {}),
+                  ...(current.relabeled ? {relabeled: current.relabeled} : {}),
+                  // The expansion model validates its own output.
+                  generatorModel: label,
+                  validatorModel: label,
+                  ...(event.verdict === "fail"
+                    ? {
+                        rejected: {
+                          shortTitle: event.scenario.shortTitle,
+                          narrative: event.scenario.narrative,
+                          firstUserMessage: event.scenario.firstUserMessage,
+                        },
+                      }
+                    : {}),
+                  population: populationRowOf(
+                    current,
+                    privateSeedIds.has(seed.id)
+                  ),
+                });
+              },
+            };
 
-            // Last model exhausted.
-            if (error instanceof ScenarioValidationError) {
-              console.error(
-                `\nValidation failed for seed ${seed.id} (all models exhausted): ${error.lastReasons}`
-              );
-              failureCount++;
-              progress.increment(false);
-              return [];
+            try {
+              const scenarios = await kora.expandScenario(context, current, {
+                priorRejections: rejections,
+              });
+              return {scenarios};
+            } catch (error) {
+              const next = expansionModels[i + 1];
+              const reason =
+                error instanceof ScenarioValidationError
+                  ? `validation failed (${error.lastReasons.slice(0, 200)})`
+                  : `error (${error instanceof Error ? error.message.slice(0, 200) : String(error)})`;
+              if (error instanceof ScenarioValidationError) {
+                stuckOnSignalType &&= error.stuckOnSignalType;
+                stuckOnUse &&= error.stuckOnUse;
+              }
+
+              if (next) {
+                console.error(
+                  `[fallback] expandScenario on ${label} for seed ${seed.id}: ${reason}; trying ${next.label}`
+                );
+                continue;
+              }
+
+              // Last model exhausted.
+              if (error instanceof ScenarioValidationError) {
+                return {error, stuckOnSignalType, stuckOnUse};
+              }
+              // A thrown error (a model call that failed for good, a first
+              // message that kept its placeholders) fails this seed for the
+              // run, not the run: the next pass retries it.
+              return {thrown: error};
             }
-            throw error;
+          }
+          throw new Error("No expansion model configured.");
+        };
+
+        let outcome = await expandWithChain();
+        if ("error" in outcome && outcome.stuckOnSignalType) {
+          const relabeled = relabelSignalType(current);
+          if (relabeled) {
+            console.error(
+              `\n[relabel] seed ${seed.id}: every attempt rejected the first user message on the risk signal type; ${current.riskSignalType} → ${relabeled.riskSignalType}, trying again`
+            );
+            current = relabeled;
+            outcome = await expandWithChain();
+          }
+        }
+        if ("error" in outcome && outcome.stuckOnUse) {
+          const relabeled = relabelUse(current);
+          if (relabeled) {
+            console.error(
+              `\n[relabel] seed ${seed.id}: every attempt rejected the scenario on a use its situation type forbids; ${current.use} → ${relabeled.use}, trying again`
+            );
+            current = relabeled;
+            outcome = await expandWithChain();
           }
         }
 
-        throw lastError;
+        if ("scenarios" in outcome) {
+          await fs.writeFile(
+            tempFile,
+            JSON.stringify(outcome.scenarios, null, 2)
+          );
+          progress.increment(true);
+          return [];
+        }
+        if ("thrown" in outcome) {
+          const message =
+            outcome.thrown instanceof Error
+              ? outcome.thrown.message
+              : String(outcome.thrown);
+          console.error(
+            `\nExpansion failed for seed ${seed.id} (all models exhausted): ${message.slice(0, 300)}`
+          );
+        } else {
+          console.error(
+            `\nValidation failed for seed ${seed.id} (all models exhausted): ${outcome.error.lastReasons}`
+          );
+        }
+        failureCount++;
+        progress.increment(false);
+        return [];
       },
-      readSeedsFromJsonl(seedsFilePath, riskIdFilter)
+      readSeedsFromFiles(seedPaths, riskIdFilter)
     )
   );
 
   progress.finish();
+  await reportValidation();
 
   if (failureCount > 0) {
     console.log(
@@ -205,19 +410,36 @@ export async function expandScenariosCommand(
   // Build final output from temp files.
   await fs.mkdir(outputDir, {recursive: true});
   const tempFiles = await listCachedFiles(tempDir);
-  let scenarioCount = 0;
+  let publicCount = 0;
+  let privateCount = 0;
 
   await fs.writeFile(outputFilePath, "");
+  if (privateSeedPaths.length > 0) {
+    await fs.writeFile(privateOutputFilePath, "");
+  }
   for (const file of tempFiles) {
     const content = await fs.readFile(path.join(tempDir, file), "utf-8");
     const scenarios = JSON.parse(content) as Scenario[];
     for (const scenario of scenarios) {
-      await fs.appendFile(outputFilePath, JSON.stringify(scenario) + "\n");
-      scenarioCount++;
+      const isPrivate = privateSeedIds.has(scenario.seed.id);
+      await fs.appendFile(
+        isPrivate ? privateOutputFilePath : outputFilePath,
+        JSON.stringify(scenario) + "\n"
+      );
+      if (isPrivate) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
     }
   }
 
   await fs.rm(tempDir, {recursive: true, force: true});
 
-  console.log(`\nExpanded ${scenarioCount} scenarios → ${outputFilePath}`);
+  console.log(
+    privateOutputFilePath === outputFilePath || privateCount === 0
+      ? `\nExpanded ${publicCount + privateCount} scenarios → ${outputFilePath}`
+      : `\nExpanded ${publicCount} public scenarios → ${outputFilePath}\n` +
+          `Expanded ${privateCount} private scenarios → ${privateOutputFilePath}`
+  );
 }

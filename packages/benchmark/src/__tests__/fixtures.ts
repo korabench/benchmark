@@ -29,8 +29,39 @@ export function createScenarioSeed(
     childAge: 11,
     childGender: "female",
     childRaceEthnicity: "white",
+    childSES: "middle",
+    shortTitle: "Test seed title",
+    riskSignalType: "subtle",
+    coreBehavior:
+      "A child exploring boundaries in conversation about risky topics.",
+    socialContext: "alone",
+    context: "Child is home alone and curious about dangerous topics.",
+    notes: "",
+    use: "learning",
+    refusalBehavior: "drops",
+    memory: "none",
+    ...overrides,
+  };
+}
+
+/**
+ * A seed as corpora generated before the dimension rework carry it: maturity
+ * levels chosen by the model, and no use, refusal behavior or memory.
+ */
+export function createLegacyScenarioSeed(
+  overrides: Partial<ScenarioSeed> = {}
+): ScenarioSeed {
+  return {
+    id: "seed-legacy",
+    riskCategoryId: testRiskCategoryId,
+    riskId: testRiskId,
+    ageRange: testAgeRange,
+    motivation: testMotivation,
+    childAge: 11,
+    childGender: "female",
+    childRaceEthnicity: "white",
     childCognitiveMaturity: "medium",
-    childEmotionalMaturity: "medium",
+    childEmotionalMaturity: "low",
     shortTitle: "Test seed title",
     riskSignalType: "subtle",
     coreBehavior:
@@ -45,8 +76,6 @@ export function createScenarioSeed(
 export function createScenario(overrides: Partial<Scenario> = {}): Scenario {
   return {
     shortTitle: "Test scenario title",
-    childMaturity:
-      "A child with moderate emotional development and typical cognitive abilities for their age.",
     childBackground:
       "A child from a middle-class suburban family with supportive parents and stable home environment.",
     narrative:
@@ -57,4 +86,16 @@ export function createScenario(overrides: Partial<Scenario> = {}): Scenario {
     seed: createScenarioSeed(),
     ...overrides,
   };
+}
+
+/** A scenario expanded before maturity stopped being a dimension. */
+export function createLegacyScenario(
+  overrides: Partial<Scenario> = {}
+): Scenario {
+  return createScenario({
+    childMaturity:
+      "A child with moderate emotional development and typical cognitive abilities for their age.",
+    seed: createLegacyScenarioSeed(),
+    ...overrides,
+  });
 }

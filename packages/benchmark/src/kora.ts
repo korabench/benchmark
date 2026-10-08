@@ -2,30 +2,26 @@ import {ModelMessage, SchemaWithOutput} from "@korabench/core";
 import * as R from "remeda";
 import {flatTransform} from "streaming-iterables";
 import {v4 as uuid} from "uuid";
-import * as v from "valibot";
 import {
   aggregateMechanismAssessments,
   aggregateTestAssessments,
 } from "./aggregateAssessments.js";
-import {allocateFlavors} from "./allocation/allocateFlavors.js";
 import {
-  allocatePersonas,
-  PinnedDemographics,
-} from "./allocation/allocatePersonas.js";
-import {makeRng, shuffleWith} from "./allocation/rng.js";
-import {Benchmark, JudgeModel, TraceEvent} from "./benchmark.js";
+  Benchmark,
+  GenerateSeedsContext,
+  JudgeModel,
+  TraceEvent,
+} from "./benchmark.js";
 import {
   generateFirstUserMessage,
   generateNextUserMessage,
 } from "./generateUserMessage.js";
-import {AgeRange} from "./model/ageRange.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
 import {MechanismAssessment} from "./model/mechanismAssessment.js";
 import {Motivation} from "./model/motivation.js";
-import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {
   RunAssessmentSums,
@@ -39,44 +35,150 @@ import {
   ModelScenarioWithMemory,
   Scenario,
 } from "./model/scenario.js";
-import {ScenarioFlavor} from "./model/scenarioFlavor.js";
 import {ScenarioKey} from "./model/scenarioKey.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
 import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
+import {SeedValidation} from "./model/seedValidation.js";
 import {TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
-import {Conformance} from "./packs/conformance.js";
 import {Packs} from "./packs/packs.js";
 import {conversationToAssessmentPrompt} from "./prompts/conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "./prompts/conversationToMechanismAssessmentPrompt.js";
 import {conversationToNextMessagePrompt} from "./prompts/conversationToNextMessagePrompt.js";
-import {riskToScenarioSeedsPrompt} from "./prompts/riskToScenarioSeedsPrompt.js";
+import {
+  riskToScenarioSeedsPrompt,
+  SeedValidationFeedback,
+} from "./prompts/riskToScenarioSeedsPrompt.js";
+import {FirstUserMessageFeedback} from "./prompts/scenarioToFirstUserMessagePrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
+import {seedToValidationPrompt} from "./prompts/seedToValidationPrompt.js";
+import {planSeedSlots, SeedSlot} from "./seedSlots.js";
 import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
 
-const AGE_BANDS: Record<AgeRange, readonly [number, number]> = {
-  "7to9": [7, 9],
-  "10to12": [10, 12],
-  "13to17": [13, 17],
-};
+export {DEFAULT_PRIVATE_RATIO, DEFAULT_TOTAL_SEEDS} from "./seedSlots.js";
 
-function clampAgeToBand(age: number, band: AgeRange): number {
-  const [lo, hi] = AGE_BANDS[band];
-  const rounded = Math.round(age);
-  if (rounded < lo) return lo;
-  if (rounded > hi) return hi;
-  return rounded;
-}
+/**
+ * Seeds written for one slot before giving up on it, when the plausibility
+ * check is on and the caller does not say.
+ */
+export const DEFAULT_SEED_VALIDATION_ATTEMPTS = 3;
 
 /** The active run stamp as a spreadable field: present only when configured. */
 function stampField(): {stamp?: RunStamp} {
   const stamp = Stamp.current();
   return stamp ? {stamp} : {};
+}
+
+function buildSeed(slot: SeedSlot, output: ModelScenarioSeed): ScenarioSeed {
+  const {riskCategory, risk, assignment} = slot;
+  const {taxonomy} = Packs.current();
+
+  // The assignment is the source of truth for every dimension: nothing
+  // structured is read back from the model.
+  return {
+    childAge: assignment.childAge,
+    childGender: assignment.childGender,
+    childRaceEthnicity: assignment.childRaceEthnicity,
+    childSES: assignment.childSES,
+    shortTitle: output.shortTitle,
+    coreBehavior: output.coreBehavior,
+    context: output.context,
+    notes: output.notes,
+    riskSignalType: assignment.riskSignalType,
+    socialContext: assignment.socialContext,
+    use: assignment.use,
+    refusalBehavior: assignment.refusalBehavior,
+    memory: assignment.memory,
+    ...(assignment.flavor ? {scenarioFlavorId: assignment.flavor.id} : {}),
+    ...(assignment.situation
+      ? {
+          goldStandardId: assignment.situation.goldStandardId,
+          situationType: assignment.situation.situationType,
+        }
+      : {}),
+    taxonomyId: taxonomy.id,
+    taxonomyVersion: taxonomy.version,
+    ...stampField(),
+    id: uuid(),
+    riskCategoryId: riskCategory.id,
+    riskId: risk.id,
+    ageRange: assignment.ageRange,
+    motivation: assignment.motivation,
+  };
+}
+
+/**
+ * Write the seed of one slot. With a plausibility check, a rejected seed is
+ * written again for the same slot, with the reasons of the last rejection,
+ * until one passes; undefined when `maxAttempts` seeds were all rejected.
+ */
+async function fillSlot(
+  c: GenerateSeedsContext,
+  slot: SeedSlot,
+  maxAttempts: number,
+  attempt: number,
+  rejections: number,
+  feedback: SeedValidationFeedback | undefined
+): Promise<ScenarioSeed | undefined> {
+  const {riskCategory, risk, assignment} = slot;
+  const prompt = riskToScenarioSeedsPrompt({
+    riskCategory,
+    risk,
+    assignment,
+    feedback,
+  });
+
+  const {output} = await c.getResponse(
+    {
+      messages: [
+        {role: "system", content: prompt.system},
+        {role: "user", content: prompt.user},
+      ],
+      outputType: ModelScenarioSeed.io,
+    },
+    {key: slot.key, rejections}
+  );
+  const seed = buildSeed(slot, output);
+
+  if (!c.getValidationResponse) {
+    return seed;
+  }
+
+  const validationPrompt = seedToValidationPrompt(riskCategory, risk, seed);
+  const {output: validation} = await c.getValidationResponse({
+    messages: [
+      {role: "system", content: validationPrompt.system},
+      {role: "user", content: validationPrompt.user},
+    ],
+    outputType: SeedValidation.io,
+  });
+  const verdict = SeedValidation.verdict(validation);
+  await c.onValidation?.({
+    key: slot.key,
+    attempt,
+    maxAttempts,
+    seed,
+    isPrivate: slot.isPrivate,
+    validation,
+    verdict,
+    rejections,
+  });
+
+  if (verdict === "pass") {
+    return seed;
+  }
+  if (attempt >= maxAttempts) {
+    return undefined;
+  }
+  return fillSlot(c, slot, maxAttempts, attempt + 1, rejections + 1, {
+    previousAttempt: output,
+    reasons: SeedValidation.failedReasons(validation),
+  });
 }
 
 /**
@@ -182,200 +284,46 @@ export const kora = Benchmark.new({
     return RunResult.io;
   },
   async *generateScenarioSeeds(c, options) {
-    const riskCategories = RiskCategory.listAll();
-    const allMotivations = Motivation.listAll();
-    const seedsPerTaskOption = options?.seedsPerTask;
-    const totalSeeds = options?.totalSeeds;
-    const ageRanges = options?.ageRanges ?? AgeRange.list;
-    const riskIds = options?.riskIds;
-    const motivationNames = options?.motivations;
-    const distribution = options?.distribution;
-    const SeedsOutput = v.strictObject({
-      seeds: v.array(ModelScenarioSeed.io),
-    });
-
-    if (seedsPerTaskOption !== undefined && totalSeeds !== undefined) {
+    const slots = planSeedSlots(options);
+    const maxAttempts =
+      options?.maxValidationAttempts ?? DEFAULT_SEED_VALIDATION_ATTEMPTS;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
       throw new Error(
-        "--seeds-per-task and --total-seeds are mutually exclusive."
+        `maxValidationAttempts must be a positive integer (got ${maxAttempts}).`
       );
     }
-    if (distribution !== undefined && seedsPerTaskOption !== undefined) {
-      throw new Error(
-        "--distribution and --seeds-per-task are mutually exclusive."
-      );
-    }
-    if (distribution !== undefined && totalSeeds === undefined) {
-      throw new Error("--distribution requires --total-seeds.");
-    }
-    const seedsPerTask = seedsPerTaskOption ?? 8;
+    const skipSlotKeys = options?.skipSlotKeys;
 
-    if (riskIds) {
-      Conformance.assertRiskIdsKnown(riskIds);
-    }
-    const riskIdSet = riskIds ? new Set(riskIds) : undefined;
-
-    if (motivationNames) {
-      const knownNames = new Set(allMotivations.map(m => m.name));
-      const unknown = motivationNames.filter(n => !knownNames.has(n));
-      if (unknown.length > 0) {
-        throw new Error(`Unknown motivation names: ${unknown.join(", ")}`);
-      }
-    }
-    const motivations = motivationNames
-      ? allMotivations.filter(m => motivationNames.includes(m.name))
-      : allMotivations;
-
-    const rng = makeRng(options?.randomSeed);
-
-    interface Task {
-      riskCategory: RiskCategory;
-      risk: Risk;
-      ageRange: AgeRange;
-      motivation: Motivation;
-      seedsToGenerate: number;
-      pinnedDemographics?: PinnedDemographics;
-      pinnedFlavor?: ScenarioFlavor;
-    }
-
-    const tasks: Task[] = distribution
-      ? riskCategories.flatMap<Task>(riskCategory =>
-          riskCategory.risks
-            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-            .flatMap<Task>(risk => {
-              const personas = allocatePersonas(
-                distribution,
-                totalSeeds!,
-                rng,
-                ageRanges
-              );
-              const motivationCycle = shuffleWith(motivations, rng);
-              const flavorIds = risk.scenarioFlavors
-                ? allocateFlavors(risk.scenarioFlavors, totalSeeds!, rng)
-                : undefined;
-              return personas.map((pinned, i) => ({
-                riskCategory,
-                risk,
-                ageRange: pinned.ageRange,
-                motivation: motivationCycle[i % motivationCycle.length]!,
-                seedsToGenerate: 1,
-                pinnedDemographics: pinned,
-                pinnedFlavor: flavorIds
-                  ? risk.scenarioFlavors!.find(f => f.id === flavorIds[i])
-                  : undefined,
-              }));
-            })
-        )
-      : riskCategories.flatMap<Task>(riskCategory =>
-          riskCategory.risks
-            .filter(risk => !riskIdSet || riskIdSet.has(risk.id))
-            .flatMap<Task>(risk => {
-              const combos = ageRanges.flatMap(ageRange =>
-                motivations.map(motivation => ({ageRange, motivation}))
-              );
-
-              if (totalSeeds !== undefined) {
-                if (totalSeeds > combos.length) {
-                  throw new Error(
-                    `--total-seeds (${totalSeeds}) exceeds the number of (age × motivation) combos (${combos.length}) for risk ${risk.id}. Use --seeds-per-task for larger runs.`
-                  );
-                }
-                return R.sample(combos, totalSeeds).map(
-                  ({ageRange, motivation}) => ({
-                    riskCategory,
-                    risk,
-                    ageRange,
-                    motivation,
-                    seedsToGenerate: 1,
-                  })
-                );
-              }
-
-              return combos.map(({ageRange, motivation}) => ({
-                riskCategory,
-                risk,
-                ageRange,
-                motivation,
-                seedsToGenerate: seedsPerTask,
-              }));
-            })
-        );
-
-    const total = tasks.reduce((sum, t) => sum + t.seedsToGenerate, 0);
-    yield {total, items: []};
+    yield {total: slots.length, items: []};
 
     const seedStream = flatTransform(
       10,
-      async (task: Task) => {
-        const {
-          riskCategory,
-          risk,
-          ageRange,
-          motivation,
-          seedsToGenerate,
-          pinnedDemographics,
-          pinnedFlavor,
-        } = task;
-        const prompt = riskToScenarioSeedsPrompt({
-          riskCategory,
-          risk,
-          ageRange,
-          motivation,
-          count: seedsToGenerate,
-          pinnedDemographics,
-          pinnedFlavor,
-        });
-
-        const {output} = await c.getResponse({
-          messages: [
-            {role: "system", content: prompt.system},
-            {role: "user", content: prompt.user},
-          ],
-          outputType: SeedsOutput,
-        });
-
-        const {taxonomy} = Packs.current();
-
-        return output.seeds.map((s: ModelScenarioSeed): ScenarioSeed => {
-          const base: ScenarioSeed = {
-            ...s,
-            taxonomyId: taxonomy.id,
-            taxonomyVersion: taxonomy.version,
-            ...stampField(),
-            id: uuid(),
-            riskCategoryId: riskCategory.id,
-            riskId: risk.id,
-            ageRange,
-            motivation,
-            ...(pinnedFlavor ? {scenarioFlavorId: pinnedFlavor.id} : {}),
-          };
-          if (!pinnedDemographics) return base;
-          return {
-            ...base,
-            childGender: pinnedDemographics.gender,
-            childRaceEthnicity: pinnedDemographics.raceEthnicity,
-            childSES: pinnedDemographics.ses,
-            childAge: clampAgeToBand(s.childAge, pinnedDemographics.ageRange),
-          };
-        });
+      async (
+        slot: SeedSlot
+      ): Promise<{seed: ScenarioSeed; slot: SeedSlot}[]> => {
+        const seed = await fillSlot(
+          c,
+          slot,
+          maxAttempts,
+          1,
+          options?.priorRejections?.[slot.key] ?? 0,
+          undefined
+        );
+        return seed ? [{seed, slot}] : [];
       },
-      tasks
+      slots.filter(slot => !skipSlotKeys?.has(slot.key))
     );
 
-    if (totalSeeds !== undefined && !distribution) {
-      const perRiskCount: Record<string, number> = {};
-      for await (const seed of seedStream) {
-        const count = perRiskCount[seed.riskId] ?? 0;
-        if (count >= totalSeeds) continue;
-        perRiskCount[seed.riskId] = count + 1;
-        yield {total, items: [seed]};
-      }
-    } else {
-      for await (const seed of seedStream) {
-        yield {total, items: [seed]};
-      }
+    for await (const {seed, slot} of seedStream) {
+      yield {
+        total: slots.length,
+        items: [seed],
+        key: slot.key,
+        ...(slot.isPrivate ? {private: true} : {}),
+      };
     }
   },
-  async expandScenario(c, seed) {
+  async expandScenario(c, seed, options) {
     const maxAttempts = 2;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
@@ -389,9 +337,21 @@ export const kora = Benchmark.new({
     let validationFeedback:
       | {previousAttempt: ModelScenario; reasons: string}
       | undefined;
+    // The scenario of the previous attempt, when it was rejected for its first
+    // user message alone: it is kept, and only the message is written again.
+    let keptScenario: ModelScenario | undefined;
+    // The first user message of the previous attempt and why it was rejected,
+    // when it was: the writer is shown both, whether or not the scenario is
+    // expanded again.
+    let messageFeedback: FirstUserMessageFeedback | undefined;
+    let lastReasons = "";
+    // Attempts whose validation said no to the first-message signal type, and
+    // to the use (in the narrative or in the first message).
+    let signalTypeRejections = 0;
+    let useRejections = 0;
 
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const outputType = risk.provideUserContext
+    const expand = async (): Promise<ModelScenario> => {
+      const outputType = ScenarioSeed.hasMemory(seed, risk)
         ? ModelScenarioWithMemory.io
         : ModelScenarioLight.io;
       const prompt = seedToScenarioPrompt(
@@ -401,27 +361,48 @@ export const kora = Benchmark.new({
         seed,
         validationFeedback
       );
-
-      const {output: modelScenario} = await c.getResponse({
+      const {output} = await c.getResponse({
         messages: [
           {role: "system", content: prompt.system},
           {role: "user", content: prompt.user},
         ],
         outputType,
       });
+      return output;
+    };
 
-      const scenario: Scenario = {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const firstMessageRewrite = keptScenario !== undefined;
+      const modelScenario = keptScenario ?? (await expand());
+
+      // The first user message is written before the validation, which asks
+      // whether a child of this age would write it.
+      const draft: Scenario = {
         seed,
         firstUserMessage: "",
         ...modelScenario,
         ...stampField(),
       };
+      const scenario: Scenario = {
+        ...draft,
+        firstUserMessage: await generateFirstUserMessage(
+          c,
+          risk,
+          draft,
+          messageFeedback
+        ),
+      };
 
+      const relaxChildVoice = ScenarioValidation.relaxesChildVoice(
+        seed.ageRange,
+        (options?.priorRejections ?? 0) + attempt
+      );
       const validationPrompt = scenarioToValidationPrompt(
         riskCategory,
         risk,
         seed.ageRange,
-        scenario
+        scenario,
+        {relaxChildVoice}
       );
 
       const {output: validation} = await c.getResponse({
@@ -431,26 +412,73 @@ export const kora = Benchmark.new({
         ],
         outputType: ScenarioValidation.io,
       });
+      const verdict = ScenarioValidation.verdict(validation, {
+        relaxChildVoice,
+      });
+      const reasons = ScenarioValidation.reasons(validation);
 
-      if (validation.verdict === "pass") {
-        scenario.firstUserMessage = await generateFirstUserMessage(
-          c,
-          risk,
-          scenario
-        );
+      await c.onValidation?.({
+        seed,
+        attempt: attempt + 1,
+        maxAttempts,
+        scenario,
+        validation,
+        verdict,
+        reasons,
+        childVoiceRelaxed: relaxChildVoice,
+        firstMessageRewrite,
+      });
+
+      if (verdict === "pass") {
         return [scenario];
       }
 
-      validationFeedback = {
-        previousAttempt: modelScenario,
-        reasons: validation.reasons,
-      };
+      lastReasons = reasons;
+      if (validation.firstMessageShowsSignalType.answer === "no") {
+        signalTypeRejections++;
+      }
+      if (
+        validation.showsUse.answer === "no" ||
+        validation.firstMessageShowsUse.answer === "no"
+      ) {
+        useRejections++;
+      }
+      const messageReasons = ScenarioValidation.firstMessageReasons(
+        validation,
+        {relaxChildVoice}
+      );
+      messageFeedback =
+        messageReasons.length > 0
+          ? {
+              previousMessage: scenario.firstUserMessage,
+              reasons: messageReasons,
+            }
+          : undefined;
+
+      // A scenario rejected for its first user message alone was accepted as
+      // a scenario: expanding it again would spend the expensive call on text
+      // that passed, and would not tell the message writer what went wrong.
+      if (
+        ScenarioValidation.rejectsFirstMessageOnly(validation, {
+          relaxChildVoice,
+        })
+      ) {
+        keptScenario = modelScenario;
+      } else {
+        keptScenario = undefined;
+        validationFeedback = {
+          previousAttempt: modelScenario,
+          reasons,
+        };
+      }
     }
 
     throw new ScenarioValidationError(
       seed,
-      validationFeedback!.reasons,
-      maxAttempts
+      lastReasons,
+      maxAttempts,
+      signalTypeRejections === maxAttempts,
+      useRejections === maxAttempts
     );
   },
   mapScenarioToKeys(scenario, prompts = ["default"]) {

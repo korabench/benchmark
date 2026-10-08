@@ -1,6 +1,7 @@
 import * as R from "remeda";
 import {describe, expect, it} from "vitest";
 import {largestRemainderCounts} from "../largestRemainder.js";
+import {makeRng} from "../rng.js";
 
 describe("largestRemainderCounts", () => {
   it("splits an even 50/50 at 10 into 5/5", () => {
@@ -83,5 +84,55 @@ describe("largestRemainderCounts", () => {
 
   it("rejects empty proportions", () => {
     expect(() => largestRemainderCounts({}, 10)).toThrow(/non-empty/);
+  });
+});
+
+describe("largestRemainderCounts with an rng", () => {
+  const ses = {low: 0.28, middle: 0.46, high: 0.26};
+
+  it("still sums to total with every count at floor or floor + 1", () => {
+    const rng = makeRng(1);
+    R.times(200, () => {
+      const counts = largestRemainderCounts(ses, 40, rng);
+      expect(counts.low + counts.middle + counts.high).toBe(40);
+      expect([11, 12]).toContain(counts.low);
+      expect([18, 19]).toContain(counts.middle);
+      expect([10, 11]).toContain(counts.high);
+    });
+  });
+
+  it("spreads the remainder so the mean count matches the proportion", () => {
+    const rng = makeRng(7);
+    const runs = 2000;
+    const sums = R.times(runs, () =>
+      largestRemainderCounts(ses, 40, rng)
+    ).reduce(
+      (acc, c) => ({
+        low: acc.low + c.low,
+        middle: acc.middle + c.middle,
+        high: acc.high + c.high,
+      }),
+      {low: 0, middle: 0, high: 0}
+    );
+
+    // Exact expectations: 11.2, 18.4, 10.4. Deterministic rounding would give
+    // 11, 19, 10 every time.
+    expect(sums.low / runs).toBeCloseTo(11.2, 1);
+    expect(sums.middle / runs).toBeCloseTo(18.4, 1);
+    expect(sums.high / runs).toBeCloseTo(10.4, 1);
+  });
+
+  it("never gives the +1 to a key with no remainder", () => {
+    const rng = makeRng(3);
+    R.times(100, () => {
+      const counts = largestRemainderCounts({a: 0.5, b: 0.3, c: 0.2}, 10, rng);
+      expect(counts).toEqual({a: 5, b: 3, c: 2});
+    });
+  });
+
+  it("is reproducible for the same seed", () => {
+    const run = () =>
+      R.times(20, () => largestRemainderCounts(ses, 40, makeRng(11)));
+    expect(run()).toEqual(run());
   });
 });

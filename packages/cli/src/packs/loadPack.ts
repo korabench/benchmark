@@ -11,6 +11,8 @@ import * as path from "node:path";
 //
 
 const BUNDLED_NAME = "kora";
+/** The taxonomy before the gold standards' harm statements replaced its risk descriptions. */
+const LEGACY_TAXONOMY_NAME = "kora-legacy";
 
 function isPath(spec: string): boolean {
   return (
@@ -30,13 +32,15 @@ function readJson(spec: string, what: string): unknown {
   }
 }
 
-function assertKnownName(spec: string, what: string): void {
-  if (spec !== BUNDLED_NAME) {
-    throw new Error(
-      `Unknown ${what} pack "${spec}". Known packs: ${BUNDLED_NAME}. ` +
-        `Pass a path to a JSON file to use a custom pack.`
-    );
-  }
+function unknownPack(
+  spec: string,
+  what: string,
+  known: readonly string[]
+): Error {
+  return new Error(
+    `Unknown ${what} pack "${spec}". Known packs: ${known.join(", ")}. ` +
+      `Pass a path to a JSON file to use a custom pack.`
+  );
 }
 
 //
@@ -45,8 +49,9 @@ function assertKnownName(spec: string, what: string): void {
 
 export function resolveTaxonomy(spec: string): RiskTaxonomy {
   if (!isPath(spec)) {
-    assertKnownName(spec, "taxonomy");
-    return Packs.bundled().taxonomy;
+    if (spec === BUNDLED_NAME) return Packs.bundled().taxonomy;
+    if (spec === LEGACY_TAXONOMY_NAME) return Packs.legacyTaxonomy();
+    throw unknownPack(spec, "taxonomy", [BUNDLED_NAME, LEGACY_TAXONOMY_NAME]);
   }
   // A custom taxonomy must be the full {id, version, categories} envelope — no
   // sniffing for the bare-array shape the bundled data file happens to use.
@@ -55,8 +60,8 @@ export function resolveTaxonomy(spec: string): RiskTaxonomy {
 
 export function resolveBehaviors(spec: string): BehaviorSet {
   if (!isPath(spec)) {
-    assertKnownName(spec, "behavior");
-    return Packs.bundled().behaviors;
+    if (spec === BUNDLED_NAME) return Packs.bundled().behaviors;
+    throw unknownPack(spec, "behavior", [BUNDLED_NAME]);
   }
   return BehaviorSet.parse(readJson(spec, "behavior"));
 }
