@@ -5,6 +5,7 @@ import {describe, expect, it} from "vitest";
 import {stableJson} from "../../packs/stableJson.js";
 import {
   DEAD_PROMPT_FILES,
+  PROMPT_DATA_FILES,
   PROMPT_SOURCE_FILES,
   Prompts,
   PROMPTS_FINGERPRINT,
@@ -21,6 +22,9 @@ import {
 //
 
 const promptsDir = fileURLToPath(new URL("../", import.meta.url));
+const rubricsDir = fileURLToPath(
+  new URL("../../../data/goldStandardRubrics/", import.meta.url)
+);
 
 function readSource(file: string): string {
   return readFileSync(new URL(`../${file}`, import.meta.url), "utf-8").replace(
@@ -29,9 +33,11 @@ function readSource(file: string): string {
   );
 }
 
+const FINGERPRINTED_FILES = [...PROMPT_SOURCE_FILES, ...PROMPT_DATA_FILES];
+
 export function computePromptsHash(): string {
   return Hash.shortHash(
-    stableJson(PROMPT_SOURCE_FILES.map(file => [file, readSource(file)]))
+    stableJson(FINGERPRINTED_FILES.map(file => [file, readSource(file)]))
   );
 }
 
@@ -57,10 +63,21 @@ describe("PROMPTS_FINGERPRINT", () => {
     expect(files).toEqual(listed);
   });
 
+  it("accounts for every gold-standard rubric", () => {
+    const files = readdirSync(rubricsDir)
+      .filter(file => file.endsWith(".json"))
+      .map(file => `../../data/goldStandardRubrics/${file}`)
+      .sort();
+    const listed = PROMPT_DATA_FILES.filter(file =>
+      file.includes("/goldStandardRubrics/")
+    );
+    expect(files).toEqual([...listed].sort());
+  });
+
   it("changes with the source text", () => {
     const tampered = Hash.shortHash(
       stableJson(
-        PROMPT_SOURCE_FILES.map(file => [file, readSource(file) + "\n// x"])
+        FINGERPRINTED_FILES.map(file => [file, readSource(file) + "\n// x"])
       )
     );
     expect(tampered).not.toBe(computePromptsHash());

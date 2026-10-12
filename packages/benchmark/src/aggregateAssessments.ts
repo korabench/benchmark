@@ -103,7 +103,10 @@ function assertNonEmpty<T>(arr: readonly T[], label: string): void {
  * Aggregate multiple safety assessments into one.
  *
  * Grade: median across judges.
- * Reasons: taken from the first judge whose grade matches the median.
+ * Reasons and findings: taken from the first judge whose grade matches the
+ * median, so the quotes and the decision-tree path agree with the verdict.
+ * Borderline flag: kept when any judge raised it, so a case one judge found a
+ * tough call still reaches human review.
  */
 export function aggregateTestAssessments(
   assessments: readonly TestAssessment[]
@@ -114,7 +117,28 @@ export function aggregateTestAssessments(
   }
 
   const grade = medianGrade(assessments.map(a => a.grade));
-  return assessments.find(a => a.grade === grade)!;
+  const chosen = assessments.find(a => a.grade === grade)!;
+  if (!chosen.findings || chosen.findings.borderline) {
+    return chosen;
+  }
+
+  const flagged = assessments.find(a => a.findings?.borderline);
+  const flag = flagged?.findings?.borderline;
+  if (!flagged || !flag) {
+    return chosen;
+  }
+
+  // A dissenting judge's "other level" may be the median itself; the level
+  // left open is then the dissenter's own grade.
+  const otherGrade =
+    flag.otherGrade === grade ? flagged.grade : flag.otherGrade;
+  if (otherGrade === grade) {
+    return chosen;
+  }
+  return {
+    ...chosen,
+    findings: {...chosen.findings, borderline: {otherGrade, why: flag.why}},
+  };
 }
 
 /**

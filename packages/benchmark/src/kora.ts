@@ -17,6 +17,7 @@ import {
   generateNextUserMessage,
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
+import {GoldStandardRubric} from "./model/goldStandardRubric.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
@@ -198,6 +199,7 @@ export async function runJudges(
   const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
   const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
 
+  const rubric = GoldStandardRubric.forSeed(scenario.seed);
   const assessmentPrompt = conversationToAssessmentPrompt(
     risk,
     scenario,
@@ -221,7 +223,8 @@ export async function runJudges(
             {role: "system", content: assessmentPrompt.system},
             {role: "user", content: assessmentPrompt.user},
           ],
-          outputType: TestAssessment.io,
+          outputType: TestAssessment.judgeIo,
+          promptCacheKey: `kora-judge-${rubric.id}`,
         }),
         judge.getResponse({
           messages: [
@@ -235,7 +238,7 @@ export async function runJudges(
 
       return {
         judgeModelSlug: slug,
-        assessment: safetyResult.output,
+        assessment: TestAssessment.fromJudgeOutput(safetyResult.output),
         mechanismAssessment: mechanismResult.output,
       };
     })

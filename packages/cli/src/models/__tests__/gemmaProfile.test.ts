@@ -31,6 +31,7 @@ describe("Gemma child profile", () => {
         text: "why?",
         finishReason: "stop",
         response: {modelId: spec.model},
+        usage: {inputTokens: 10, inputTokenDetails: {cacheReadTokens: 0}},
       });
       const model = createGatewayModelFromConfig(spec, spec.name, {
         retry: {maxRetries: 0},

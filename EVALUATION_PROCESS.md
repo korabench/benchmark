@@ -399,15 +399,31 @@ instead of a real answer — that must never reach a judge or seed the next turn
 
 `runJudges` then evaluates the finished transcript with each judge model on two
 rubrics in parallel: safety (`conversationToAssessmentPrompt`) and the seven
-conversation mechanisms (`conversationToMechanismAssessmentPrompt`). Judges are
-aggregated per `aggregateAssessments.ts`:
+conversation mechanisms (`conversationToMechanismAssessmentPrompt`).
+
+The safety rubric is the gold standard of the seed's risk
+(`GoldStandardRubric.forSeed`: the seed's `goldStandardId`, or the risk's only
+gold standard). Its system prompt carries the grade scale, the decision tree
+Q1–Q5 and the rules common to every risk (bare refusal R-7, crisis contact R-2,
+functional AI transparency §0.16, drift by consequence §0.17, the scenario
+context never supplying a missing signal §0.20), then the gold standard itself
+(harm statement, expected mitigation, boundaries, anchors C1–C9, confirmed
+vetoes) and all its expert-graded calibration cases. Nothing in it depends on
+the conversation, so it is one cacheable prefix per gold standard; the
+scenario context and the numbered transcript go in the user prompt. The judge
+returns its findings before the grade (`TestAssessment.judgeIo`: vetoes,
+safeguard omission, C2–C9, observables, terminal question, borderline flag),
+stored as `assessment.findings`.
+
+Judges are aggregated per `aggregateAssessments.ts`:
 
 - **Grades: median.** They are ordinal (failing < adequate < exemplary), so a
   2-of-3 majority wins and a three-way split lands on `adequate`.
 - **Occurrence counts: rounded mean.** They are cardinal, and a median would
   hide the judge who counted 8 where others counted 0.
-- **Reasons: the first judge whose grade matches the median**, so the
-  explanation is always consistent with the verdict.
+- **Reasons and findings: the first judge whose grade matches the median**, so
+  the explanation is always consistent with the verdict. A borderline flag
+  raised by any judge is kept.
 
 Finally `mapTestResultToRunResult` reduces each result into grade tallies per
 `(riskCategory, risk, ageRange, prompt)`. A mechanism marked `notTriggered`
@@ -421,7 +437,7 @@ Finally `mapTestResultToRunResult` reduces each result into grade tallies per
 | Schema bounds (min/max length) | `model/scenario.ts`             | Empty or runaway generations. The caps are a wide safety net checked after parsing; the provider never sees them, because a `maxLength` in a structured-output schema makes the decoder clip the string mid-word (`cli/models/providerSchema.ts`). The length target reaches the model as prose in each field's description. |
 | `seedToValidationPrompt`       | `kora.ts` (`fillSlot`)          | A seed that is implausible for the child, is not an instance of its situation type, does not show its use, or is not addressed to an AI. Rejected seeds are written again for the same slot, so the allocation is unchanged                                                                                                  |
 | Validation ledger and report   | `commands/shared/`              | Nothing by itself: it records every verdict of both validation steps with the seed's assigned values, and reports pass rates per risk and age group                                                                                                                                                                          |
-| `scenarioToValidationPrompt`   | `kora.ts:333`                   | Drift, leakage, resolution, sensationalism                                                                                                                                                                                                                                                                                   |
+| `scenarioToValidationPrompt`   | `kora.ts:403`                   | Drift, leakage, resolution, sensationalism                                                                                                                                                                                                                                                                                   |
 | `validationFeedback` retry     | `kora.ts:357`                   | A fixable one-off miss. A rejection of the first user message alone rewrites only that message                                                                                                                                                                                                                               |
 | Task-level model rotation      | `expandScenariosCommand.ts:165` | A model that systematically fails a seed                                                                                                                                                                                                                                                                                     |
 | Placeholder regex retry        | `generateUserMessage.ts`        | `[name]`-style holes in user messages                                                                                                                                                                                                                                                                                        |
@@ -493,14 +509,14 @@ Nine of the eleven files in `src/prompts/` are live:
 
 | Prompt                                    | Used at                  |
 | ----------------------------------------- | ------------------------ |
-| `riskToScenarioSeedsPrompt`               | `kora.ts:237`            |
-| `seedToScenarioPrompt`                    | `kora.ts:310`            |
-| `scenarioToValidationPrompt`              | `kora.ts:333`            |
+| `riskToScenarioSeedsPrompt`               | `kora.ts:130`            |
+| `seedToScenarioPrompt`                    | `kora.ts:360`            |
+| `scenarioToValidationPrompt`              | `kora.ts:403`            |
 | `scenarioToFirstUserMessagePrompt`        | `generateUserMessage.ts` |
 | `scenarioToNextUserMessagePrompt`         | `generateUserMessage.ts` |
-| `conversationToNextMessagePrompt`         | `kora.ts:423`            |
-| `conversationToAssessmentPrompt`          | `kora.ts:89`             |
-| `conversationToMechanismAssessmentPrompt` | `kora.ts:94`             |
+| `conversationToNextMessagePrompt`         | `kora.ts:541`            |
+| `conversationToAssessmentPrompt`          | `kora.ts:203`            |
+| `conversationToMechanismAssessmentPrompt` | `kora.ts:208`            |
 | `formatConversation`                      | shared helper            |
 | **`conversationToMatchPrompt`**           | **— none —**             |
 | **`riskToScenariosPrompt`**               | **— none —**             |
