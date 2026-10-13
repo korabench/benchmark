@@ -10,6 +10,7 @@ import {
   Benchmark,
   GenerateSeedsContext,
   JudgeModel,
+  JudgeRequest,
   TraceEvent,
 } from "./benchmark.js";
 import {
@@ -17,6 +18,7 @@ import {
   generateNextUserMessage,
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
+import {GoldStandardRubric} from "./model/goldStandardRubric.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
 import {Mechanism} from "./model/mechanism.js";
@@ -41,7 +43,7 @@ import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
 import {SeedValidation} from "./model/seedValidation.js";
-import {TestAssessment} from "./model/testAssessment.js";
+import {JudgeOutput, TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
 import {Packs} from "./packs/packs.js";
 import {conversationToAssessmentPrompt} from "./prompts/conversationToAssessmentPrompt.js";
@@ -182,6 +184,32 @@ async function fillSlot(
 }
 
 /**
+ * The safety judge's request for one conversation: the prompt of the seed's
+ * gold standard, the judge's output type, and the prompt-cache key every
+ * request on that gold standard shares. `runJudges` sends it to each judge; a
+ * caller grading with a judge of its own sends the same request and stores
+ * `TestAssessment.fromJudgeOutput` of the answer.
+ */
+export function safetyJudgeRequest(
+  scenario: Scenario,
+  messages: readonly ModelMessage[]
+): JudgeRequest<JudgeOutput> {
+  const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
+  const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
+  const rubric = GoldStandardRubric.forSeed(scenario.seed);
+  const prompt = conversationToAssessmentPrompt(risk, scenario, messages);
+
+  return {
+    messages: [
+      {role: "system", content: prompt.system},
+      {role: "user", content: prompt.user},
+    ],
+    outputType: TestAssessment.judgeIo,
+    promptCacheKey: `kora-judge-${rubric.id}`,
+  };
+}
+
+/**
  * Run the judge-assessment step on a pre-existing transcript.
  *
  * Mirrors the tail of `runTest` (prompt building → parallel judge calls →
@@ -195,14 +223,7 @@ export async function runJudges(
   messages: readonly ModelMessage[],
   trace?: (event: TraceEvent) => void
 ): Promise<TestResult> {
-  const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
-  const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
-
-  const assessmentPrompt = conversationToAssessmentPrompt(
-    risk,
-    scenario,
-    messages
-  );
+  const safetyRequest = safetyJudgeRequest(scenario, messages);
   const mechanismPrompt = conversationToMechanismAssessmentPrompt(
     scenario,
     messages
@@ -216,13 +237,7 @@ export async function runJudges(
 
       const tJudge = Date.now();
       const [safetyResult, mechanismResult] = await Promise.all([
-        judge.getResponse({
-          messages: [
-            {role: "system", content: assessmentPrompt.system},
-            {role: "user", content: assessmentPrompt.user},
-          ],
-          outputType: TestAssessment.io,
-        }),
+        judge.getResponse(safetyRequest),
         judge.getResponse({
           messages: [
             {role: "system", content: mechanismPrompt.system},
@@ -235,7 +250,7 @@ export async function runJudges(
 
       return {
         judgeModelSlug: slug,
-        assessment: safetyResult.output,
+        assessment: TestAssessment.fromJudgeOutput(safetyResult.output),
         mechanismAssessment: mechanismResult.output,
       };
     })

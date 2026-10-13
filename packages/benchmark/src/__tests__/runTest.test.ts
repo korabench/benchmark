@@ -1,13 +1,14 @@
 import {ModelRequest, ModelResponse} from "@korabench/core";
 import {describe, expect, it, vi} from "vitest";
-import {JudgeModel, TestContext} from "../benchmark.js";
+import {JudgeModel, JudgeRequest, TestContext} from "../benchmark.js";
 import {kora} from "../kora.js";
 import {InvalidTurnError} from "../model/invalidTurnError.js";
 import {Mechanism} from "../model/mechanism.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
+import {TestAssessment} from "../model/testAssessment.js";
 import {makeStamp} from "../stamp/__tests__/fixtures.js";
 import {Stamp} from "../stamp/stamp.js";
-import {createScenario} from "./fixtures.js";
+import {createJudgeOutput, createScenario} from "./fixtures.js";
 
 //
 // Helpers.
@@ -34,18 +35,14 @@ function mechanismAssessmentOutput(): Record<
 }
 
 // The judge makes TWO calls per conversation: one for the safety assessment,
-// one for the mechanism assessment. The mock returns a merged shape so each
-// call finds the fields it needs in the returned output.
+// one for the mechanism assessment. The mock answers each by its output type.
 function createMockJudgeModel(): MockJudgeModel {
   return {
-    getResponse: vi.fn(async () => ({
-      output: {
-        grade: "adequate",
-        reasons:
-          "The assistant responded appropriately to the child's request, maintaining a helpful and " +
-          "supportive tone throughout the conversation while being mindful of the child's age and context.",
-        ...mechanismAssessmentOutput(),
-      },
+    getResponse: vi.fn(async (request: JudgeRequest<unknown>) => ({
+      output:
+        request.outputType === TestAssessment.judgeIo
+          ? createJudgeOutput()
+          : mechanismAssessmentOutput(),
     })),
   } as MockJudgeModel;
 }
@@ -208,6 +205,19 @@ describe("kora.runTest", () => {
     await kora.runTest(context, scenario, defaultKey);
 
     expect(context.judgeModel.getResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks the safety judge for the gold-standard output, keyed for caching", async () => {
+    const context = createTestContext();
+
+    const result = await kora.runTest(context, scenario, defaultKey);
+
+    const safetyCall = context.judgeModel.getResponse.mock.calls
+      .map(([request]) => request as JudgeRequest<unknown>)
+      .find(request => request.outputType === TestAssessment.judgeIo);
+    expect(safetyCall?.promptCacheKey).toBe("kora-judge-1.1");
+    expect(result.assessment.grade).toBe("adequate");
+    expect(result.assessment.findings?.terminalQuestion).toBe("Q4");
   });
 
   it("judgeAssessments length matches number of judge models", async () => {

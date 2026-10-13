@@ -74,12 +74,47 @@ say, so bump the prompts fingerprint version with it.
 Each gold standard's `boundaries` is Section 4 ("Risk Boundaries") of the same
 document, in its own wording: `borderlineCases` are the named cases listed
 before the table, `examples` the table's rows (activates the risk, does not,
-boundary principle). No prompt quotes it; it is what a person reviewing a
-scenario is shown next to the situation type. Left out: the notes on how to read
+boundary principle). The safety judge's prompt quotes it (see below), and it is
+what a person reviewing a scenario is shown next to the situation type. Left out: the notes on how to read
 the table, the "Expected response" column of 6.3, the scenarios a reviewer
 suggested after the table of 1.2b, and the "Disclosed ongoing use" case of 1.3,
 which has a name but no text. The "Frontier 3.3 vs 3.4" paragraph that follows
 the tables of 3.3 and 3.4 is kept as a borderline case.
+
+## goldStandardRubrics/
+
+One file per gold standard (`1.1.json` … `8.4.json`, 28 in all), loaded by
+`src/model/goldStandardRubric.ts`: what the safety judge grades a conversation
+against. Like the situation types it is outside the pack, but the files are
+part of the prompts fingerprint (`src/prompts/promptsFingerprint.ts`), so any
+edit changes the run stamp. Each file is transcribed from the post-review
+gold standard in the "GS post expert review" Drive folder; `source` names the
+document, its Drive id and the modification time it was read at (2026-10-12).
+4.2 and 5.2 are the October versions (`KORA_GS_Risk4.2_FINAL`,
+`KORA_GS_Risk5.2_FINAL_v2`); the others are `GS RISK <id> ... v1 FINAL SEPT 2026`.
+
+- `harmStatement`: Section 1, "Harm statement (short)".
+- `expectedMitigation`: Section 3, one item per paragraph.
+- `criteria`: Section 5, the behavioural anchors C1–C9 with their weight as
+  worded.
+- `vetoes`: Section 6. `status: "proposed"` marks the vetoes the document says
+  are "not applied by the judge until confirmed" (ruling §0.19); the judge's
+  prompt leaves them out.
+- `cases`: the calibration corpus of Part B (case id, title, age group, child
+  profile, turns) with its gold label from Part C: the scorable `grade`, the
+  `borderline` flag, the terminal decision-tree question and the criteria cited
+  as written, the expert notes (named "Expert 1" / "Expert 2" where two
+  experts annotated, "KORA team" for the bench v2 additions), and the
+  reconciliation. Where a case has no reconciliation, its note comparing the
+  gold label with the archived judge takes that place. The archived judge
+  baselines themselves are left out: they are not gold. Emojis did not survive
+  the Drive text export and read `[emoji]`.
+
+Left out: Section 2 (risk profile), Section 7 (open decisions; its rulings are
+already written into the anchors and vetoes), Part D, and the boundaries of
+Section 4, which `situationTypes.json` holds. The grade scale, the decision
+tree Q1–Q5 and the cross-risk rules (R-2, R-7, §0.16, §0.17, §0.20, §0.21)
+are the same in every gold standard; the judge prompt carries them once.
 
 ## behaviors.json
 

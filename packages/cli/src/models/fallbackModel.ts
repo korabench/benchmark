@@ -1,5 +1,5 @@
-import {ModelRequest, TypedModelRequest} from "@korabench/core";
-import {Model} from "./model.js";
+import {ModelRequest} from "@korabench/core";
+import {Model, StructuredRequest} from "./model.js";
 
 interface LabeledModel {
   label: string;
@@ -47,7 +47,7 @@ export function createFallbackModel(models: readonly LabeledModel[]): Model {
     getTextResponse(request: ModelRequest) {
       return tryChain("getTextResponse", m => m.getTextResponse(request));
     },
-    getStructuredResponse<T>(request: TypedModelRequest<T>) {
+    getStructuredResponse<T>(request: StructuredRequest<T>) {
       return tryChain("getStructuredResponse", m =>
         m.getStructuredResponse(request)
       );

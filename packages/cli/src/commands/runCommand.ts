@@ -25,6 +25,7 @@ import {
   collectServed,
   createJudgeModels,
   createSpecModel,
+  describeJudgeCacheUsage,
 } from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {
@@ -407,4 +408,5 @@ export async function runCommand(
 
   console.log(`\nCompleted ${testCount} tests → ${outputFilePath}`);
   console.log(`Test results archived → ${zipFilePath}`);
+  describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
 }

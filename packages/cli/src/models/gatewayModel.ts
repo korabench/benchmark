@@ -1,9 +1,16 @@
-import {ModelRequest, TypedModelRequest} from "@korabench/core";
-import {gateway, generateObject, generateText, jsonSchema} from "ai";
+import {ModelRequest} from "@korabench/core";
+import {
+  gateway,
+  generateObject,
+  generateText,
+  jsonSchema,
+  LanguageModelUsage,
+  SystemModelMessage,
+} from "ai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
 import {createFallbackModel} from "./fallbackModel.js";
-import {Model} from "./model.js";
+import {Model, StructuredRequest} from "./model.js";
 import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
 import {toProviderSchema} from "./providerSchema.js";
 
@@ -18,6 +25,59 @@ export interface GatewayModel extends Model {
    * snapshots over time; this is the only evidence of which one answered.
    */
   readonly served: ReadonlySet<string>;
+  /** Input tokens sent, and how many of them the provider read from its cache. */
+  readonly usage: Readonly<InputTokenUsage>;
+}
+
+export interface InputTokenUsage {
+  inputTokens: number;
+  cachedInputTokens: number;
+}
+
+//
+// Prompt caching.
+//
+// Requests that share a `promptCacheKey` share a long system prompt (one gold
+// standard's judge rubric). OpenAI caches long prefixes on its own; the key
+// routes the requests to the same cache, and the 24-hour retention keeps the
+// prefix between two conversations of one gold standard, which a shuffled
+// corpus spaces out well past the default in-memory lifetime. Anthropic caches
+// only a marked prefix, so the system message carries the mark. Google caches
+// implicitly and takes no hint.
+//
+
+type ProviderOptions = Record<string, Record<string, unknown>>;
+
+function withPromptCacheKey(
+  model: string,
+  providerOptions: ProviderOptions | undefined,
+  promptCacheKey: string | undefined
+): ProviderOptions | undefined {
+  if (!promptCacheKey || !model.startsWith("openai/")) {
+    return providerOptions;
+  }
+  return {
+    ...providerOptions,
+    openai: {
+      ...providerOptions?.["openai"],
+      promptCacheKey,
+      promptCacheRetention: "24h",
+    },
+  };
+}
+
+function systemMessage(
+  model: string,
+  content: string,
+  promptCacheKey: string | undefined
+): SystemModelMessage {
+  return promptCacheKey && model.startsWith("anthropic/")
+    ? {
+        role: "system",
+        content,
+        providerOptions: {anthropic: {cacheControl: {type: "ephemeral"}}},
+      }
+    : {role: "system", content};
 }
 
 const defaultRetryOptions: RetryOptions = {
@@ -91,9 +151,21 @@ export function createGatewayModelFromConfig(
     label === config.model ? label : `${label} (${config.model})`;
   const retryOptions = buildRetryOptions(retryLabel, options);
   const served = new Set<string>();
+  const usage: InputTokenUsage = {inputTokens: 0, cachedInputTokens: 0};
+
+  function record(result: {
+    response: {modelId: string};
+    usage: LanguageModelUsage;
+  }) {
+    served.add(result.response.modelId);
+    usage.inputTokens += result.usage.inputTokens ?? 0;
+    usage.cachedInputTokens +=
+      result.usage.inputTokenDetails.cacheReadTokens ?? 0;
+  }
 
   return {
     served,
+    usage,
 
     async getTextResponse(request: ModelRequest): Promise<string> {
       const maxTokens = request.maxTokens ?? config.maxTokens;
@@ -138,15 +210,21 @@ export function createGatewayModelFromConfig(
         retryOptions
       );
 
-      served.add(result.response.modelId);
+      record(result);
       return result.text;
     },
 
-    async getStructuredResponse<T>(request: TypedModelRequest<T>): Promise<T> {
+    async getStructuredResponse<T>(request: StructuredRequest<T>): Promise<T> {
       const outputSchema = toProviderSchema(request.outputType);
       const maxTokens = request.maxTokens ?? config.maxTokens;
       const temperature = request.temperature ?? config.temperature;
-      const systemMessage = request.messages.find(
+      const {promptCacheKey} = request;
+      const providerOptions = withPromptCacheKey(
+        config.model,
+        config.providerOptions as ProviderOptions | undefined,
+        promptCacheKey
+      );
+      const systemContent = request.messages.find(
         m => m.role === "system"
       )?.content;
       const userMessages = request.messages
@@ -164,22 +242,24 @@ export function createGatewayModelFromConfig(
           "Respond with a single JSON object that strictly conforms to this JSON Schema. " +
           "Output JSON only — no prose, no code fences, no <think> tags.\n\n" +
           JSON.stringify(outputSchema);
-        const combinedSystem = systemMessage
-          ? `${systemMessage}\n\n${schemaInstruction}`
+        const combinedSystem = systemContent
+          ? `${systemContent}\n\n${schemaInstruction}`
           : schemaInstruction;
 
         return withRetry(async () => {
           const result = await generateText({
             model: gateway(config.model),
-            system: combinedSystem,
-            messages: userMessages,
+            messages: [
+              systemMessage(config.model, combinedSystem, promptCacheKey),
+              ...userMessages,
+            ],
             maxOutputTokens: maxTokens,
             temperature,
-            providerOptions: config.providerOptions as any,
+            providerOptions: providerOptions as any,
             maxRetries: 0,
           });
 
-          served.add(result.response.modelId);
+          record(result);
           const parsed = JSON.parse(extractJson(result.text));
           return v.parse(request.outputType, parsed);
         }, retryOptions);
@@ -188,16 +268,16 @@ export function createGatewayModelFromConfig(
       return withRetry(async () => {
         const result = await generateObject({
           model: gateway(config.model),
-          system: systemMessage,
+          system: systemContent,
           messages: userMessages,
           schema: jsonSchema(outputSchema),
           maxOutputTokens: maxTokens,
           temperature,
-          providerOptions: config.providerOptions as any,
+          providerOptions: providerOptions as any,
           maxRetries: 0,
         });
 
-        served.add(result.response.modelId);
+        record(result);
         return v.parse(request.outputType, result.object);
       }, retryOptions);
     },

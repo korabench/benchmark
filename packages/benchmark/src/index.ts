@@ -15,6 +15,7 @@ export * from "./generateUserMessage.js";
 export * from "./kora.js";
 export * from "./model/ageRange.js";
 export * from "./model/assessmentGrade.js";
+export * from "./model/goldStandardRubric.js";
 export * from "./model/invalidTurnError.js";
 export * from "./model/judgeAssessment.js";
 export * from "./model/judgeLengthCaps.js";

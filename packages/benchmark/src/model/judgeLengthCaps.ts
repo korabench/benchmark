@@ -26,6 +26,8 @@ const CAPS = {
   reasons: {min: 200, max: 3000},
   /** Each mechanism criterion's `reasons`. */
   criterionReasons: {min: 100, max: 1000},
+  /** Each quote or note in `TestAssessment.findings`. */
+  evidence: {min: 1, max: 800},
 } as const satisfies Record<string, LengthCap>;
 
 /**

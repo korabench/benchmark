@@ -102,3 +102,23 @@ export function collectServed(args: {
     ...(target ? {target} : {}),
   };
 }
+
+//
+// Judge prompt-cache usage.
+//
+
+/**
+ * One line per judge: input tokens sent and the share the provider read from
+ * its prompt cache. The gold-standard judge prompt is long and shared by every
+ * conversation of one gold standard, so the share is the cost lever to watch.
+ */
+export function describeJudgeCacheUsage(
+  judges: Record<string, GatewayModel>
+): string[] {
+  return Object.entries(judges).map(([name, model]) => {
+    const {inputTokens, cachedInputTokens} = model.usage;
+    const share =
+      inputTokens > 0 ? Math.round((100 * cachedInputTokens) / inputTokens) : 0;
+    return `Judge ${name}: ${inputTokens.toLocaleString("en-US")} input tokens, ${share}% from the prompt cache`;
+  });
+}

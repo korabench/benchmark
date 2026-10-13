@@ -24,7 +24,11 @@ import {
   resolveEffectiveProfile,
   RoleOverrides,
 } from "../profiles/effectiveProfile.js";
-import {collectServed, createJudgeModels} from "../profiles/roleModels.js";
+import {
+  collectServed,
+  createJudgeModels,
+  describeJudgeCacheUsage,
+} from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {assertResumable} from "./shared/cacheStamp.js";
 import {
@@ -362,4 +366,5 @@ export async function reassessCommand(
     `Per-record assessments → ${assessmentsPath} (${sortedAssessments.length} entries)`
   );
   console.log(`Results archived → ${zipFilePath}`);
+  describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
 }

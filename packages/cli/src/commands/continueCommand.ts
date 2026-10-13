@@ -25,6 +25,7 @@ import {
   collectServed,
   createJudgeModels,
   createSpecModel,
+  describeJudgeCacheUsage,
 } from "../profiles/roleModels.js";
 import {sha256File} from "../shared/sha256File.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
@@ -434,4 +435,5 @@ export async function continueCommand(
     `Per-record assessments → ${assessmentsPath} (${sortedAssessments.length} entries)`
   );
   console.log(`Results archived → ${zipFilePath}`);
+  describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
 }

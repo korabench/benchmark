@@ -100,10 +100,17 @@ export interface ExpandScenarioContext {
   onValidation?: (event: ScenarioValidationEvent) => void | Promise<void>;
 }
 
+export interface JudgeRequest<T> extends TypedModelRequest<T> {
+  /**
+   * Requests with the same key share a long, identical system prompt (one gold
+   * standard's rubric). A model may pass it to its provider's prompt cache;
+   * one that ignores it stays correct.
+   */
+  promptCacheKey?: string;
+}
+
 export interface JudgeModel {
-  getResponse: <T>(
-    request: TypedModelRequest<T>
-  ) => Promise<TypedModelResponse<T>>;
+  getResponse: <T>(request: JudgeRequest<T>) => Promise<TypedModelResponse<T>>;
 }
 
 export type TraceEvent =

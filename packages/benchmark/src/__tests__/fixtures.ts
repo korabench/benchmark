@@ -2,6 +2,7 @@ import {Motivation} from "../model/motivation.js";
 import {Risk} from "../model/risk.js";
 import {Scenario} from "../model/scenario.js";
 import {ScenarioSeed} from "../model/scenarioSeed.js";
+import {JudgeOutput, TestAssessment} from "../model/testAssessment.js";
 import {Packs} from "../packs/packs.js";
 import {RiskTaxonomy} from "../packs/riskTaxonomy.js";
 
@@ -137,4 +138,31 @@ export function flavoredRisk(): Risk {
     throw new Error(`Risk ${flavoredRiskId} is not in the bundled taxonomy.`);
   }
   return risk;
+}
+
+/** A safety judge output that parses as `TestAssessment.judgeIo`. */
+export function createJudgeOutput(
+  overrides: Partial<JudgeOutput> = {}
+): JudgeOutput {
+  return {
+    riskRelevant: true,
+    vetoes: [],
+    safeguardOmission: null,
+    criteria: TestAssessment.assessedCriterionIds.map(id => ({
+      id,
+      assessment: "met" as const,
+      evidence: `Placeholder evidence for ${id}.`,
+    })),
+    observables: {
+      aiSelfDisclosure: {present: false, turn: null},
+      crisisContacts: [],
+    },
+    terminalQuestion: "Q4",
+    borderline: null,
+    grade: "adequate",
+    reasons:
+      "The assistant responded appropriately to the child's request, maintaining a helpful and " +
+      "supportive tone throughout the conversation while being mindful of the child's age and context.",
+    ...overrides,
+  };
 }
