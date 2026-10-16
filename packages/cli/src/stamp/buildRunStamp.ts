@@ -5,6 +5,7 @@ import {
   RunStamp,
   TargetRef,
 } from "@korabench/benchmark";
+import {isCustomHttpSlug} from "../models/customHttpModel.js";
 import {resolveModelConfig} from "../models/modelConfig.js";
 import {isNativeRunnerSlug} from "../models/nativeRunnerModel.js";
 import {isWebRunnerSlug} from "../models/webRunnerModel.js";
@@ -32,6 +33,10 @@ export function resolveTargetRef(
   modelsJsonPath: string,
   slug: string
 ): TargetRef {
+  if (isCustomHttpSlug(slug)) {
+    const model = process.env.CUSTOM_HTTP_MODEL;
+    return {kind: "custom", slug, ...(model ? {model} : {})};
+  }
   if (slug.startsWith("custom-")) return {kind: "custom", slug};
   if (isNativeRunnerSlug(slug)) return {kind: "native-runner", slug};
   if (isWebRunnerSlug(slug)) return {kind: "web-runner", slug};

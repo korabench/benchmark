@@ -3,7 +3,7 @@ import {mkdtempSync, writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import * as path from "node:path";
 import * as v from "valibot";
-import {describe, expect, it} from "vitest";
+import {afterEach, describe, expect, it, vi} from "vitest";
 import {makeRoles} from "../../profiles/__tests__/fixtures.js";
 import {EffectiveProfile} from "../../profiles/effectiveProfile.js";
 import {Profile} from "../../profiles/profile.js";
@@ -39,6 +39,43 @@ describe("resolveTargetRef", () => {
     ["custom-thing", "custom"],
   ])("maps %s to a %s reference", (slug, kind) => {
     expect(resolveTargetRef(modelsJsonPath, slug)).toEqual({kind, slug});
+  });
+
+  describe("custom-http", () => {
+    const slug = "custom-http:http://localhost:8000/v1/chat/completions";
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it("records the model the endpoint was asked for", async () => {
+      vi.stubEnv("CUSTOM_HTTP_MODEL", "qwen3-8b");
+      expect(resolveTargetRef(modelsJsonPath, slug)).toEqual({
+        kind: "custom",
+        slug,
+        model: "qwen3-8b",
+      });
+
+      // The field survives the persisted schema, not just the builder.
+      const stamp = await buildRunStamp({
+        effective,
+        modelsJsonPath,
+        target: slug,
+      });
+      expect(v.parse(RunStamp.io, stamp).models.target).toEqual({
+        kind: "custom",
+        slug,
+        model: "qwen3-8b",
+      });
+    });
+
+    it("omits the model when CUSTOM_HTTP_MODEL is unset", () => {
+      vi.stubEnv("CUSTOM_HTTP_MODEL", "");
+      expect(resolveTargetRef(modelsJsonPath, slug)).toEqual({
+        kind: "custom",
+        slug,
+      });
+    });
   });
 });
 
