@@ -1034,7 +1034,7 @@ Your choice is remembered. All benchmark features remain available with telemetr
 
 The CLI reports the start and finish of these commands: `generate-seeds`, `expand-scenarios`, `run`, `reassess`, `continue`, `seeds-report`, `compare-assessments`, `stats`, `validate`, and `profile`.
 
-Reports contain a random installation ID, an invocation ID and event ID, the command name, CLI version, timestamp, OS family, and whether the command runs in CI. Finishes include duration rounded to whole seconds and whether execution completed, partly completed, failed, or was interrupted. Pipeline commands include available counts of planned, newly completed, failed, and cached work: seed items for generation/expansion, test items for evaluations. These are operational counts, not safety scores.
+Reports contain a random installation ID, an invocation ID and event ID, the command name, CLI version, timestamp, OS family, and whether the command runs in CI. Finishes include duration rounded to whole seconds and whether execution completed, partly completed, failed, or was interrupted. Pipeline commands include available counts of planned, newly completed, and failed work: seed items for generation/expansion, test items for evaluations. These are operational counts, not safety scores.
 
 **We do not collect model names, prompts, conversations, grades or benchmark results, raw arguments, file paths, environment contents, API keys, or exception messages.** Help, version, invalid CLI syntax, telemetry controls, installation, builds, and benchmark library imports do not generate usage events. Explicit identification and deletion commands contact their respective endpoints.
 

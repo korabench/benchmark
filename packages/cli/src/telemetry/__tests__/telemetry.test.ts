@@ -61,6 +61,12 @@ it("keeps v1 fixtures and privacy allowlists strict", async () => {
       work: {...fixtures.finished.work, completed: 101},
     }).success
   ).toBe(false);
+  expect(
+    v.safeParse(eventSchema, {
+      ...fixtures.finished,
+      work: {...fixtures.finished.work, reused: 10},
+    }).success
+  ).toBe(false);
 });
 it("treats unknown nonempty opt-outs conservatively", () => {
   for (const value of ["1", "true", "yes", "on", "TRUE", "invalid"])
@@ -205,10 +211,10 @@ it("failed deletion stays disabled and retryable even under an environment opt-o
   });
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
-it("distinguishes cached work, new successes, partial failure and all-failed work", () => {
+it("reports only new successes and failures, with no cache count", () => {
   expect(workSummary("test", 100, 95, 5, 10)).toEqual({
     outcome: "partial",
-    work: {unit: "test", planned: 100, completed: 85, failed: 5, reused: 10},
+    work: {unit: "test", planned: 100, completed: 85, failed: 5},
   });
   expect(workSummary("seed", 3, 0, 3, 0).outcome).toBe("failed");
   expect(workSummary("test", 3, 3, 0, 3).work?.completed).toBe(0);
@@ -264,7 +270,7 @@ it("sends both phases to a real local HTTP collector", async () => {
         expect.objectContaining({
           event: "command_finished",
           outcome: "partial",
-          work: {unit: "test", planned: 10, completed: 5, failed: 2, reused: 3},
+          work: {unit: "test", planned: 10, completed: 5, failed: 2},
         }),
       ])
     );

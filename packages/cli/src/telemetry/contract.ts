@@ -54,7 +54,6 @@ const workSchema = v.strictObject({
   planned: v.optional(count),
   completed: v.optional(count),
   failed: v.optional(count),
-  reused: v.optional(count),
 });
 const metadata = {
   schemaVersion: v.literal(1),
@@ -87,11 +86,8 @@ export const eventSchema = v.pipe(
     const test = ["run", "reassess", "continue"].includes(event.command);
     if ((!seed && !test) || event.work.unit !== (seed ? "seed" : "test"))
       return false;
-    const {planned, completed, failed, reused} = event.work;
-    return (
-      planned === undefined ||
-      (completed ?? 0) + (failed ?? 0) + (reused ?? 0) <= planned
-    );
+    const {planned, completed, failed} = event.work;
+    return planned === undefined || (completed ?? 0) + (failed ?? 0) <= planned;
   })
 );
 export type TelemetryEvent = v.InferOutput<typeof eventSchema>;

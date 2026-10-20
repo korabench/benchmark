@@ -6,7 +6,6 @@ export interface ExecutionSummary {
     planned?: number;
     completed?: number;
     failed?: number;
-    reused?: number;
   };
 }
 
@@ -19,6 +18,6 @@ export function workSummary(
 ): ExecutionSummary {
   return {
     outcome: failed === 0 ? "completed" : succeeded > 0 ? "partial" : "failed",
-    work: {unit, planned, completed: succeeded - reused, failed, reused},
+    work: {unit, planned, completed: succeeded - reused, failed},
   };
 }

@@ -28,8 +28,7 @@
       "unit": "test",
       "planned": 100,
       "completed": 85,
-      "failed": 5,
-      "reused": 10
+      "failed": 5
     }
   },
   "identify": {
