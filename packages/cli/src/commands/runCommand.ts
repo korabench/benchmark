@@ -33,6 +33,7 @@ import {
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
 import {assertResumable, hasCachedFiles} from "./shared/cacheStamp.js";
+import {workSummary} from "./shared/executionSummary.js";
 import {reportInvalidTurn} from "./shared/reportInvalidTurn.js";
 import {buildResultHeader} from "./shared/resultHeader.js";
 import {resolveRiskIdFilter} from "./shared/riskFilters.js";
@@ -281,6 +282,7 @@ export async function runCommand(
     throw new Error(`No scenarios found in ${scenariosFilePath}.`);
   }
 
+  let reusedCount = 0;
   const progress = Script.progress(totalTests, text =>
     process.stdout.write(text)
   );
@@ -297,6 +299,7 @@ export async function runCommand(
           const content = await fs.readFile(tempFile, "utf-8");
           progress.increment(true);
           const testResult = v.parse(kora.testResultType, JSON.parse(content));
+          reusedCount++;
           return [{kind: "success", testResult}];
         } catch {
           // Not yet processed.
@@ -376,7 +379,13 @@ export async function runCommand(
       `\n${failureCount} tests failed. Temp files kept at ${tempDir} for restart.`
     );
     console.log(`Re-run the command to retry failed tests.`);
-    return;
+    return workSummary(
+      "test",
+      totalTests,
+      testCount,
+      failureCount,
+      reusedCount
+    );
   }
 
   // Write reduced result.
@@ -409,4 +418,5 @@ export async function runCommand(
   console.log(`\nCompleted ${testCount} tests → ${outputFilePath}`);
   console.log(`Test results archived → ${zipFilePath}`);
   describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
+  return workSummary("test", totalTests, testCount, failureCount, reusedCount);
 }

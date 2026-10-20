@@ -31,6 +31,7 @@ import {
 } from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {assertResumable} from "./shared/cacheStamp.js";
+import {workSummary} from "./shared/executionSummary.js";
 import {
   readReassessInputsFromJsonl,
   ReassessInput,
@@ -217,6 +218,7 @@ export async function reassessCommand(
     throw new Error(`No records found in ${inputFilePath}.`);
   }
 
+  let reusedCount = 0;
   const progress = Script.progress(totalTests, text =>
     process.stdout.write(text)
   );
@@ -236,6 +238,7 @@ export async function reassessCommand(
       try {
         const content = await fs.readFile(tempFile, "utf-8");
         const testResult = v.parse(kora.testResultType, JSON.parse(content));
+        reusedCount++;
         progress.increment(true);
         return [
           {
@@ -323,7 +326,13 @@ export async function reassessCommand(
       `\n${failureCount} reassessments failed. Temp files kept at ${tempDir} for restart.`
     );
     console.log(`Re-run the command to retry failed records.`);
-    return;
+    return workSummary(
+      "test",
+      totalTests,
+      testCount,
+      failureCount,
+      reusedCount
+    );
   }
 
   const writtenFiles: string[] = [];
@@ -367,4 +376,5 @@ export async function reassessCommand(
   );
   console.log(`Results archived → ${zipFilePath}`);
   describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
+  return workSummary("test", totalTests, testCount, failureCount, reusedCount);
 }

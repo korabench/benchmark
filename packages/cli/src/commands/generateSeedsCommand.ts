@@ -34,6 +34,7 @@ import {
 import {chainLabel, createChainModel} from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
 import {assertResumable, listCachedFiles} from "./shared/cacheStamp.js";
+import {workSummary} from "./shared/executionSummary.js";
 import {
   buildPassRateReport,
   formatPassRateReport,
@@ -378,7 +379,13 @@ export async function generateSeeds(
       "Re-run the same command to retry only these slots. A slot that never passes points at an assignment no plausible seed can be written for."
     );
     process.exitCode = 1;
-    return;
+    return workSummary(
+      "seed",
+      slots.length,
+      slots.length - stuckSlots.length,
+      stuckSlots.length,
+      slots.length - pendingCount
+    );
   }
 
   // Written in plan order, so that the files do not depend on which call
@@ -412,5 +419,12 @@ export async function generateSeeds(
       ? `\nGenerated ${publicCount + privateCount} seeds → ${outputFilePath}`
       : `\nGenerated ${publicCount} public seeds → ${outputFilePath}\n` +
           `Generated ${privateCount} private seeds → ${privateFilePath}`
+  );
+  return workSummary(
+    "seed",
+    slots.length,
+    slots.length - stuckSlots.length,
+    stuckSlots.length,
+    slots.length - pendingCount
   );
 }

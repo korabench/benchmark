@@ -47,6 +47,8 @@ cp .env.example .env   # then add your API key
 yarn && yarn tsbuild
 ```
 
+> **Telemetry:** The CLI sends basic usage information to KORA by default. On your first interactive command, you can share an organization, website, or email, continue without identifying yourself, or disable all telemetry. Every feature stays available. To opt out before any request, set `KORA_TELEMETRY_DISABLED=1`. [Read about telemetry and your controls](#telemetry).
+
 Run the benchmark with pre-built scenarios:
 
 ```bash
@@ -1013,6 +1015,77 @@ yarn test          # Run tests
 yarn lint          # Lint
 yarn pretty        # Check formatting
 ```
+
+## Telemetry
+
+KORA is open source, so you can use it without ever getting in touch. That also means our team may never know our work is useful to you. Knowing who we reach helps us prioritize improvements, understand our impact, and demonstrate why maintaining an independent, open-source benchmark matters. Sharing just one identifier is a small, voluntary way to help sustain the project.
+
+### Your choice
+
+Basic usage telemetry is **on by default**. Before your first interactive tracked command sends information, the CLI offers three choices:
+
+- **Share an organization, website, or email.** Any one is enough; you choose which.
+- **Continue without identifying myself — basic telemetry stays on.**
+- **Disable all telemetry.**
+
+Your choice is remembered. All benchmark features remain available with telemetry disabled. Your identifier stays private within KORA; it is not published or added to a mailing list. It links to retained activity from this installation, including activity received before you identified yourself. This is pseudonymous installation tracking, not anonymous reporting once an identifier is supplied.
+
+### What is collected
+
+The CLI reports the start and finish of these commands: `generate-seeds`, `expand-scenarios`, `run`, `reassess`, `continue`, `seeds-report`, `compare-assessments`, `stats`, `validate`, and `profile`.
+
+Reports contain a random installation ID, an invocation ID and event ID, the command name, CLI version, timestamp, OS family, and whether the command runs in CI. Finishes include duration rounded to whole seconds and whether execution completed, partly completed, failed, or was interrupted. Pipeline commands include available counts of planned, newly completed, and failed work: seed items for generation/expansion, test items for evaluations. These are operational counts, not safety scores.
+
+**We do not collect model names, prompts, conversations, grades or benchmark results, raw arguments, file paths, environment contents, API keys, or exception messages.** Help, version, invalid CLI syntax, telemetry controls, installation, builds, and benchmark library imports do not generate usage events. Explicit identification and deletion commands contact their respective endpoints.
+
+### Where it goes
+
+Reports go over HTTPS to the existing KORA website at `korabench.ai`, are stored in KORA's PostgreSQL database, and are accessible through the private admin interface. There is no third-party analytics SDK. Hosting providers still process network metadata needed to serve requests; source IP addresses are not stored in the telemetry tables.
+
+Preferences, optional identity, a randomly generated installation ID, and a random installation secret are saved in `~/.kora/telemetry.json` with restricted permissions. The secret authorizes updates and deletion of that installation; the server stores only its hash. It is not a hardware fingerprint. Do not copy this file into images, shared repositories, or publicly distributed environments.
+
+### Controls and CI
+
+In this repository, use `yarn kora telemetry …` (or `kora telemetry …` when using the executable):
+
+```bash
+yarn kora telemetry status
+yarn kora telemetry identify --organization "Example Research"
+yarn kora telemetry identify --website "https://example.org"
+yarn kora telemetry identify --email "you@example.org"
+yarn kora telemetry disable
+yarn kora telemetry enable
+yarn kora telemetry forget
+```
+
+`identify` accepts any combination of those fields; a new submission replaces the previous identity. Without flags it offers an interactive form. Noninteractive identification requires flags. If telemetry is disabled, identification saves locally and sends nothing. `status` shows the effective mode, environment overrides, identity, installation ID, and settings path, never the secret.
+
+To disable reporting before the CLI creates credentials, for a single invocation or an entire CI job:
+
+```bash
+KORA_TELEMETRY_DISABLED=1 yarn kora run <target-model>
+# Or export either variable for the current shell / CI environment:
+export KORA_TELEMETRY_DISABLED=1
+export DO_NOT_TRACK=1
+```
+
+Both opt-out variables recognize `1`, `true`, `yes`, and `on` as disabled; `0`, `false`, `no`, `off`, and an empty value do not opt out. Matching ignores case and surrounding whitespace. Any other nonempty value conservatively disables telemetry. Either opt-out overrides `telemetry enable` and suppresses onboarding.
+
+CI and noninteractive commands never prompt. Basic telemetry remains on unless disabled, and the CLI prints a short notice on stderr once per saved installation. A later interactive invocation still offers the three choices. Installation IDs do **not** represent unique people: shared machines may share an ID, while ephemeral CI environments and fresh home directories can create additional IDs.
+
+### Retention and deletion
+
+Events are eligible for deletion after 365 days; installation profiles after 365 days without activity. The website's hourly cleanup removes expired records from the active telemetry database.
+
+`telemetry disable` stops future reporting without contacting KORA. `telemetry forget` also requests removal of the installation's shared identity and event history from the active database. It works even with an environment opt-out set. After confirmation, it clears the local identity and credentials. The server keeps only a minimal installation ID, credential hash, and revocation timestamp for 365 days to reject delayed requests; this record is excluded from adoption reporting.
+
+If deletion cannot be confirmed, reporting remains disabled and credentials are retained so you can retry `telemetry forget`. Re-enabling is blocked until deletion succeeds. Keep the settings file until confirmation: losing the credential prevents the CLI from authenticating a deletion request. These controls address the active telemetry database; they do not promise immediate erasure from infrastructure backups or operational logs. For questions, contact [hello@korabench.ai](mailto:hello@korabench.ai).
+
+### Limitations
+
+Usage delivery is best-effort, with one-second request timeouts and at most one second of shutdown waiting. Failed events are dropped without retries or a persistent queue. Network failures, forced process termination, opt-outs, CI churn, and missing finish events all limit coverage. A missing finish means completion is unknown. Supplied organizations and contact details are self-declared, not verified affiliations. These are adoption signals, not a census of users or a measure of benchmark quality.
+
+If settings are corrupt, unwritable, or locked by another process, telemetry is skipped for that invocation. If a process was forcibly stopped while updating settings, and no KORA process is still running, remove the empty `~/.kora/telemetry.json.lock` directory before retrying a management command.
 
 ## License
 

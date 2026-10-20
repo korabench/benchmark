@@ -35,6 +35,7 @@ import {
   hasCachedFiles,
   listCachedFiles,
 } from "./shared/cacheStamp.js";
+import {workSummary} from "./shared/executionSummary.js";
 import {
   buildPassRateReport,
   formatPassRateReport,
@@ -224,6 +225,7 @@ export async function expandScenariosCommand(
     process.stdout.write(text)
   );
   let failureCount = 0;
+  let reusedCount = 0;
   await consume(
     flatTransform(
       10,
@@ -233,6 +235,7 @@ export async function expandScenariosCommand(
         // Check if already processed (graceful restart).
         try {
           await fs.access(tempFile);
+          reusedCount++;
           progress.increment(true);
           return [];
         } catch {
@@ -404,7 +407,13 @@ export async function expandScenariosCommand(
       `\n${failureCount} seeds failed validation. Temp files kept at ${tempDir} for restart.`
     );
     console.log(`Re-run the command to retry failed seeds.`);
-    return;
+    return workSummary(
+      "seed",
+      totalSeeds,
+      totalSeeds - failureCount,
+      failureCount,
+      reusedCount
+    );
   }
 
   // Build final output from temp files.
@@ -441,5 +450,12 @@ export async function expandScenariosCommand(
       ? `\nExpanded ${publicCount + privateCount} scenarios → ${outputFilePath}`
       : `\nExpanded ${publicCount} public scenarios → ${outputFilePath}\n` +
           `Expanded ${privateCount} private scenarios → ${privateOutputFilePath}`
+  );
+  return workSummary(
+    "seed",
+    totalSeeds,
+    totalSeeds - failureCount,
+    failureCount,
+    reusedCount
   );
 }

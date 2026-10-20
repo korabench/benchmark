@@ -1,0 +1,39 @@
+{
+  "started": {
+    "schemaVersion": 1,
+    "event": "command_started",
+    "eventId": "58694bf1-2690-4085-bcab-415c2aa48d40",
+    "installationId": "88b7af65-ccdd-4a74-97b2-74f233d316b0",
+    "invocationId": "d936d593-aae1-40c4-bd31-8e5bbc98dad7",
+    "command": "run",
+    "cliVersion": "1.0.0",
+    "occurredAt": "2026-10-20T12:00:00Z",
+    "os": "linux",
+    "ci": false
+  },
+  "finished": {
+    "schemaVersion": 1,
+    "event": "command_finished",
+    "eventId": "68694bf1-2690-4085-bcab-415c2aa48d40",
+    "installationId": "88b7af65-ccdd-4a74-97b2-74f233d316b0",
+    "invocationId": "d936d593-aae1-40c4-bd31-8e5bbc98dad7",
+    "command": "run",
+    "cliVersion": "1.0.0",
+    "occurredAt": "2026-10-20T12:00:42Z",
+    "os": "linux",
+    "ci": false,
+    "outcome": "partial",
+    "durationSeconds": 42,
+    "work": {
+      "unit": "test",
+      "planned": 100,
+      "completed": 85,
+      "failed": 5
+    }
+  },
+  "identify": {
+    "schemaVersion": 1,
+    "installationId": "88b7af65-ccdd-4a74-97b2-74f233d316b0",
+    "identity": {"organization": "Example Research"}
+  }
+}
