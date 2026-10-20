@@ -35,6 +35,7 @@ import {
   resolveTargetGatewayModel,
 } from "./shared/buildContext.js";
 import {assertResumable} from "./shared/cacheStamp.js";
+import {workSummary} from "./shared/executionSummary.js";
 import {
   readReassessInputsFromJsonl,
   ReassessInput,
@@ -244,6 +245,8 @@ export async function continueCommand(
   const metaPath = path.join(outputDirPath, "continue-meta.json");
   await fs.writeFile(metaPath, JSON.stringify(meta, null, 2));
 
+  let reusedCount = 0;
+  const totalTests = selectedRecords.length;
   const progress = Script.progress(selectedRecords.length, text =>
     process.stdout.write(text)
   );
@@ -273,6 +276,7 @@ export async function continueCommand(
       try {
         const content = await fs.readFile(tempFile, "utf-8");
         const testResult = v.parse(kora.testResultType, JSON.parse(content));
+        reusedCount++;
         progress.increment(true);
         return [
           {
@@ -380,7 +384,13 @@ export async function continueCommand(
       `\n${failureCount} continuations failed. Temp files kept at ${tempDir} for restart.`
     );
     console.log(`Re-run the command to retry failed records.`);
-    return;
+    return workSummary(
+      "test",
+      totalTests,
+      testCount,
+      failureCount,
+      reusedCount
+    );
   }
 
   const writtenFiles: string[] = [];
@@ -436,4 +446,5 @@ export async function continueCommand(
   );
   console.log(`Results archived → ${zipFilePath}`);
   describeJudgeCacheUsage(judgeModels).forEach(l => console.log(l));
+  return workSummary("test", totalTests, testCount, failureCount, reusedCount);
 }

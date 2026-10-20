@@ -7,6 +7,7 @@ import {
   PopulationDistribution,
   ScenarioPrompt,
 } from "@korabench/benchmark";
+import {CommanderError} from "commander";
 import {existsSync} from "node:fs";
 import * as path from "node:path";
 import * as v from "valibot";
@@ -25,6 +26,8 @@ import {configurePacks} from "./packs/loadPack.js";
 import {loadProfile, profilesDir} from "./profiles/loadProfile.js";
 import {Profiles} from "./profiles/profiles.js";
 import {readPackageVersion} from "./shared/packageVersion.js";
+import {trackedAction} from "./telemetry/executeCommand.js";
+import {telemetryCommand} from "./telemetry/management.js";
 
 function findConfigFile(filename: string): string {
   let dir = process.cwd();
@@ -61,40 +64,21 @@ function optionalCsv(value: string | undefined): readonly string[] | undefined {
   return value === undefined ? undefined : splitCsv(value);
 }
 
-const modelsJsonPath = findConfigFile("models.json");
-const dataPath = path.join(path.dirname(modelsJsonPath), "data");
-
-const defaultSeedsPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "scenarioSeeds.jsonl")
+let modelsJsonPath: string;
+const defaultSeedsPath = path.join("data", "scenarioSeeds.jsonl");
+const defaultScenariosPath = path.join("data", "scenarios.jsonl");
+const defaultResultsPath = path.join("data", "results.json");
+const defaultReassessInputPath = path.join("data", "reassessment-input.jsonl");
+const defaultReassessOutputDir = path.join("data", "reassessment-results");
+const defaultContinueOutputDir = path.join("data", "continue-results");
+const defaultCompareOriginalPath = path.join(
+  "data",
+  "reassessment-input.assessments.json"
 );
-const defaultScenariosPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "scenarios.jsonl")
-);
-const defaultResultsPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "results.json")
-);
-const defaultReassessInputPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "reassessment-input.jsonl")
-);
-const defaultReassessOutputDir = path.relative(
-  process.cwd(),
-  path.join(dataPath, "reassessment-results")
-);
-const defaultContinueOutputDir = path.relative(
-  process.cwd(),
-  path.join(dataPath, "continue-results")
-);
-const defaultCompareOriginalPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "reassessment-input.assessments.json")
-);
-const defaultCompareNewPath = path.relative(
-  process.cwd(),
-  path.join(dataPath, "reassessment-results", "assessments.json")
+const defaultCompareNewPath = path.join(
+  "data",
+  "reassessment-results",
+  "assessments.json"
 );
 
 const program = new Command()
@@ -126,22 +110,36 @@ const program = new Command()
     process.env.KORA_PROFILE ?? "kora"
   );
 
-// Packs and the profile must be resolved before any command body runs, but
-// AFTER the module graph is fully loaded — `cli.ts` statically imports every
-// command, so nothing may read a pack-dependent schema at module scope. See
-// `benchmark.ts`. The `profile` command loads the profile itself so that
-// `--print-hash` can inspect a file whose hash is stale.
-program.hook("preAction", (_thisCommand, actionCommand) => {
+function prepareCommand(name: string) {
+  modelsJsonPath = findConfigFile("models.json");
+  const command = program.commands.find(command => command.name() === name)!;
+  // Resolve only default paths after parsing; explicit user paths stay relative to cwd.
+  for (const option of command.options) {
+    const key = option.attributeName();
+    if (
+      command.getOptionValueSource(key) === "default" &&
+      typeof option.defaultValue === "string" &&
+      option.defaultValue.startsWith("data" + path.sep)
+    ) {
+      command.setOptionValueWithSource(
+        key,
+        path.relative(
+          process.cwd(),
+          path.join(path.dirname(modelsJsonPath), option.defaultValue)
+        ),
+        "default"
+      );
+    }
+  }
   configurePacks({
     taxonomy: program.opts().taxonomy,
     behaviors: program.opts().behaviors,
   });
-  if (actionCommand.name() !== "profile") {
+  if (name !== "profile")
     Profiles.configure(
       loadProfile(program.opts().profile, profilesDir(modelsJsonPath))
     );
-  }
-});
+}
 
 export type Program = typeof program;
 
@@ -192,64 +190,72 @@ program
     "share of each risk's seeds held out as private, between 0 and 1; they are written to <output>.private.<ext>, which git ignores (0 keeps every seed public)",
     String(DEFAULT_PRIVATE_RATIO)
   )
-  .action(async (model, opts) => {
-    if (opts.seedsPerTask !== undefined) {
-      throw new Error(
-        "--seeds-per-task was removed: seeds are no longer generated per age/motivation combination. " +
-          "Every dimension is now allocated per risk; use --total-seeds <count> to set the number of seeds per risk."
-      );
-    }
-    const distribution = await PopulationDistribution.resolve(
-      opts.distribution
-    );
-    const randomSeed =
-      opts.randomSeed !== undefined ? parseInt(opts.randomSeed, 10) : undefined;
-    if (opts.randomSeed !== undefined && !Number.isFinite(randomSeed)) {
-      throw new Error(
-        `--random-seed must be an integer (got: ${opts.randomSeed})`
-      );
-    }
-    const privateRatio = Number(opts.privateRatio);
-    if (
-      !Number.isFinite(privateRatio) ||
-      privateRatio < 0 ||
-      privateRatio > 1
-    ) {
-      throw new Error(
-        `--private-ratio must be a number between 0 and 1 (got: ${opts.privateRatio})`
-      );
-    }
+  .action(
+    trackedAction(
+      "generate-seeds",
+      () => prepareCommand("generate-seeds"),
+      async (model, opts) => {
+        if (opts.seedsPerTask !== undefined) {
+          throw new Error(
+            "--seeds-per-task was removed: seeds are no longer generated per age/motivation combination. " +
+              "Every dimension is now allocated per risk; use --total-seeds <count> to set the number of seeds per risk."
+          );
+        }
+        const distribution = await PopulationDistribution.resolve(
+          opts.distribution
+        );
+        const randomSeed =
+          opts.randomSeed !== undefined
+            ? parseInt(opts.randomSeed, 10)
+            : undefined;
+        if (opts.randomSeed !== undefined && !Number.isFinite(randomSeed)) {
+          throw new Error(
+            `--random-seed must be an integer (got: ${opts.randomSeed})`
+          );
+        }
+        const privateRatio = Number(opts.privateRatio);
+        if (
+          !Number.isFinite(privateRatio) ||
+          privateRatio < 0 ||
+          privateRatio > 1
+        ) {
+          throw new Error(
+            `--private-ratio must be a number between 0 and 1 (got: ${opts.privateRatio})`
+          );
+        }
 
-    return generateSeeds(
-      program,
-      modelsJsonPath,
-      {
-        seeds: optionalCsv(model),
-        seedValidation: optionalCsv(opts.validator),
-      },
-      opts.output,
-      {
-        totalSeeds:
-          opts.totalSeeds !== undefined
-            ? parseInt(opts.totalSeeds, 10)
-            : undefined,
-        ageRanges: opts.ageRanges
-          .split(",")
-          .map(r => v.parse(AgeRange.io, r.trim())),
-        riskIds: opts.riskIds
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        motivations: opts.motivations
-          ?.split(",")
-          .map(name => name.trim())
-          .filter(name => name.length > 0),
-        distribution,
-        randomSeed,
-        privateRatio,
+        return generateSeeds(
+          program,
+          modelsJsonPath,
+          {
+            seeds: optionalCsv(model),
+            seedValidation: optionalCsv(opts.validator),
+          },
+          opts.output,
+          {
+            totalSeeds:
+              opts.totalSeeds !== undefined
+                ? parseInt(opts.totalSeeds, 10)
+                : undefined,
+            ageRanges: opts.ageRanges
+              .split(",")
+              .map(r => v.parse(AgeRange.io, r.trim())),
+            riskIds: opts.riskIds
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            motivations: opts.motivations
+              ?.split(",")
+              .map(name => name.trim())
+              .filter(name => name.length > 0),
+            distribution,
+            randomSeed,
+            privateRatio,
+          }
+        );
       }
-    );
-  });
+    )
+  );
 
 program
   .command("seeds-report")
@@ -288,34 +294,40 @@ program
     "private share the file was generated with",
     String(DEFAULT_PRIVATE_RATIO)
   )
-  .action(async opts => {
-    const randomSeed = parseInt(opts.randomSeed, 10);
-    if (!Number.isFinite(randomSeed)) {
-      throw new Error(
-        `--random-seed must be an integer (got: ${opts.randomSeed})`
-      );
-    }
-    return seedsReportCommand(program, opts.input, {
-      totalSeeds:
-        opts.totalSeeds !== undefined
-          ? parseInt(opts.totalSeeds, 10)
-          : undefined,
-      ageRanges: opts.ageRanges
-        .split(",")
-        .map((r: string) => v.parse(AgeRange.io, r.trim())),
-      riskIds: opts.riskIds
-        ?.split(",")
-        .map((id: string) => id.trim())
-        .filter((id: string) => id.length > 0),
-      motivations: opts.motivations
-        ?.split(",")
-        .map((name: string) => name.trim())
-        .filter((name: string) => name.length > 0),
-      distribution: await PopulationDistribution.resolve(opts.distribution),
-      randomSeed,
-      privateRatio: Number(opts.privateRatio),
-    });
-  });
+  .action(
+    trackedAction(
+      "seeds-report",
+      () => prepareCommand("seeds-report"),
+      async opts => {
+        const randomSeed = parseInt(opts.randomSeed, 10);
+        if (!Number.isFinite(randomSeed)) {
+          throw new Error(
+            `--random-seed must be an integer (got: ${opts.randomSeed})`
+          );
+        }
+        return seedsReportCommand(program, opts.input, {
+          totalSeeds:
+            opts.totalSeeds !== undefined
+              ? parseInt(opts.totalSeeds, 10)
+              : undefined,
+          ageRanges: opts.ageRanges
+            .split(",")
+            .map((r: string) => v.parse(AgeRange.io, r.trim())),
+          riskIds: opts.riskIds
+            ?.split(",")
+            .map((id: string) => id.trim())
+            .filter((id: string) => id.length > 0),
+          motivations: opts.motivations
+            ?.split(",")
+            .map((name: string) => name.trim())
+            .filter((name: string) => name.length > 0),
+          distribution: await PopulationDistribution.resolve(opts.distribution),
+          randomSeed,
+          privateRatio: Number(opts.privateRatio),
+        });
+      }
+    )
+  );
 
 program
   .command("expand-scenarios")
@@ -342,18 +354,26 @@ program
     "--language <name>",
     'natural language the simulated child writes in, e.g. "Estonian" (default: English)'
   )
-  .action((model, userModel, opts) =>
-    expandScenariosCommand(
-      program,
-      modelsJsonPath,
-      {expansion: optionalCsv(model), expansionUser: optionalCsv(userModel)},
-      opts.input,
-      opts.output,
-      opts.riskIds
-        ?.split(",")
-        .map(id => id.trim())
-        .filter(id => id.length > 0),
-      opts.language
+  .action(
+    trackedAction(
+      "expand-scenarios",
+      () => prepareCommand("expand-scenarios"),
+      (model, userModel, opts) =>
+        expandScenariosCommand(
+          program,
+          modelsJsonPath,
+          {
+            expansion: optionalCsv(model),
+            expansionUser: optionalCsv(userModel),
+          },
+          opts.input,
+          opts.output,
+          opts.riskIds
+            ?.split(",")
+            .map(id => id.trim())
+            .filter(id => id.length > 0),
+          opts.language
+        )
     )
   );
 
@@ -406,48 +426,56 @@ program
     "--language <name>",
     'natural language of the conversation, e.g. "Estonian": the simulated child writes in it and the target model is told to answer in it (default: English)'
   )
-  .action((targetModel, userModel, opts) => {
-    const limit =
-      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
-    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
-      throw new Error(
-        `--limit must be a positive integer (got: ${opts.limit})`
-      );
-    }
-    const concurrency = parseInt(opts.concurrency, 10);
-    if (!Number.isFinite(concurrency) || concurrency <= 0) {
-      throw new Error(
-        `--concurrency must be a positive integer (got: ${opts.concurrency})`
-      );
-    }
-    const cooldownSeconds = parseInt(opts.cooldown, 10);
-    if (!Number.isFinite(cooldownSeconds) || cooldownSeconds < 0) {
-      throw new Error(
-        `--cooldown must be a non-negative integer (got: ${opts.cooldown})`
-      );
-    }
+  .action(
+    trackedAction(
+      "run",
+      () => prepareCommand("run"),
+      (targetModel, userModel, opts) => {
+        const limit =
+          opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+        if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+          throw new Error(
+            `--limit must be a positive integer (got: ${opts.limit})`
+          );
+        }
+        const concurrency = parseInt(opts.concurrency, 10);
+        if (!Number.isFinite(concurrency) || concurrency <= 0) {
+          throw new Error(
+            `--concurrency must be a positive integer (got: ${opts.concurrency})`
+          );
+        }
+        const cooldownSeconds = parseInt(opts.cooldown, 10);
+        if (!Number.isFinite(cooldownSeconds) || cooldownSeconds < 0) {
+          throw new Error(
+            `--cooldown must be a non-negative integer (got: ${opts.cooldown})`
+          );
+        }
 
-    return runCommand(
-      program,
-      modelsJsonPath,
-      targetModel,
-      {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
-      opts.input,
-      opts.output,
-      opts.prompts.split(",").map(p => v.parse(ScenarioPrompt.io, p.trim())),
-      {
-        riskIds: opts.riskIds
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        limit,
-        concurrency,
-        reverse: opts.reverse === true,
-        cooldownMs: cooldownSeconds * 1000,
-        language: opts.language,
+        return runCommand(
+          program,
+          modelsJsonPath,
+          targetModel,
+          {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
+          opts.input,
+          opts.output,
+          opts.prompts
+            .split(",")
+            .map(p => v.parse(ScenarioPrompt.io, p.trim())),
+          {
+            riskIds: opts.riskIds
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            limit,
+            concurrency,
+            reverse: opts.reverse === true,
+            cooldownMs: cooldownSeconds * 1000,
+            language: opts.language,
+          }
+        );
       }
-    );
-  });
+    )
+  );
 
 program
   .command("reassess")
@@ -484,34 +512,40 @@ program
     "--limit <count>",
     "maximum number of records to reassess (useful for smoke tests)"
   )
-  .action((userModel, opts) => {
-    const limit =
-      opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
-    if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
-      throw new Error(
-        `--limit must be a positive integer (got: ${opts.limit})`
-      );
-    }
+  .action(
+    trackedAction(
+      "reassess",
+      () => prepareCommand("reassess"),
+      (userModel, opts) => {
+        const limit =
+          opts.limit !== undefined ? parseInt(opts.limit, 10) : undefined;
+        if (limit !== undefined && (!Number.isFinite(limit) || limit <= 0)) {
+          throw new Error(
+            `--limit must be a positive integer (got: ${opts.limit})`
+          );
+        }
 
-    return reassessCommand(
-      program,
-      modelsJsonPath,
-      {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
-      opts.input,
-      opts.output,
-      {
-        riskIds: opts.riskIds
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        targetModels: opts.targetModels
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        limit,
+        return reassessCommand(
+          program,
+          modelsJsonPath,
+          {judges: optionalCsv(opts.judges), user: optionalCsv(userModel)},
+          opts.input,
+          opts.output,
+          {
+            riskIds: opts.riskIds
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            targetModels: opts.targetModels
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            limit,
+          }
+        );
       }
-    );
-  });
+    )
+  );
 
 program
   .command("continue")
@@ -552,40 +586,49 @@ program
     "--language <name>",
     'natural language of the added turns, e.g. "Estonian" (default: English)'
   )
-  .action((userModel, opts) => {
-    const limitPerRisk =
-      opts.limitPerRisk !== undefined
-        ? parseInt(opts.limitPerRisk, 10)
-        : undefined;
-    if (
-      limitPerRisk !== undefined &&
-      (!Number.isFinite(limitPerRisk) || limitPerRisk <= 0)
-    ) {
-      throw new Error(
-        `--limit-per-risk must be a positive integer (got: ${opts.limitPerRisk})`
-      );
-    }
+  .action(
+    trackedAction(
+      "continue",
+      () => prepareCommand("continue"),
+      (userModel, opts) => {
+        const limitPerRisk =
+          opts.limitPerRisk !== undefined
+            ? parseInt(opts.limitPerRisk, 10)
+            : undefined;
+        if (
+          limitPerRisk !== undefined &&
+          (!Number.isFinite(limitPerRisk) || limitPerRisk <= 0)
+        ) {
+          throw new Error(
+            `--limit-per-risk must be a positive integer (got: ${opts.limitPerRisk})`
+          );
+        }
 
-    return continueCommand(
-      program,
-      modelsJsonPath,
-      {judges: optionalCsv(opts.judges), continueUser: optionalCsv(userModel)},
-      opts.input,
-      opts.output,
-      {
-        riskIds: opts.riskIds
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        targetModels: opts.targetModels
-          ?.split(",")
-          .map(id => id.trim())
-          .filter(id => id.length > 0),
-        limitPerRisk,
-        language: opts.language,
+        return continueCommand(
+          program,
+          modelsJsonPath,
+          {
+            judges: optionalCsv(opts.judges),
+            continueUser: optionalCsv(userModel),
+          },
+          opts.input,
+          opts.output,
+          {
+            riskIds: opts.riskIds
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            targetModels: opts.targetModels
+              ?.split(",")
+              .map(id => id.trim())
+              .filter(id => id.length > 0),
+            limitPerRisk,
+            language: opts.language,
+          }
+        );
       }
-    );
-  });
+    )
+  );
 
 program
   .command("compare-assessments")
@@ -603,10 +646,15 @@ program
     defaultCompareNewPath
   )
   .option("--csv <path>", "write per-record detail CSV to this path")
-  .action(opts =>
-    compareAssessmentsCommand(program, opts.original, opts.new, {
-      csvPath: opts.csv,
-    })
+  .action(
+    trackedAction(
+      "compare-assessments",
+      () => prepareCommand("compare-assessments"),
+      opts =>
+        compareAssessmentsCommand(program, opts.original, opts.new, {
+          csvPath: opts.csv,
+        })
+    )
   );
 
 program
@@ -624,14 +672,19 @@ program
     "comma-separated mechanism IDs to report (defaults to all mechanisms)"
   )
   .option("--by-model", "also print a per-model breakdown")
-  .action(opts =>
-    statsCommand(program, opts.input, {
-      mechanismIds: opts.mechanismIds
-        ?.split(",")
-        .map(id => id.trim())
-        .filter(id => id.length > 0),
-      byModel: opts.byModel === true,
-    })
+  .action(
+    trackedAction(
+      "stats",
+      () => prepareCommand("stats"),
+      opts =>
+        statsCommand(program, opts.input, {
+          mechanismIds: opts.mechanismIds
+            ?.split(",")
+            .map(id => id.trim())
+            .filter(id => id.length > 0),
+          byModel: opts.byModel === true,
+        })
+    )
   );
 
 program
@@ -652,18 +705,24 @@ program
     "--packs-only",
     "print the active profile, taxonomy and behavior pack, then stop without reading the input"
   )
-  .action(opts => {
-    const kind = opts.kind as InputKind | undefined;
-    if (kind && !["seeds", "scenarios", "reassess"].includes(kind)) {
-      throw new Error(
-        `--kind must be one of: seeds, scenarios, reassess (got: ${opts.kind})`
-      );
-    }
-    return validateCommand(program, modelsJsonPath, opts.input, {
-      kind,
-      packsOnly: opts.packsOnly === true,
-    });
-  });
+  .action(
+    trackedAction(
+      "validate",
+      () => prepareCommand("validate"),
+      opts => {
+        const kind = opts.kind as InputKind | undefined;
+        if (kind && !["seeds", "scenarios", "reassess"].includes(kind)) {
+          throw new Error(
+            `--kind must be one of: seeds, scenarios, reassess (got: ${opts.kind})`
+          );
+        }
+        return validateCommand(program, modelsJsonPath, opts.input, {
+          kind,
+          packsOnly: opts.packsOnly === true,
+        });
+      }
+    )
+  );
 
 program
   .command("profile")
@@ -678,11 +737,31 @@ program
     "--print-hash",
     "print only the profile's recomputed content hash (paste it into the file after bumping its version)"
   )
-  .action(opts =>
-    profileCommand(program, modelsJsonPath, program.opts().profile, {
-      check: opts.check === true,
-      printHash: opts.printHash === true,
-    })
+  .action(
+    trackedAction(
+      "profile",
+      () => prepareCommand("profile"),
+      opts =>
+        profileCommand(program, modelsJsonPath, program.opts().profile, {
+          check: opts.check === true,
+          printHash: opts.printHash === true,
+        })
+    )
   );
 
-program.parseAsync();
+program.addCommand(telemetryCommand());
+program.exitOverride();
+try {
+  await program.parseAsync();
+} catch (error) {
+  if (error instanceof CommanderError) {
+    process.exitCode =
+      error.exitCode === 0
+        ? 0
+        : process.argv.includes("telemetry")
+          ? 1
+          : error.exitCode;
+  } else {
+    throw error;
+  }
+}
