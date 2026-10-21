@@ -9,6 +9,7 @@ import {
 } from "ai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
+import {parseDroppingExtraKeys} from "./dropExtraKeys.js";
 import {createFallbackModel} from "./fallbackModel.js";
 import {Model, StructuredRequest} from "./model.js";
 import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
@@ -261,7 +262,16 @@ export function createGatewayModelFromConfig(
 
           record(result);
           const parsed = JSON.parse(extractJson(result.text));
-          return v.parse(request.outputType, parsed);
+          const {output, dropped} = parseDroppingExtraKeys(
+            request.outputType,
+            parsed
+          );
+          if (dropped.length > 0) {
+            console.warn(
+              `[${config.model}] dropped keys the schema does not define: ${dropped.join(", ")}`
+            );
+          }
+          return output;
         }, retryOptions);
       }
 
