@@ -14,7 +14,8 @@ function buildJudgeAssessmentSchema(): JudgeAssessmentSchema {
   return v.strictObject({
     judgeModelSlug: v.string(),
     assessment: TestAssessment.io,
-    mechanismAssessment: MechanismAssessment.io,
+    // Absent for a judge that grades safety only (`mechanismJudges`).
+    mechanismAssessment: v.optional(MechanismAssessment.io),
   }) as unknown as JudgeAssessmentSchema;
 }
 
@@ -25,7 +26,7 @@ function buildJudgeAssessmentSchema(): JudgeAssessmentSchema {
 export interface JudgeAssessment {
   judgeModelSlug: string;
   assessment: TestAssessment;
-  mechanismAssessment: MechanismAssessment;
+  mechanismAssessment?: MechanismAssessment;
 }
 
 type JudgeAssessmentSchema = v.GenericSchema<

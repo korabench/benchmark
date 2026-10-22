@@ -245,4 +245,36 @@ describe("kora.runTest", () => {
     expect(judge1.getResponse).toHaveBeenCalledTimes(2);
     expect(judge2.getResponse).toHaveBeenCalledTimes(2);
   });
+
+  it("asks only the mechanism judges for the behaviours", async () => {
+    const judge1 = createMockJudgeModel();
+    const judge2 = createMockJudgeModel();
+    const context: TestContext = {
+      ...createTestContext(),
+      judgeModels: {"judge-a": judge1, "judge-b": judge2},
+      mechanismJudges: ["judge-a"],
+    };
+
+    const result = await kora.runTest(context, scenario, defaultKey);
+
+    expect(judge1.getResponse).toHaveBeenCalledTimes(2);
+    expect(judge2.getResponse).toHaveBeenCalledTimes(1);
+    expect(result.judgeAssessments[0]!.mechanismAssessment).toBeDefined();
+    expect(result.judgeAssessments[1]!.mechanismAssessment).toBeUndefined();
+    expect(result.judgeAssessments[1]!.assessment.grade).toBe("adequate");
+    expect(Object.keys(result.mechanismAssessment)).toEqual(
+      Mechanism.listAll().map(m => m.id)
+    );
+  });
+
+  it("rejects mechanism judges that are not judges", async () => {
+    const context: TestContext = {
+      ...createTestContext(),
+      mechanismJudges: ["nobody"],
+    };
+
+    await expect(kora.runTest(context, scenario, defaultKey)).rejects.toThrow(
+      /mechanismJudges must name at least one of the judges/
+    );
+  });
 });

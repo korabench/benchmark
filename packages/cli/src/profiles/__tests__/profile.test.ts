@@ -1,5 +1,5 @@
 import {describe, expect, it} from "vitest";
-import {ODD_JUDGES_MESSAGE, Profile, Role} from "../profile.js";
+import {Profile, Role} from "../profile.js";
 import {makeProfile, makeRoles, makeSpec} from "./fixtures.js";
 
 describe("Profile.parse", () => {
@@ -8,12 +8,25 @@ describe("Profile.parse", () => {
     expect(Profile.parse(profile, {verifyHash: true})).toEqual(profile);
   });
 
-  it("rejects an even number of judges", () => {
+  it("accepts a pair of judges, one of them grading the behaviours", () => {
     const profile = makeProfile({
-      roles: makeRoles({judges: [makeSpec("j1"), makeSpec("j2")]}),
+      roles: makeRoles({
+        judges: [makeSpec("j1"), makeSpec("j2")],
+        mechanismJudges: ["j1"],
+      }),
+    });
+    expect(Profile.parse(profile, {verifyHash: true})).toEqual(profile);
+  });
+
+  it("rejects behaviours judges that are not judges", () => {
+    const profile = makeProfile({
+      roles: makeRoles({
+        judges: [makeSpec("j1"), makeSpec("j2")],
+        mechanismJudges: ["j3"],
+      }),
     });
     expect(() => Profile.parse(profile, {verifyHash: true})).toThrow(
-      ODD_JUDGES_MESSAGE
+      /"mechanismJudges" names models that are not judges: j3/
     );
   });
 

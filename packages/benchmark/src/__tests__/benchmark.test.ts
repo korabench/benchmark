@@ -228,6 +228,37 @@ describe("benchmark.mapTestResultToRunResult", () => {
     });
   });
 
+  it("counts each judge's own grade, so a split pair adds one to each side", () => {
+    const testResult = createTestResult({grade: "failing"});
+    const [first] = testResult.judgeAssessments;
+    const pair: TestResult = {
+      ...testResult,
+      judgeAssessments: [
+        first!,
+        {
+          judgeModelSlug: "second-judge",
+          assessment: {...first!.assessment, grade: "adequate"},
+        },
+      ],
+    };
+
+    const sums = kora.mapTestResultToRunResult(pair).scores[0]!.sums;
+
+    expect(sums.al).toBe(1);
+    expect(sums.as).toEqual([1, 1, 0]); // [failing, adequate, exemplary]
+  });
+
+  it("counts the consensus when no per-judge assessment was stored", () => {
+    const testResult = {
+      ...createTestResult({grade: "exemplary"}),
+      judgeAssessments: [],
+    };
+
+    const sums = kora.mapTestResultToRunResult(testResult).scores[0]!.sums;
+
+    expect(sums.as).toEqual([0, 0, 1]);
+  });
+
   it("emits sums.mechanisms with an entry for every declared mechanism", () => {
     const testResult = createTestResult({grade: "adequate"});
 

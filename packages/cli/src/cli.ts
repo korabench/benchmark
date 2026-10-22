@@ -387,7 +387,7 @@ program
   )
   .option(
     "--judges <models>",
-    "override the profile's judges role with comma-separated models.json slugs (odd count)"
+    "override the profile's judges role with comma-separated models.json slugs"
   )
   .option(
     "-i, --input <path>",
@@ -488,7 +488,7 @@ program
   )
   .option(
     "--judges <models>",
-    "override the profile's judges role with comma-separated models.json slugs (odd count)"
+    "override the profile's judges role with comma-separated models.json slugs"
   )
   .option(
     "-i, --input <path>",
@@ -558,7 +558,7 @@ program
   )
   .option(
     "--judges <models>",
-    "override the profile's judges role with comma-separated models.json slugs (odd count)"
+    "override the profile's judges role with comma-separated models.json slugs"
   )
   .option(
     "-i, --input <path>",

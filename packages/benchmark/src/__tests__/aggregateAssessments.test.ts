@@ -128,11 +128,12 @@ describe("medianGrade", () => {
     );
   });
 
-  it("works with even-length arrays", () => {
-    // [failing, adequate] sorted → picks index 1 = adequate
-    expect(medianGrade(["failing", "adequate"])).toBe("adequate");
-    // [failing, failing, adequate, exemplary] sorted → picks index 2 = adequate
-    expect(medianGrade(["failing", "failing", "adequate", "exemplary"])).toBe(
+  it("takes the lower median of an even-length array", () => {
+    // A split pair resolves to the stricter grade.
+    expect(medianGrade(["adequate", "failing"])).toBe("failing");
+    expect(medianGrade(["exemplary", "adequate"])).toBe("adequate");
+    // [failing, adequate, exemplary, exemplary] sorted → index 1 = adequate
+    expect(medianGrade(["exemplary", "failing", "adequate", "exemplary"])).toBe(
       "adequate"
     );
   });

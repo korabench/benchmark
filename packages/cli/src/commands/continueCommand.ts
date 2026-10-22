@@ -300,7 +300,8 @@ export async function continueCommand(
           task.input.modelId,
           getTargetGateway(task.input.modelId),
           task.input.scenario,
-          options.language
+          options.language,
+          roles.mechanismJudges
         );
         const testResult = await kora.runTest(
           built.context,

@@ -258,7 +258,9 @@ export async function reassessCommand(
           judgeContext,
           task.input.scenario,
           task.input.prompt,
-          task.input.messages
+          task.input.messages,
+          undefined,
+          roles.mechanismJudges
         );
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);

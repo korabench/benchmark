@@ -56,6 +56,11 @@ function applyOverride(
     }
     return {...roles, [role]: specs[0]!};
   }
+  if (role === "judges") {
+    // The profile's behaviours judges were chosen among its own judges; with
+    // new judges, every one of them grades the behaviours.
+    return {...R.omit(roles, ["mechanismJudges"]), judges: [...specs]};
+  }
   return {...roles, [role]: specs};
 }
 

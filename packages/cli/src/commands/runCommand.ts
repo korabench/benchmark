@@ -324,7 +324,8 @@ export async function runCommand(
           targetModelSlug,
           targetGatewayModel,
           task.scenario,
-          options.language
+          options.language,
+          roles.mechanismJudges
         );
 
         let outcome: "completed" | "errored" = "errored";
