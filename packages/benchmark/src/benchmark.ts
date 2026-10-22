@@ -124,6 +124,9 @@ export interface TestContext {
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
+  /** Slugs of the judges that also grade the behaviours (M1-M7); every judge
+   * when undefined. The others grade safety only. */
+  mechanismJudges?: readonly string[];
   /** Natural language the conversation is held in (e.g. "Estonian"): the
    * simulated child writes in it and the target model is told to answer in it.
    * Undefined keeps the default English. */

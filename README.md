@@ -254,7 +254,7 @@ yarn kora run <target-model> [user-model]
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `<target-model>`      | Model to benchmark                                                                                                                                      |
 | `[user-model]`        | Override the profile's `user` role (child simulator) with a `models.json` slug (default: from profile)                                                  |
-| `--judges <models>`   | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                        |
+| `--judges <models>`   | Override the profile's `judges` role with comma-separated `models.json` slugs (default: from profile)                                                   |
 | `-i, --input <path>`  | Input scenarios JSONL file (default: `data/scenarios.jsonl`)                                                                                            |
 | `-o, --output <path>` | Output results JSON file (default: `data/results.json`)                                                                                                 |
 | `--prompts <prompts>` | Comma-separated prompt variants to test (default: `default`)                                                                                            |
@@ -267,7 +267,7 @@ yarn kora run <target-model> [user-model]
 
 The safety judge grades each conversation against the gold standard of its seed's risk (`packages/benchmark/data/goldStandardRubrics/`; a self-harm seed names one of 1.2a, 1.2b, 1.2c in `goldStandardId`). It applies the gold standard's confirmed vetoes, walks the decision tree Q1–Q5 and assesses criteria C2–C9, with the expert-graded calibration conversations of that gold standard in its prompt as worked examples. Besides `grade` and `reasons`, each assessment stores those `findings`: vetoes triggered and safeguard omitted with quotes, a verdict and quote per criterion, the observables (explicit AI self-disclosure, crisis contacts given), the terminal question, and a borderline flag. The system prompt depends only on the gold standard, so providers can cache it: the judge sends a prompt-cache key per gold standard (OpenAI, with 24-hour retention) or marks the prefix (Anthropic), and `run`, `reassess` and `continue` print each judge's share of input tokens read from the cache.
 
-By default a single judge (`gpt-5.2:medium:limited`, from the `kora` profile) grades every conversation, matching the production grading pipeline. When multiple judge models are specified, each judge independently evaluates every conversation: the final grade is the **median** across judges (on the ordered scale failing < adequate < exemplary), the findings come from the first judge whose grade is the median, a borderline flag raised by any judge is kept, and the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis.
+By default the `kora` profile's pair of judges, `gpt-6.1-sol:medium` and `claude-sonnet-5.5:medium`, grades every conversation, matching production's V3 grading. Each judge grades safety independently, and a run's grade counts pool every judge's grade, so each rate (failing, adequate, exemplary) is the mean of the judges' rates. A conversation's own grade is the median across judges on the ordered scale failing < adequate < exemplary, the lower one for an even count, so a split pair shows its stricter grade; the findings come from the first judge whose grade it is, and a borderline flag raised by any judge is kept. The behaviours (M1–M7) are graded by the profile's `mechanismJudges` (gpt-6.1-sol alone in `kora`; every judge when the role is absent or `--judges` overrides the judges), and with several of them the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis. The `2.2.0` tag keeps V2's single gpt-5.2 judge.
 
 All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off. A resume is refused when the temp files were produced under a different configuration (other profile, override, prompts or packs); see [Run stamps](#run-stamps).
 
@@ -282,7 +282,7 @@ yarn kora reassess [user-model]
 | Argument / Option       | Description                                                                                                                                                                                                                  |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `[user-model]`          | Override the profile's `user` role with a `models.json` slug. Only recorded into each output JSON's `user` field — the user model that originally produced the transcripts; no user model is invoked (default: from profile) |
-| `--judges <models>`     | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile)                                                                                                             |
+| `--judges <models>`     | Override the profile's `judges` role with comma-separated `models.json` slugs (default: from profile)                                                                                                                        |
 | `-i, --input <path>`    | Input JSONL of recorded conversations (default: `data/reassessment-input.jsonl`)                                                                                                                                             |
 | `-o, --output <dir>`    | Output directory — one `{modelId}.json` is written per target model (default: `data/reassessment-results`)                                                                                                                   |
 | `--risk-ids <ids>`      | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                                                                     |
@@ -327,7 +327,7 @@ yarn kora continue [user-model]
 | Argument / Option          | Description                                                                                                                                                                        |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `[user-model]`             | Override the profile's `continueUser` role with a `models.json` slug (default: from profile; `gemma-4-31b-it` in `kora`)                                                           |
-| `--judges <models>`        | Override the profile's `judges` role with comma-separated `models.json` slugs, odd count (default: from profile — single judge, held constant across 3-turn vs 8-turn comparisons) |
+| `--judges <models>`        | Override the profile's `judges` role with comma-separated `models.json` slugs (default: from profile — the same judges, held constant across 3-turn vs 8-turn comparisons)            |
 | `-i, --input <path>`       | Input JSONL of recorded conversations, same shape as `reassess` (default: `data/reassessment-input.jsonl`)                                                                         |
 | `-o, --output <dir>`       | Output directory — one `{modelId}.json` per target model, plus `assessments.json`, `continue-meta.json`, and `results.zip` (default: `data/continue-results`)                      |
 | `--risk-ids <ids>`         | Comma-separated risk IDs to restrict the run to (default: all records in the input file)                                                                                           |
@@ -494,14 +494,16 @@ role, so the file alone is a complete record of what ran:
 ```json
 {
   "id": "kora",
-  "version": "2",
-  "hash": "aa2b45f1…",
+  "version": "3",
+  "hash": "fc21bde8…",
   "roles": {
     "seeds":         [{"name": "gpt-4o", "model": "openai/gpt-4o"}],
     "expansion":     [{"name": "gpt-5.2:high", "model": "openai/gpt-5.2", "providerOptions": {"openai": {"reasoningEffort": "high"}}}],
     "expansionUser": [{"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}],
     "user":           {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000},
-    "judges":        [{"name": "gpt-5.2:medium:limited", "model": "openai/gpt-5.2", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}}],
+    "judges":        [{"name": "gpt-6.1-sol:medium", "model": "openai/gpt-6.1-sol", "maxTokens": 26000, "providerOptions": {"openai": {"reasoningEffort": "medium"}}},
+                      {"name": "claude-sonnet-5.5:medium", "model": "anthropic/claude-sonnet-5.5", "maxTokens": 26000, "providerOptions": {"anthropic": {"thinking": {"type": "adaptive"}, "effort": "medium"}}}],
+    "mechanismJudges": ["gpt-6.1-sol:medium"],
     "continueUser":   {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}
   }
 }
@@ -514,7 +516,8 @@ role, so the file alone is a complete record of what ran:
 | `expansion`      | `expand-scenarios`               | Fallback chain; also produces the validation verdict                      |
 | `expansionUser`  | `expand-scenarios`               | Fallback chain, first user message                                        |
 | `user`           | `run` (and the `reassess` label) | Single model, child simulator                                             |
-| `judges`         | `run`, `reassess`, `continue`    | Concurrent judges, odd count                                              |
+| `judges`         | `run`, `reassess`, `continue`    | Concurrent judges; each grades safety, and run counts pool their grades   |
+| `mechanismJudges` | `run`, `reassess`, `continue`   | Names of `judges` that also grade the behaviours; optional, all judges    |
 | `continueUser`   | `continue`                       | Single model; optional, falls back to `user`                              |
 
 Each entry is a `models.json` entry plus a `name`, which is what logs and the
@@ -896,7 +899,7 @@ The `run` command produces a result object with this structure:
 ```json
 {
   "target": "gpt-4o",
-  "judges": ["gpt-5.2:medium:limited"],
+  "judges": ["gpt-6.1-sol:medium", "claude-sonnet-5.5:medium"],
   "user": "gemma-4-31b-it",
   "prompts": ["default"],
   "packs": {
@@ -904,7 +907,7 @@ The `run` command produces a result object with this structure:
     "behaviors": {"id": "kora", "version": "2", "hash": "b93aee04…"}
   },
   "stamp": {
-    "profile": {"id": "kora", "version": "2", "hash": "aa2b45f1…"},
+    "profile": {"id": "kora", "version": "3", "hash": "fc21bde8…"},
     "models": {"user": {"name": "gemma-4-31b-it", "model": "google/gemma-4-31b-it", "maxTokens": 4000}, "judges": ["…"], "target": {"name": "gpt-4o", "model": "openai/gpt-4o"}, "…": "…"},
     "prompts": {"version": "1", "hash": "7eacbd51…"},
     "code": {"version": "1.0.0", "commit": "b73b4731…", "dirty": false},
@@ -913,7 +916,7 @@ The `run` command produces a result object with this structure:
   },
   "served": {
     "user": ["google/gemma-4-31b-it"],
-    "judges": {"gpt-5.2:medium:limited": ["openai/gpt-5.2"]},
+    "judges": {"gpt-6.1-sol:medium": ["openai/gpt-6.1-sol"], "claude-sonnet-5.5:medium": ["anthropic/claude-sonnet-5.5"]},
     "target": ["openai/gpt-4o"]
   },
   "scores": [

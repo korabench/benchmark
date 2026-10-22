@@ -11,6 +11,7 @@ export * from "./allocation/rng.js";
 export * from "./allocation/selectPrivateIndices.js";
 export * from "./allocation/selectPrivateIndicesByGroup.js";
 export * from "./benchmark.js";
+export * from "./dropExtraKeys.js";
 export * from "./generateUserMessage.js";
 export * from "./kora.js";
 export * from "./model/ageRange.js";

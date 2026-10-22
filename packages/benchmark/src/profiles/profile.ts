@@ -34,8 +34,19 @@ const VProfileRoles = v.strictObject({
   expansionUser: VChain,
   /** User simulator during `run` (and `reassess` label). */
   user: ModelSpec.io,
-  /** Concurrent judges (`run`, `reassess`, `continue`). Odd count. */
+  /**
+   * Concurrent judges (`run`, `reassess`, `continue`). Each grades safety; a
+   * run's grade counts pool every judge's grade, so any count works. A split
+   * pair shows its stricter grade on the conversation.
+   */
   judges: VChain,
+  /**
+   * Names of the `judges` that also grade the behaviours (M1-M7); every judge
+   * when absent. Dropped when `judges` is overridden on the command line.
+   */
+  mechanismJudges: v.optional(
+    v.pipe(v.array(v.pipe(v.string(), v.minLength(1))), v.minLength(1))
+  ),
   /** User simulator during `continue`; falls back to `user`. */
   continueUser: v.optional(ModelSpec.io),
 });
@@ -57,9 +68,6 @@ const ROLE_LIST = [
   "judges",
   "continueUser",
 ] as const;
-
-export const ODD_JUDGES_MESSAGE =
-  "The current implementation only supports odd numbers of judges. This ensures that the median assessment is always defined. See `aggregateTestAssessments` for reference.";
 
 //
 // API.
@@ -106,10 +114,25 @@ function assertUniqueNames(roles: ProfileRoles): void {
 
 /** Structural checks shared by file profiles and override-derived ones. */
 function assertValidRoles(roles: ProfileRoles): void {
-  if (roles.judges.length % 2 === 0) {
-    throw new Error(ODD_JUDGES_MESSAGE);
-  }
   assertUniqueNames(roles);
+  if (roles.mechanismJudges) {
+    const judgeNames = roles.judges.map(spec => spec.name);
+    const unknown = roles.mechanismJudges.filter(
+      name => !judgeNames.includes(name)
+    );
+    if (unknown.length > 0) {
+      throw new Error(
+        `Profile role "mechanismJudges" names models that are not judges: ${unknown.join(", ")}.`
+      );
+    }
+    if (
+      R.unique(roles.mechanismJudges).length !== roles.mechanismJudges.length
+    ) {
+      throw new Error(
+        `Profile role "mechanismJudges" lists the same judge more than once: ${roles.mechanismJudges.join(", ")}.`
+      );
+    }
+  }
 }
 
 export interface ParseOptions {
@@ -134,8 +157,9 @@ function parse(data: unknown, options: ParseOptions): Profile {
 }
 
 /**
- * Every role filled in: `continueUser` defaults to `user`, `seedValidation` to
- * `judges`.
+ * Every model role filled in: `continueUser` defaults to `user`,
+ * `seedValidation` to `judges`. `mechanismJudges` stays optional: absent means
+ * every judge.
  */
 function effectiveRoles(roles: ProfileRoles): EffectiveRoles {
   return {
@@ -153,8 +177,9 @@ export type Role = (typeof ROLE_LIST)[number];
 
 export interface ProfileRoles extends v.InferOutput<typeof VProfileRoles> {}
 
-/** `ProfileRoles` with every optional role resolved. */
-export type EffectiveRoles = Required<ProfileRoles>;
+/** `ProfileRoles` with every optional model role resolved. */
+export type EffectiveRoles = Required<Omit<ProfileRoles, "mechanismJudges">> &
+  Pick<ProfileRoles, "mechanismJudges">;
 
 export interface Profile extends v.InferOutput<typeof VProfile> {}
 

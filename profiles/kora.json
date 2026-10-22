@@ -1,7 +1,7 @@
 {
   "id": "kora",
-  "version": "2",
-  "hash": "aa2b45f1a02f133002e1b0f3b13d2ccf",
+  "version": "3",
+  "hash": "fc21bde83ffc02cdee87161add81d7f4",
   "roles": {
     "seeds": [
       {
@@ -34,16 +34,30 @@
     },
     "judges": [
       {
-        "name": "gpt-5.2:medium:limited",
-        "model": "openai/gpt-5.2",
+        "name": "gpt-6.1-sol:medium",
+        "model": "openai/gpt-6.1-sol",
         "maxTokens": 26000,
         "providerOptions": {
           "openai": {
             "reasoningEffort": "medium"
           }
         }
+      },
+      {
+        "name": "claude-sonnet-5.5:medium",
+        "model": "anthropic/claude-sonnet-5.5",
+        "maxTokens": 26000,
+        "providerOptions": {
+          "anthropic": {
+            "thinking": {
+              "type": "adaptive"
+            },
+            "effort": "medium"
+          }
+        }
       }
     ],
+    "mechanismJudges": ["gpt-6.1-sol:medium"],
     "continueUser": {
       "name": "gemma-4-31b-it",
       "model": "google/gemma-4-31b-it",

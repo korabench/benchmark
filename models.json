@@ -99,6 +99,15 @@
       }
     }
   },
+  "gpt-6.1-sol:medium": {
+    "model": "openai/gpt-6.1-sol",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "openai": {
+        "reasoningEffort": "medium"
+      }
+    }
+  },
   "claude-sonnet-4.6:limited": {
     "model": "anthropic/claude-sonnet-4.6",
     "maxTokens": 16000
@@ -157,7 +166,7 @@
     "maxTokens": 26000,
     "providerOptions": {
       "deepseek": {
-        "thinking": { "type": "enabled" }
+        "thinking": {"type": "enabled"}
       }
     }
   },
@@ -176,6 +185,16 @@
       "anthropic": {
         "thinking": {"type": "adaptive"},
         "effort": "high"
+      }
+    }
+  },
+  "claude-sonnet-5.5:medium": {
+    "model": "anthropic/claude-sonnet-5.5",
+    "maxTokens": 26000,
+    "providerOptions": {
+      "anthropic": {
+        "thinking": {"type": "adaptive"},
+        "effort": "medium"
       }
     }
   },

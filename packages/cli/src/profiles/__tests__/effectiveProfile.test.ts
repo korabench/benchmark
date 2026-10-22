@@ -6,7 +6,6 @@ import {
   describeProfileRef,
   resolveEffectiveProfile,
 } from "../effectiveProfile.js";
-import {ODD_JUDGES_MESSAGE} from "../profile.js";
 import {Profiles} from "../profiles.js";
 import {makeProfile, makeRoles, makeSpec} from "./fixtures.js";
 
@@ -73,10 +72,14 @@ describe("resolveEffectiveProfile", () => {
     expect(resolveEffectiveProfile(modelsJsonPath).ref.local).toBe(true);
   });
 
-  it("rejects an even number of judge overrides", () => {
-    expect(() =>
-      resolveEffectiveProfile(modelsJsonPath, {judges: ["judge-x", "judge-y"]})
-    ).toThrow(ODD_JUDGES_MESSAGE);
+  it("accepts a pair of judge overrides", () => {
+    const effective = resolveEffectiveProfile(modelsJsonPath, {
+      judges: ["judge-x", "judge-y"],
+    });
+    expect(effective.roles.judges.map(s => s.name)).toEqual([
+      "judge-x",
+      "judge-y",
+    ]);
   });
 
   it("rejects several models for a single-model role", () => {

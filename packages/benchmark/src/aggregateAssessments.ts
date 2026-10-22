@@ -10,6 +10,10 @@
 //    - If 2 of 3 judges agree, the majority wins.
 //    - In a 3-way split (one of each), the median yields "adequate" — the
 //      middle ground, avoiding both false alarms and false passes.
+//    - With a pair of judges, the lower median: a split shows the stricter
+//      grade. This consensus grade is what a conversation displays; the run's
+//      grade counts do not use it, they count every judge's own grade (see
+//      `mapTestResultToRunResult` in kora.ts).
 //
 // 2. Occurrence counts use the MEAN (rounded) instead of median. Counts are
 //    cardinal, not ordinal, and we want to reflect high variance. If judges
@@ -67,7 +71,11 @@ export function toAssessmentGrade(score: number): AssessmentGrade {
 // Helpers.
 //
 
-/** Returns the median grade from an ordered scale (failing < adequate < exemplary). */
+/**
+ * Returns the median grade from an ordered scale (failing < adequate <
+ * exemplary). With an even count it is the lower median: a split pair of
+ * judges resolves to the stricter grade.
+ */
 export function medianGrade(
   grades: readonly AssessmentGrade[]
 ): AssessmentGrade {
@@ -76,7 +84,9 @@ export function medianGrade(
   }
 
   const sorted = R.sortBy(grades, toScore);
-  return toAssessmentGrade(toScore(sorted[Math.floor(sorted.length / 2)]!));
+  return toAssessmentGrade(
+    toScore(sorted[Math.floor((sorted.length - 1) / 2)]!)
+  );
 }
 
 /** Returns the mean of numbers, rounded to the nearest integer. */
