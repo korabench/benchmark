@@ -28,7 +28,9 @@ function withoutKey(value: unknown, path: readonly v.IssuePathItem[]): unknown {
   }
   const record = value as Record<string, unknown>;
   if (rest.length === 0) {
-    return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+    return Object.fromEntries(
+      Object.entries(record).filter(([k]) => k !== key)
+    );
   }
   return {...record, [key]: withoutKey(record[key as string], rest)};
 }

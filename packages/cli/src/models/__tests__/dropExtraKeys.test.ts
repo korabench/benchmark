@@ -32,7 +32,11 @@ describe("parseDroppingExtraKeys", () => {
 
   it("still fails on any other issue", () => {
     expect(() =>
-      parseDroppingExtraKeys(Schema, {grade: "adequate", extra: 1, criteria: {}})
+      parseDroppingExtraKeys(Schema, {
+        grade: "adequate",
+        extra: 1,
+        criteria: {},
+      })
     ).toThrow(v.ValiError);
   });
 });
