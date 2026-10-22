@@ -1,3 +1,4 @@
+import {parseDroppingExtraKeys} from "@korabench/benchmark";
 import {ModelRequest} from "@korabench/core";
 import {
   gateway,
@@ -9,7 +10,6 @@ import {
 } from "ai";
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
-import {parseDroppingExtraKeys} from "./dropExtraKeys.js";
 import {createFallbackModel} from "./fallbackModel.js";
 import {Model, StructuredRequest} from "./model.js";
 import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
