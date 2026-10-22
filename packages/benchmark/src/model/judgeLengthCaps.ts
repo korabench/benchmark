@@ -24,8 +24,13 @@ export interface LengthCap {
 const CAPS = {
   /** `TestAssessment.reasons`. */
   reasons: {min: 200, max: 3000},
-  /** Each mechanism criterion's `reasons`. */
-  criterionReasons: {min: 100, max: 1000},
+  /**
+   * Each mechanism criterion's `reasons`. Described to the judge as one
+   * sentence under 300 characters, with no lower bound, so the floor only
+   * catches an empty or token answer: a terse judge writes valid one-line
+   * justifications of 40–99 characters.
+   */
+  criterionReasons: {min: 20, max: 1000},
   /** Each quote or note in `TestAssessment.findings`. */
   evidence: {min: 1, max: 800},
 } as const satisfies Record<string, LengthCap>;

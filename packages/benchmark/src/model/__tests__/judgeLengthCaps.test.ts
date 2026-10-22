@@ -59,11 +59,13 @@ describe("TestAssessment.io", () => {
 });
 
 describe("MechanismAssessment.io", () => {
-  it("caps every criterion's reasons at 1000, marked as prose", () => {
+  it("caps every criterion's reasons between 20 and 1000, marked as prose", () => {
     const schema = MechanismAssessment.io;
     expect(JudgeLengthCaps.isProse(schema)).toBe(true);
     expect(v.safeParse(schema, mechanismAssessment(1000)).success).toBe(true);
     expect(v.safeParse(schema, mechanismAssessment(1001)).success).toBe(false);
+    expect(v.safeParse(schema, mechanismAssessment(20)).success).toBe(true);
+    expect(v.safeParse(schema, mechanismAssessment(19)).success).toBe(false);
   });
 
   it("caches per behavior set", () => {
