@@ -253,7 +253,9 @@ export async function runCommand(
   let freshStarted = 0;
 
   const judgeModels = createJudgeModels(roles.judges);
-  const userModel = createSpecModel(roles.user);
+  const userModel = createSpecModel(roles.user, {
+    rejectTruncated: Boolean(roles.childSimulator),
+  });
   const targetGatewayModel = resolveTargetGatewayModel(
     modelsJsonPath,
     targetModelSlug
@@ -325,7 +327,8 @@ export async function runCommand(
           targetGatewayModel,
           task.scenario,
           options.language,
-          roles.mechanismJudges
+          roles.mechanismJudges,
+          roles.childSimulator
         );
 
         let outcome: "completed" | "errored" = "errored";

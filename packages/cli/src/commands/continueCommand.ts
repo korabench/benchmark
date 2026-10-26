@@ -214,7 +214,9 @@ export async function continueCommand(
   }
 
   const judgeModels = createJudgeModels(roles.judges);
-  const userModel = createSpecModel(roles.continueUser);
+  const userModel = createSpecModel(roles.continueUser, {
+    rejectTruncated: Boolean(roles.childSimulator),
+  });
 
   // Per-record target model resolution: cache by modelId across records.
   const targetGatewayCache = new Map<string, GatewayModel | undefined>();
@@ -301,7 +303,8 @@ export async function continueCommand(
           getTargetGateway(task.input.modelId),
           task.input.scenario,
           options.language,
-          roles.mechanismJudges
+          roles.mechanismJudges,
+          roles.childSimulator
         );
         const testResult = await kora.runTest(
           built.context,

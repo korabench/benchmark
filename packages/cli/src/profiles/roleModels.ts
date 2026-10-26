@@ -5,6 +5,7 @@ import {
   GatewayModel,
   ModelOptions,
 } from "../models/gatewayModel.js";
+import {createMimesisModel} from "../models/mimesisModel.js";
 import {Model} from "../models/model.js";
 
 //
@@ -30,6 +31,7 @@ export function createSpecModel(
   spec: ModelSpec,
   options?: ModelOptions
 ): GatewayModel {
+  if (spec.model === "modal/mimesis-9b") return createMimesisModel(spec);
   return createGatewayModelFromConfig(
     ModelSpec.config(spec),
     spec.name,

@@ -34,6 +34,8 @@ const VProfileRoles = v.strictObject({
   expansionUser: VChain,
   /** User simulator during `run` (and `reassess` label). */
   user: ModelSpec.io,
+  /** Optional shared native child pipeline; never selected implicitly. */
+  childSimulator: v.optional(v.literal("mimesis-multistep-patch")),
   /**
    * Concurrent judges (`run`, `reassess`, `continue`). Each grades safety; a
    * run's grade counts pool every judge's grade, so any count works. A split
@@ -115,6 +117,14 @@ function assertUniqueNames(roles: ProfileRoles): void {
 /** Structural checks shared by file profiles and override-derived ones. */
 function assertValidRoles(roles: ProfileRoles): void {
   assertUniqueNames(roles);
+  if (
+    roles.childSimulator &&
+    !/^(modal\/mimesis-9b|.*MIMESIS-9B(?:@.*)?)$/.test(roles.user.model)
+  ) {
+    throw new Error(
+      "The MIMESIS patch recipe requires MIMESIS-9B as its draft model."
+    );
+  }
   if (roles.mechanismJudges) {
     const judgeNames = roles.judges.map(spec => spec.name);
     const unknown = roles.mechanismJudges.filter(
@@ -178,8 +188,10 @@ export type Role = (typeof ROLE_LIST)[number];
 export interface ProfileRoles extends v.InferOutput<typeof VProfileRoles> {}
 
 /** `ProfileRoles` with every optional model role resolved. */
-export type EffectiveRoles = Required<Omit<ProfileRoles, "mechanismJudges">> &
-  Pick<ProfileRoles, "mechanismJudges">;
+export type EffectiveRoles = Required<
+  Omit<ProfileRoles, "mechanismJudges" | "childSimulator">
+> &
+  Pick<ProfileRoles, "mechanismJudges" | "childSimulator">;
 
 export interface Profile extends v.InferOutput<typeof VProfile> {}
 
