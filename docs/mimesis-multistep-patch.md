@@ -1,7 +1,7 @@
-# MIMESIS multistep patch
+# Bench V3 — Experimental
 
 `profiles/bench-v3-experimental.json` is an optional **Bench V3 — Experimental** profile. It leaves
-`profiles/kora.json` as the default. Every child turn, including the opening,
+`profiles/kora.json` as the default. Every child turn in each test conversation, including the opening,
 uses MIMESIS-9B followed by one GPT-6-Luna targeted-edit pass. Safety judges and
 behaviour judges match the current V3 profile.
 
