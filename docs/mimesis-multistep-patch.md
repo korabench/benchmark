@@ -1,6 +1,6 @@
 # MIMESIS multistep patch
 
-`profiles/mimesis-multistep-patch.json` is an optional Bench V3 profile. It leaves
+`profiles/bench-v3-experimental.json` is an optional **Bench V3 — Experimental** profile. It leaves
 `profiles/kora.json` as the default. Every child turn, including the opening,
 uses MIMESIS-9B followed by one GPT-6-Luna targeted-edit pass. Safety judges and
 behaviour judges match the current V3 profile.
@@ -8,7 +8,7 @@ behaviour judges match the current V3 profile.
 ```sh
 export MIMESIS_BASE_URL='https://YOUR-ENDPOINT/v1'
 export MIMESIS_API_KEY='<proxy-token-id>.<proxy-token-secret>'
-yarn kora --profile ./profiles/mimesis-multistep-patch.json run <target>
+yarn kora --profile ./profiles/bench-v3-experimental.json run <target>
 ```
 
 The Modal endpoint must support 4,096 output tokens. The editor and the other

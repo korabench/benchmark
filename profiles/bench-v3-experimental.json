@@ -1,7 +1,7 @@
 {
-  "id": "mimesis-multistep-patch",
+  "id": "bench-v3-experimental",
   "version": "1",
-  "hash": "336317cb10997def0d6d83b419533274",
+  "hash": "f35b76eafac9caedc6d0bf9a900268e6",
   "roles": {
     "seeds": [
       {
