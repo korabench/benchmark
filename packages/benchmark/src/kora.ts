@@ -547,6 +547,10 @@ export const kora = Benchmark.new({
       const tUserMessage = Date.now();
       const userMessage = await (() => {
         if (i === 0) {
+          if (c.getChildResponse)
+            return c
+              .getChildResponse({scenario, messages})
+              .then(response => response.output);
           return scenario.firstUserMessage;
         }
 

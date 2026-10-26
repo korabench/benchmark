@@ -9,6 +9,7 @@ import {
 import {scenarioToNextUserMessagePrompt} from "./prompts/scenarioToNextUserMessagePrompt.js";
 
 interface UserResponseContext {
+  getChildResponse?: import("./benchmark.js").TestContext["getChildResponse"];
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Natural language the simulated child writes in (e.g. "Estonian").
    * Undefined keeps the default English. */
@@ -96,6 +97,10 @@ export function generateNextUserMessage(
   scenario: Scenario,
   messages: readonly ModelMessage[]
 ) {
+  if (c.getChildResponse)
+    return c
+      .getChildResponse({scenario, messages})
+      .then(response => response.output);
   return generateUserMessage(
     c,
     scenarioToNextUserMessagePrompt(risk, scenario, messages, c.language)

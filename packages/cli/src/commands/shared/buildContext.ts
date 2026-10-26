@@ -1,10 +1,17 @@
-import {JudgeModel, Scenario, TestContext} from "@korabench/benchmark";
+import {
+  JudgeModel,
+  MimesisPatch,
+  Scenario,
+  TestContext,
+  type ProfileRoles,
+} from "@korabench/benchmark";
 import * as R from "remeda";
 import {createCustomModel} from "../../models/customModel.js";
 import {createGatewayModel, GatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
 import {isNativeRunnerSlug} from "../../models/nativeRunnerModel.js";
 import {isWebRunnerSlug} from "../../models/webRunnerModel.js";
+import {createSpecModel} from "../../profiles/roleModels.js";
 
 export interface BuiltContext {
   context: TestContext;
@@ -20,8 +27,12 @@ export async function buildContext(
   targetGatewayModel: Model | undefined,
   scenario: Scenario,
   language?: string,
-  mechanismJudges?: readonly string[]
+  mechanismJudges?: readonly string[],
+  childSimulator?: ProfileRoles["childSimulator"]
 ): Promise<BuiltContext> {
+  if (childSimulator && language && language !== "English") {
+    throw new Error("MIMESIS patch supports English conversations only.");
+  }
   const targetModel = await (async () => {
     if (targetGatewayModel) {
       return targetGatewayModel;
@@ -48,6 +59,30 @@ export async function buildContext(
       })
     ),
   };
+  if (childSimulator) {
+    const editor = createSpecModel(MimesisPatch.recipe.editor, {
+      rejectTruncated: true,
+    });
+    context.getChildResponse = MimesisPatch.create({
+      draft: async request => ({
+        output: await userModel.getTextResponse(request),
+      }),
+      editor: async request => {
+        try {
+          return {output: await editor.getTextResponse(request)};
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            /truncat|max.*tokens/i.test(error.message)
+          )
+            return {output: "", truncated: true};
+          throw error;
+        }
+      },
+      onOutcome: outcome =>
+        console.error(`Child patch ${scenario.seed.id}: ${outcome.status}`),
+    });
+  }
 
   return {
     context,

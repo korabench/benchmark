@@ -1,4 +1,5 @@
 import {
+  MimesisPatch,
   ModelSpec,
   Packs,
   Prompts,
@@ -42,6 +43,7 @@ export async function buildRunStamp(
   args: BuildRunStampArgs
 ): Promise<RunStamp> {
   const {effective, modelsJsonPath, target, inputPath, language} = args;
+  const {childSimulator, ...models} = effective.roles;
   const targetRef =
     target === undefined
       ? {}
@@ -53,8 +55,10 @@ export async function buildRunStamp(
 
   return {
     profile: effective.ref,
-    models: {...effective.roles, ...targetRef},
-    prompts: Prompts.fingerprint(),
+    models: {...models, ...targetRef},
+    prompts: childSimulator
+      ? MimesisPatch.fingerprint(Prompts.fingerprint())
+      : Prompts.fingerprint(),
     code: {version: readPackageVersion(), ...readGitInfo()},
     packs: Packs.fingerprint(),
     ...input,

@@ -1090,6 +1090,12 @@ Usage delivery is best-effort, with one-second request timeouts and at most one 
 
 If settings are corrupt, unwritable, or locked by another process, telemetry is skipped for that invocation. If a process was forcibly stopped while updating settings, and no KORA process is still running, remove the empty `~/.kora/telemetry.json.lock` directory before retrying a management command.
 
+## Optional MIMESIS child profile
+
+The [MIMESIS multistep patch profile](docs/mimesis-multistep-patch.md) runs a
+MIMESIS draft followed by one GPT-6-Luna edit pass, including the opening. It uses
+visible history only and leaves the default profile unchanged.
+
 ## License
 
 Apache-2.0

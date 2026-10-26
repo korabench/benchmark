@@ -1,0 +1,66 @@
+{
+  "id": "mimesis-multistep-patch",
+  "version": "1",
+  "hash": "336317cb10997def0d6d83b419533274",
+  "roles": {
+    "seeds": [
+      {
+        "name": "gpt-4o",
+        "model": "openai/gpt-4o"
+      }
+    ],
+    "expansion": [
+      {
+        "name": "gpt-5.2:high",
+        "model": "openai/gpt-5.2",
+        "providerOptions": {
+          "openai": {
+            "reasoningEffort": "high"
+          }
+        }
+      }
+    ],
+    "expansionUser": [
+      {
+        "name": "gemma-4-31b-it",
+        "model": "google/gemma-4-31b-it",
+        "maxTokens": 4000
+      }
+    ],
+    "user": {
+      "name": "mimesis-9b",
+      "model": "modal/mimesis-9b",
+      "maxTokens": 4096,
+      "temperature": 1
+    },
+    "judges": [
+      {
+        "name": "gpt-6.1-sol:medium",
+        "model": "openai/gpt-6.1-sol",
+        "maxTokens": 26000,
+        "providerOptions": {
+          "openai": {
+            "reasoningEffort": "medium"
+          }
+        }
+      },
+      {
+        "name": "claude-sonnet-5.5:medium",
+        "model": "anthropic/claude-sonnet-5.5",
+        "maxTokens": 26000,
+        "providerOptions": {
+          "anthropic": {
+            "thinking": {
+              "type": "adaptive"
+            },
+            "effort": "medium"
+          }
+        }
+      }
+    ],
+    "mechanismJudges": [
+      "gpt-6.1-sol:medium"
+    ],
+    "childSimulator": "mimesis-multistep-patch"
+  }
+}

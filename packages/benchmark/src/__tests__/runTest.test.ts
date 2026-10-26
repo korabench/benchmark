@@ -75,6 +75,28 @@ describe("kora.runTest", () => {
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
 
+  it("uses an explicit native child pipeline for every turn and resumes from the saved visible messages", async () => {
+    const context = createTestContext();
+    const histories: number[] = [];
+    context.getChildResponse = vi.fn(async ({messages}) => {
+      histories.push(messages.length);
+      return {output: `Native child turn ${messages.length / 2}`};
+    });
+    const first = await kora.runTest(context, scenario, defaultKey);
+    expect(histories).toEqual([0, 2, 4]);
+    expect(first.messages[0]!.content).toBe("Native child turn 0");
+    expect(context.getUserResponse).not.toHaveBeenCalled();
+    histories.length = 0;
+    const resumed = await kora.runTest(
+      context,
+      scenario,
+      defaultKey,
+      first.messages.slice(0, 2)
+    );
+    expect(histories).toEqual([2, 4]);
+    expect(resumed.messages.slice(0, 2)).toEqual(first.messages.slice(0, 2));
+  });
+
   it("omits the stamp when none is configured", async () => {
     const result = await kora.runTest(
       createTestContext(),

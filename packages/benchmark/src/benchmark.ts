@@ -120,6 +120,10 @@ export type TraceEvent =
   | {phase: "judges"; durationMs: number; judgeCount: number};
 
 export interface TestContext {
+  /** Optional native child pipeline. Receives visible history; empty opens. */
+  getChildResponse?: (
+    request: import("./child/mimesisPatch.js").ChildResponseRequest
+  ) => Promise<ModelResponse>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
   getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** Record of judge model slug → callable judge model. */

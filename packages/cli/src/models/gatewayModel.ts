@@ -17,6 +17,8 @@ import {toProviderSchema} from "./providerSchema.js";
 
 export interface ModelOptions {
   retry?: RetryOptions;
+  /** Native child pipelines must retain the first draw, including truncation. */
+  rejectTruncated?: boolean;
 }
 
 export interface GatewayModel extends Model {
@@ -212,6 +214,9 @@ export function createGatewayModelFromConfig(
       );
 
       record(result);
+      if (options?.rejectTruncated && result.finishReason === "length") {
+        throw new Error("Response truncated: max output tokens reached.");
+      }
       return result.text;
     },
 
