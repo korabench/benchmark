@@ -17,6 +17,7 @@ import {expandScenariosCommand} from "./commands/expandScenariosCommand.js";
 import {generateSeeds} from "./commands/generateSeedsCommand.js";
 import {profileCommand} from "./commands/profileCommand.js";
 import {reassessCommand} from "./commands/reassessCommand.js";
+import {reviseOpeningsCommand} from "./commands/reviseOpeningsCommand.js";
 import {runCommand} from "./commands/runCommand.js";
 import {seedsReportCommand} from "./commands/seedsReportCommand.js";
 import {InputKind} from "./commands/shared/validateInputFile.js";
@@ -376,6 +377,51 @@ program
         )
     )
   );
+
+program
+  .command("revise-openings")
+  .description(
+    "rewrite each scenario's first user message with the profile's child model (use after switching child models); other fields unchanged, previous text kept in `revisions`"
+  )
+  .argument(
+    "[user-model]",
+    "override the profile's user role (the child) with a models.json slug"
+  )
+  .requiredOption("-i, --input <path>", "input scenarios JSONL file")
+  .requiredOption(
+    "-o, --output <path>",
+    "output scenarios JSONL file; must not exist (a private input needs a private output)"
+  )
+  .requiredOption(
+    "--reason <text>",
+    'why the openings change, recorded in every revision (e.g. "Child model swapped: gemma-4-31b-it → MIMESIS-9B patch")'
+  )
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the revision to (the output then holds only those scenarios)"
+  )
+  .option("--concurrency <n>", "openings written in parallel", "10")
+  // A corpus maintenance step, not a benchmark stage: kept out of the
+  // telemetry contract shared with infra.
+  .action(async (userModel, opts) => {
+    prepareCommand("revise-openings");
+    const summary = await reviseOpeningsCommand(
+      program,
+      modelsJsonPath,
+      {user: optionalCsv(userModel)},
+      opts.input,
+      opts.output,
+      {
+        reason: opts.reason,
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map((id: string) => id.trim())
+          .filter((id: string) => id.length > 0),
+        concurrency: Number(opts.concurrency),
+      }
+    );
+    if (summary.outcome !== "completed") process.exitCode = 1;
+  });
 
 program
   .command("run")

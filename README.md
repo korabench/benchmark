@@ -242,6 +242,25 @@ yarn kora expand-scenarios [model] [user-model]
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file)                                                                                                                                                                                                  |
 | `--language <name>`   | Natural language the simulated child writes in, e.g. `Estonian` (default: English). Only the generated first user message is translated; the scenario itself stays English.                                                                                                               |
 
+### `revise-openings`
+
+Rewrites the first user message of every scenario in a corpus with the profile's child model, and changes nothing else. Use it after switching the child model: see [Switching the child model](#switching-the-child-model).
+
+```bash
+yarn kora --profile <profile> revise-openings [user-model] -i <scenarios.jsonl> -o <new/scenarios.jsonl> --reason "<why>"
+```
+
+| Argument / Option     | Description                                                                                                                                                      |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[user-model]`        | Override the profile's `user` role (the child) with a `models.json` slug (default: from profile)                                                                 |
+| `-i, --input <path>`  | Input scenarios JSONL file (required)                                                                                                                            |
+| `-o, --output <path>` | Output scenarios JSONL file (required). Must not exist: the command never overwrites a corpus. A private input (`.private.` in its name) needs a private output. |
+| `--reason <text>`     | Why the openings change (required), recorded in every scenario's revision                                                                                        |
+| `--risk-ids <ids>`    | Comma-separated risk IDs to restrict the revision to; the output then holds only those scenarios (default: every scenario)                                       |
+| `--concurrency <n>`   | Openings written in parallel (default: `10`)                                                                                                                     |
+
+The opening is written the way the profile's child writes it: through the `childSimulator` recipe when the profile names one (MIMESIS draft plus one editor pass, English only), otherwise by the `user` model with the first-user-message prompt that `expand-scenarios` uses. Either way, an opening that keeps a bracketed placeholder (`[name]`) is drawn again, up to three times, as in expansion; a run never redraws a turn. Each opening is appended to a private ledger next to the output (`scenarios.revisions.private.jsonl`, or `scenarios.private.revisions.jsonl` for a private output) as soon as it is written (with the MIMESIS draft and the editor's outcome), so a run that stops resumes where it was; the command refuses a ledger written under another stamp. The output is written once every scenario has its opening, in input order. An opening that stays stuck (e.g. the scenario itself leaves the detail unnamed) can be written by hand: append its ledger row with a `manualFill` note saying how, and re-run; the note is appended to that scenario's revision `reason`. It refuses a corpus whose openings were already written by the same child.
+
 ### `run`
 
 Runs the benchmark against the target model.
@@ -583,6 +602,33 @@ resume one written under a different stamp (delete the directory to start
 over; there is no bypass flag). Result files also record `served`: the model
 ids the provider reported for the user, judge and target calls, the only
 evidence of which snapshot actually answered.
+
+### Switching the child model
+
+A scenario's opening (`firstUserMessage`) is part of the corpus. Every run sends it as is, whatever the profile: each target answers the same first message, and it is the message experts review. The child model writes every later turn live. So switching the child model (a profile's `user` role, or its `childSimulator`) means writing the openings again, into a new corpus:
+
+```bash
+mkdir data/seeds-v7.1
+cp data/seeds-v7/seeds*.jsonl data/seeds-v7.1/
+yarn kora --profile bench-v3-experimental revise-openings \
+  -i data/seeds-v7/scenarios.jsonl -o data/seeds-v7.1/scenarios.jsonl \
+  --reason "Child model swapped: gemma-4-31b-it → MIMESIS-9B patch"
+yarn kora --profile bench-v3-experimental revise-openings \
+  -i data/seeds-v7/scenarios.private.jsonl -o data/seeds-v7.1/scenarios.private.jsonl \
+  --reason "Child model swapped: gemma-4-31b-it → MIMESIS-9B patch"
+```
+
+`revise-openings` keeps every other field, the seed ids and the expansion `stamp`. Anything keyed by the seed id therefore still resolves: expert reviews, and earlier runs. Each scenario gains a `revisions` entry:
+
+| Field            | Description                                                                                        |
+| ---------------- | -------------------------------------------------------------------------------------------------- |
+| `field`          | `firstUserMessage`                                                                                 |
+| `previous`       | The opening it replaced, word for word: the one earlier reviews and runs saw                       |
+| `reason`         | The `--reason` given                                                                               |
+| `childSimulator` | `{id, version, hash}` of the child recipe that wrote the new opening; absent for a plain model     |
+| `stamp`          | The revising run's [stamp](#run-stamps): profile, models (the child is `models.user`), code, input |
+
+`revisions` lists every rewrite, oldest first. A scenario without it is as expanded. Write each revision to a new directory (e.g. `seeds-vN.M`) and keep the old one: hosted infrastructure stores a corpus as an immutable scenario set, so the revised corpus is uploaded as a new set.
 
 ### Editions
 
@@ -1092,9 +1138,11 @@ If settings are corrupt, unwritable, or locked by another process, telemetry is 
 
 ## Optional Bench V3 experimental profile
 
-The [Bench V3 — Experimental profile](docs/mimesis-multistep-patch.md) runs a
-MIMESIS draft followed by one GPT-6-Luna edit pass, including the opening. It uses
-visible history only and leaves the default profile unchanged.
+The [Bench V3 — Experimental profile](docs/mimesis-multistep-patch.md) writes every
+child turn after the opening with a MIMESIS draft followed by one GPT-6-Luna edit
+pass. The opening comes from the corpus, written once with the same recipe by
+[`revise-openings`](#switching-the-child-model). It uses visible history only and
+leaves the default profile unchanged.
 
 ## License
 

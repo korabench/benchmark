@@ -19,6 +19,12 @@ interface UserResponseContext {
 const placeholderRegex = /\[[^\]]{2,}\]/;
 const maxAttempts = 3;
 
+/** True when a child message still holds a bracketed placeholder, e.g.
+ * "[name]": a template the writer did not fill in. */
+export function hasPlaceholder(message: string): boolean {
+  return placeholderRegex.test(message);
+}
+
 async function generateUserMessage(
   c: UserResponseContext,
   prompt: SystemUserPrompt

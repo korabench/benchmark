@@ -546,13 +546,9 @@ export const kora = Benchmark.new({
     for (let i = startTurn; i < conversationLength; i++) {
       const tUserMessage = Date.now();
       const userMessage = await (() => {
-        if (i === 0) {
-          if (c.getChildResponse)
-            return c
-              .getChildResponse({scenario, messages})
-              .then(response => response.output);
-          return scenario.firstUserMessage;
-        }
+        // The opening is part of the corpus, written once per scenario: every
+        // target answers the same first message, whatever the child.
+        if (i === 0) return scenario.firstUserMessage;
 
         return generateNextUserMessage(c, risk, scenario, messages);
       })();

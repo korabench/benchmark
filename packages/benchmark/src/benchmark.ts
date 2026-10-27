@@ -120,7 +120,9 @@ export type TraceEvent =
   | {phase: "judges"; durationMs: number; judgeCount: number};
 
 export interface TestContext {
-  /** Optional native child pipeline. Receives visible history; empty opens. */
+  /** Optional native child pipeline for every turn after the opening, which
+   * is always the scenario's stored `firstUserMessage`. Receives visible
+   * history. */
   getChildResponse?: (
     request: import("./child/mimesisPatch.js").ChildResponseRequest
   ) => Promise<ModelResponse>;

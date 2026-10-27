@@ -2,7 +2,7 @@ import {Hash, type ModelMessage, type ModelRequest} from "@korabench/core";
 import * as v from "valibot";
 import recipe from "../../data/child/mimesis-multistep-patch.json" with {type: "json"};
 import {RiskCategory} from "../model/riskCategory.js";
-import type {Scenario} from "../model/scenario.js";
+import type {ChildSimulatorRef, Scenario} from "../model/scenario.js";
 import {
   childSESDescriptions,
   refusalBehaviorDescriptions,
@@ -21,7 +21,9 @@ export interface ChildCompletion {
 
 export interface ChildResponseRequest {
   readonly scenario: Scenario;
-  /** Actual visible history: child=user, evaluated AI=assistant. Empty opens. */
+  /** Actual visible history: child=user, evaluated AI=assistant. Empty asks
+   * for an opening, which `revise-openings` writes into the corpus once; runs
+   * always send the stored one. */
   readonly messages: readonly ModelMessage[];
 }
 
@@ -277,12 +279,31 @@ function create(options: MimesisPatchOptions) {
   };
 }
 
-/** The source prompts/configuration plus the approved visible-history policy. */
-function fingerprint(benchmark: {version: string; hash: string}) {
+/** The recipe by content, as recorded in a scenario revision it wrote. */
+function recipeRef(): ChildSimulatorRef {
   return {
-    ...benchmark,
-    hash: Hash.hash(stableJson({benchmark, child: recipe})),
+    id: recipe.id,
+    version: recipe.version,
+    hash: Hash.hash(stableJson(recipe)),
   };
 }
 
-export const MimesisPatch = {create, fingerprint, recipe};
+/**
+ * Where a run's opening comes from. "corpus": the scenario's stored
+ * `firstUserMessage`, written once by `revise-openings`. Runs that sampled the
+ * opening per test, before, carried no policy and so a different hash.
+ */
+const openingPolicy = "corpus";
+
+/** The source prompts/configuration plus the approved visible-history and
+ * opening policies. */
+function fingerprint(benchmark: {version: string; hash: string}) {
+  return {
+    ...benchmark,
+    hash: Hash.hash(
+      stableJson({benchmark, child: recipe, opening: openingPolicy})
+    ),
+  };
+}
+
+export const MimesisPatch = {create, fingerprint, recipe, recipeRef};
