@@ -75,7 +75,7 @@ describe("kora.runTest", () => {
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
 
-  it("uses an explicit native child pipeline for every turn and resumes from the saved visible messages", async () => {
+  it("opens with the stored first message, uses an explicit native child pipeline for every later turn and resumes from the saved visible messages", async () => {
     const context = createTestContext();
     const histories: number[] = [];
     context.getChildResponse = vi.fn(async ({messages}) => {
@@ -83,8 +83,9 @@ describe("kora.runTest", () => {
       return {output: `Native child turn ${messages.length / 2}`};
     });
     const first = await kora.runTest(context, scenario, defaultKey);
-    expect(histories).toEqual([0, 2, 4]);
-    expect(first.messages[0]!.content).toBe("Native child turn 0");
+    expect(histories).toEqual([2, 4]);
+    expect(first.messages[0]!.content).toBe(scenario.firstUserMessage);
+    expect(first.messages[2]!.content).toBe("Native child turn 1");
     expect(context.getUserResponse).not.toHaveBeenCalled();
     histories.length = 0;
     const resumed = await kora.runTest(

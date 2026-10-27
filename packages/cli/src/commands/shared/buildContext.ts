@@ -1,6 +1,5 @@
 import {
   JudgeModel,
-  MimesisPatch,
   Scenario,
   TestContext,
   type ProfileRoles,
@@ -11,7 +10,7 @@ import {createGatewayModel, GatewayModel} from "../../models/gatewayModel.js";
 import {Model} from "../../models/model.js";
 import {isNativeRunnerSlug} from "../../models/nativeRunnerModel.js";
 import {isWebRunnerSlug} from "../../models/webRunnerModel.js";
-import {createSpecModel} from "../../profiles/roleModels.js";
+import {createChildSimulator} from "./childSimulator.js";
 
 export interface BuiltContext {
   context: TestContext;
@@ -60,25 +59,7 @@ export async function buildContext(
     ),
   };
   if (childSimulator) {
-    const editor = createSpecModel(MimesisPatch.recipe.editor, {
-      rejectTruncated: true,
-    });
-    context.getChildResponse = MimesisPatch.create({
-      draft: async request => ({
-        output: await userModel.getTextResponse(request),
-      }),
-      editor: async request => {
-        try {
-          return {output: await editor.getTextResponse(request)};
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            /truncat|max.*tokens/i.test(error.message)
-          )
-            return {output: "", truncated: true};
-          throw error;
-        }
-      },
+    context.getChildResponse = createChildSimulator(userModel, {
       onOutcome: outcome =>
         console.error(`Child patch ${scenario.seed.id}: ${outcome.status}`),
     });

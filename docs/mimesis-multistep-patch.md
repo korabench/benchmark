@@ -1,8 +1,11 @@
 # Bench V3 — Experimental
 
 `profiles/bench-v3-experimental.json` is an optional **Bench V3 — Experimental** profile. It leaves
-`profiles/kora.json` as the default. Every child turn in each test conversation, including the opening,
-uses MIMESIS-9B followed by one GPT-6-Luna targeted-edit pass. Safety judges and
+`profiles/kora.json` as the default. Every child turn in each test conversation
+after the opening uses MIMESIS-9B followed by one GPT-6-Luna targeted-edit pass.
+The opening is the scenario's stored `firstUserMessage`, written once into the
+corpus with the same recipe by `yarn kora revise-openings` (see the README,
+"Switching the child model"), so every target answers the same first message. Safety judges and
 behaviour judges match the current V3 profile.
 
 ```sh
@@ -32,14 +35,16 @@ content to get a more desirable answer. Explicit startup/capacity/network retry
 policies remain transport concerns.
 
 `messages` contains only visible conversation history: child=`user`, evaluated
-AI=`assistant`. Empty history generates the opening; subsequent calls require
-complete pairs. The full V3 scenario dimensions and situation definitions are
+AI=`assistant`. Empty history generates an opening, which only
+`revise-openings` asks for: it writes the opening into the corpus, and runs send
+the stored one. Subsequent calls require complete pairs. The full V3 scenario dimensions and situation definitions are
 required; missing fields fail before model calls. Saved corpus openings, judge
 criteria and generation notes are excluded from the child/editor source.
 
 `TestContext.getChildResponse` is optional. `kora.runTest` and continuation use it
-when provided; existing contexts keep their saved opening and ordinary child
-prompt path. Completed visible pairs suffice to resume this recipe. No private
+for every turn after the opening when provided; the opening is always the
+scenario's stored `firstUserMessage`. Contexts without it keep the ordinary
+child prompt path. Completed visible pairs suffice to resume this recipe. No private
 reasoning, new table or database dependency is introduced.
 
 The edit pass validates issues/source references and exact non-overlapping
@@ -51,7 +56,10 @@ issue/edit counts, without messages or reasoning. The CLI prints the status;
 hosted consumers can route it to their run logs.
 
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
-both model configurations and the history policy. Both CLI and hosted consumers
+both model configurations, the history policy and the opening policy (`corpus`:
+runs that sampled the opening per test carry a different hash).
+`MimesisPatch.recipeRef()` names the recipe alone, by content; it is what a
+scenario revision records. Both CLI and hosted consumers
 must use it when stamping runs with this recipe.
 
 ## Source and limits

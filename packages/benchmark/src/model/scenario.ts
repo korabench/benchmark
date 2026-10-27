@@ -67,12 +67,38 @@ const VModelScenario = v.strictObject({
   modelMemory: v.optional(VModelMemory),
 });
 
+/** A child simulator recipe, by content (`MimesisPatch.recipeRef()`). */
+const VChildSimulatorRef = v.strictObject({
+  id: v.string(),
+  version: v.string(),
+  hash: v.string(),
+});
+
+/**
+ * One field of a scenario rewritten after expansion, e.g. the opening written
+ * again by a new child model. The scenario keeps its seed id, so anything
+ * keyed by it (expert reviews, earlier runs) can tell what it was given.
+ */
+const VScenarioRevision = v.strictObject({
+  field: v.picklist(["firstUserMessage"]),
+  /** The field's value before this revision. */
+  previous: v.string(),
+  /** Why the field was rewritten. */
+  reason: v.string(),
+  /** The child recipe that wrote the new value; absent for a plain model. */
+  childSimulator: v.optional(VChildSimulatorRef),
+  /** Provenance of the revising run. */
+  stamp: RunStamp.io,
+});
+
 const VScenario = v.strictObject({
   ...VModelScenario.entries,
   seed: ScenarioSeed.io,
   firstUserMessage: v.string(),
   /** Provenance of the expanding run. Optional: older corpora carry none. */
   stamp: v.optional(RunStamp.io),
+  /** Fields rewritten after expansion, oldest first. Absent: as expanded. */
+  revisions: v.optional(v.array(VScenarioRevision)),
 });
 
 //
@@ -97,6 +123,12 @@ export interface ModelScenarioWithMemory extends v.InferOutput<
   typeof VModelScenarioWithMemory
 > {}
 export interface ModelScenario extends v.InferOutput<typeof VModelScenario> {}
+export interface ChildSimulatorRef extends v.InferOutput<
+  typeof VChildSimulatorRef
+> {}
+export interface ScenarioRevision extends v.InferOutput<
+  typeof VScenarioRevision
+> {}
 export interface Scenario extends v.InferOutput<typeof VScenario> {}
 
 export const ModelScenarioLight = {
@@ -109,6 +141,14 @@ export const ModelScenarioWithMemory = {
 
 export const ModelScenario = {
   io: VModelScenario,
+};
+
+export const ChildSimulatorRef = {
+  io: VChildSimulatorRef,
+};
+
+export const ScenarioRevision = {
+  io: VScenarioRevision,
 };
 
 export const Scenario = {
