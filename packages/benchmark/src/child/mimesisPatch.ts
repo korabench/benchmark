@@ -34,6 +34,8 @@ export interface PatchOutcome {
     | "invalid_correction_retained_draft";
   readonly issueCount: number;
   readonly editCount: number;
+  /** Drafts drawn again for carrying an end marker (`endMarker`). */
+  readonly endMarkerRedraws: number;
 }
 
 export interface MimesisPatchOptions {
@@ -113,6 +115,22 @@ function source(scenario: Scenario): Record<string, string | number | null> {
   };
 }
 
+/**
+ * A conversation-end marker ("[end]", "[end of conversation]"): a token from
+ * MIMESIS's training transcripts, not something a child types. A draft that
+ * carries one is drawn again, up to `endMarkerDraws` draws in all; a marker the
+ * last draw still carries is cut out.
+ */
+const endMarker = /\[\s*end\b[^\]\n]{0,30}\]/i;
+const endMarkerDraws = 3;
+
+function withoutEndMarkers(text: string): string {
+  return text
+    .replace(new RegExp(endMarker.source, "gi"), " ")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
 function render(
   text: string,
   fields: Record<string, string | number | null>
@@ -178,7 +196,11 @@ function correction(
         text.slice(0, span.start) + span.after + text.slice(span.end),
       draft
     );
-  if (!output.trim() || /<think>|<\/think>|<\|im_start\|>/.test(output))
+  if (
+    !output.trim() ||
+    /<think>|<\/think>|<\|im_start\|>/.test(output) ||
+    endMarker.test(output)
+  )
     throw new Error("Invalid edited output.");
   return {output, issueCount: data.issues.length, editCount: data.edits.length};
 }
@@ -207,7 +229,7 @@ function create(options: MimesisPatchOptions) {
         .map(m => `${m.role === "user" ? "CHILD" : "AI"}: ${m.content}`)
         .join("\n\n"),
     };
-    const draft = await options.draft({
+    const draftRequest: ModelRequest = {
       maxTokens: recipe.draft.maxTokens,
       messages: [
         {
@@ -224,14 +246,25 @@ function create(options: MimesisPatchOptions) {
           })
         ),
       ],
-    });
-    const original = draft.output.trim();
-    if (
-      draft.truncated ||
-      !original ||
-      /<\s*\/?\s*think\b|<\|im_start\|>/i.test(original)
-    )
-      throw new Error("Invalid MIMESIS draft.");
+    };
+    const drawDraft = async (
+      n: number
+    ): Promise<{output: string; redraws: number}> => {
+      const draft = await options.draft(draftRequest);
+      const output = draft.output.trim();
+      if (
+        draft.truncated ||
+        !output ||
+        /<\s*\/?\s*think\b|<\|im_start\|>/i.test(output)
+      )
+        throw new Error("Invalid MIMESIS draft.");
+      if (!endMarker.test(output)) return {output, redraws: n - 1};
+      if (n < endMarkerDraws) return drawDraft(n + 1);
+      const kept = withoutEndMarkers(output);
+      if (!kept) throw new Error("Invalid MIMESIS draft.");
+      return {output: kept, redraws: n - 1};
+    };
+    const {output: original, redraws} = await drawDraft(1);
     const edited = await options.editor({
       maxTokens: recipe.editor.maxTokens,
       messages: [
@@ -256,6 +289,7 @@ function create(options: MimesisPatchOptions) {
             status: result.output === original ? "unchanged" : "changed",
             issueCount: result.issueCount,
             editCount: result.editCount,
+            endMarkerRedraws: redraws,
           },
         };
       } catch {
@@ -265,6 +299,7 @@ function create(options: MimesisPatchOptions) {
             status: "invalid_correction_retained_draft",
             issueCount: 0,
             editCount: 0,
+            endMarkerRedraws: redraws,
           },
         };
       }
@@ -295,13 +330,18 @@ function recipeRef(): ChildSimulatorRef {
  */
 const openingPolicy = "corpus";
 
-/** The source prompts/configuration plus the approved visible-history and
- * opening policies. */
+/** The source prompts/configuration plus the approved visible-history,
+ * opening and end-marker policies. */
 function fingerprint(benchmark: {version: string; hash: string}) {
   return {
     ...benchmark,
     hash: Hash.hash(
-      stableJson({benchmark, child: recipe, opening: openingPolicy})
+      stableJson({
+        benchmark,
+        child: recipe,
+        opening: openingPolicy,
+        endMarker: {pattern: endMarker.source, draws: endMarkerDraws},
+      })
     ),
   };
 }

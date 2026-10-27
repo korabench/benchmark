@@ -69,6 +69,7 @@ const VLedgerRow = v.object({
       status: v.string(),
       issueCount: v.number(),
       editCount: v.number(),
+      endMarkerRedraws: v.optional(v.number()),
     })
   ),
 });
@@ -161,7 +162,8 @@ async function writeOpening(
     }
     // An opening that keeps a bracketed placeholder ("[name]") is drawn again,
     // as expansion does for its own openings. Only here: the opening is
-    // written once into the corpus, and runs never redraw a turn.
+    // written once into the corpus, and runs never redraw a turn for a
+    // placeholder.
     const attempt = async (
       n: number
     ): Promise<Omit<LedgerRow, "seedId" | "stampHash">> => {

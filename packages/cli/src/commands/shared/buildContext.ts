@@ -61,7 +61,12 @@ export async function buildContext(
   if (childSimulator) {
     context.getChildResponse = createChildSimulator(userModel, {
       onOutcome: outcome =>
-        console.error(`Child patch ${scenario.seed.id}: ${outcome.status}`),
+        console.error(
+          `Child patch ${scenario.seed.id}: ${outcome.status}` +
+            (outcome.endMarkerRedraws
+              ? ` (${outcome.endMarkerRedraws} end-marker redraws)`
+              : "")
+        ),
     });
   }
 
