@@ -60,6 +60,15 @@ describe("RunStamp.io", () => {
     );
   });
 
+  it("keeps the judges that grade the behaviours", () => {
+    const stamp = makeStamp({
+      models: {...makeStamp().models, mechanismJudges: ["judge-a"]},
+    });
+    expect(v.parse(RunStamp.io, stamp).models.mechanismJudges).toEqual([
+      "judge-a",
+    ]);
+  });
+
   it("tolerates unknown fields from newer writers", () => {
     const stamp = {...makeStamp(), future: true};
     expect(() => v.parse(RunStamp.io, stamp)).not.toThrow();

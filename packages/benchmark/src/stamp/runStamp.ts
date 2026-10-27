@@ -46,6 +46,9 @@ const VStampModels = v.object({
   expansionUser: v.optional(VChain),
   user: ModelSpec.io,
   judges: VChain,
+  /** Names of the judges that also grade the behaviours; every judge when
+   * absent. */
+  mechanismJudges: v.optional(v.array(v.string())),
   continueUser: v.optional(ModelSpec.io),
   /** The evaluated model; only meaningful for `run`. */
   target: v.optional(VTargetRef),
