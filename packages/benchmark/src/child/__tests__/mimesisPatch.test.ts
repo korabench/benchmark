@@ -66,6 +66,7 @@ describe("MIMESIS + one targeted patch pass", () => {
       status: "changed",
       issueCount: 1,
       editCount: 1,
+      endMarkerRedraws: 0,
     });
   });
 
@@ -112,6 +113,7 @@ describe("MIMESIS + one targeted patch pass", () => {
       ...validEdit,
       edits: [{before: "blue", after: "<think>leak</think>"}],
     }),
+    JSON.stringify({...validEdit, edits: [{before: "blue", after: "[end]"}]}),
   ])(
     "retains and flags the first draft for invalid edits without another content attempt (%s)",
     async output => {
@@ -125,6 +127,7 @@ describe("MIMESIS + one targeted patch pass", () => {
         status: "invalid_correction_retained_draft",
         issueCount: 0,
         editCount: 0,
+        endMarkerRedraws: 0,
       });
     }
   );
@@ -184,5 +187,51 @@ describe("MIMESIS + one targeted patch pass", () => {
       /Invalid MIMESIS draft/
     );
     expect(f.editor).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["ok. [end]", "[END OF CONVERSATION]", "bye [end chat]"])(
+    "draws a draft with an end marker again (%s)",
+    async marked => {
+      const f = fixture('{"issues":[],"edits":[]}');
+      f.draft.mockResolvedValueOnce({output: marked});
+      expect(await f.reply({scenario, messages: []})).toEqual({
+        output: original,
+      });
+      expect(f.draft).toHaveBeenCalledTimes(2);
+      expect(f.draft.mock.calls[1]![0]).toEqual(f.draft.mock.calls[0]![0]);
+      expect(f.editor).toHaveBeenCalledTimes(1);
+      expect(f.editor.mock.calls[0]![0].messages[1]!.content).not.toContain(
+        marked
+      );
+      expect(f.outcome).toHaveBeenCalledWith({
+        status: "unchanged",
+        issueCount: 0,
+        editCount: 0,
+        endMarkerRedraws: 1,
+      });
+    }
+  );
+
+  it("cuts the end marker out of the last draft, and fails a draft that is nothing else", async () => {
+    const f = fixture('{"issues":[],"edits":[]}');
+    f.draft.mockResolvedValue({output: "ok.  [end] see you"});
+    expect(await f.reply({scenario, messages: []})).toEqual({
+      output: "ok. see you",
+    });
+    expect(f.draft).toHaveBeenCalledTimes(3);
+    expect(f.outcome.mock.calls[0]![0].endMarkerRedraws).toBe(2);
+    f.draft.mockResolvedValue({output: "[end]"});
+    await expect(f.reply({scenario, messages: []})).rejects.toThrow(
+      /Invalid MIMESIS draft/
+    );
+  });
+
+  it("leaves brackets that are not an end marker alone", async () => {
+    const f = fixture('{"issues":[],"edits":[]}');
+    f.draft.mockResolvedValue({output: "it's (2x + 3) [the weekend one]"});
+    expect(await f.reply({scenario, messages: []})).toEqual({
+      output: "it's (2x + 3) [the weekend one]",
+    });
+    expect(f.draft).toHaveBeenCalledTimes(1);
   });
 });

@@ -32,7 +32,12 @@ await getChildResponse({scenario, messages}); // {output: visibleChildMessage}
 4,096 and 8,192 respectively. The transport configures MIMESIS at temperature 1,
 top-p 0.95, and GPT-6-Luna at low reasoning effort. Neither transport may retry
 content to get a more desirable answer. Explicit startup/capacity/network retry
-policies remain transport concerns.
+policies remain transport concerns. The one content redraw is the recipe's own:
+a draft carrying a conversation-end marker (`[end]`, `[end of conversation]`,
+`[end chat]`…), a token from MIMESIS's training transcripts that no child types,
+is drawn again with the same request, up to three draws in all. A marker the
+third draw still carries is cut out, and a draft that is nothing else fails the
+turn. An edit that would add one is invalid, and the draft is kept.
 
 `messages` contains only visible conversation history: child=`user`, evaluated
 AI=`assistant`. Empty history generates an opening, which only
@@ -52,12 +57,13 @@ replacement spans. It preserves all unaffected draft text. Invalid JSON,
 invalid/truncated edits or empty edited output retain the draft and report
 `invalid_correction_retained_draft` through the text-free outcome hook. Draft
 failure and editor transport failure fail the turn. The hook reports status and
-issue/edit counts, without messages or reasoning. The CLI prints the status;
+issue/edit counts and the end-marker redraws, without messages or reasoning. The CLI prints the status;
 hosted consumers can route it to their run logs.
 
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
-both model configurations, the history policy and the opening policy (`corpus`:
-runs that sampled the opening per test carry a different hash).
+both model configurations, the history policy, the opening policy (`corpus`:
+runs that sampled the opening per test carry a different hash) and the
+end-marker policy (pattern and draws: runs before it carry a different hash).
 `MimesisPatch.recipeRef()` names the recipe alone, by content; it is what a
 scenario revision records. Both CLI and hosted consumers
 must use it when stamping runs with this recipe.
