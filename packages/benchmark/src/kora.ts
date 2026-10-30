@@ -18,6 +18,7 @@ import {
   generateNextUserMessage,
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
+import {AssistantTurn} from "./model/assistantTurn.js";
 import {GoldStandardRubric} from "./model/goldStandardRubric.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
@@ -542,6 +543,7 @@ export const kora = Benchmark.new({
     // Multi-turn conversation.
     const messages: ModelMessage[] = startMessages ? [...startMessages] : [];
     const startTurn = messages.length / 2;
+    const assistantTurns: AssistantTurn[] = [];
 
     for (let i = startTurn; i < conversationLength; i++) {
       const tUserMessage = Date.now();
@@ -572,15 +574,23 @@ export const kora = Benchmark.new({
           modelMemory: scenario.modelMemory,
           language: c.language,
         });
-        const {output} = await c.getAssistantResponse({
-          messages: [
-            {
-              role: "system",
-              content: modelPrompt.input,
-            },
-            ...messages,
-          ],
-        });
+        const {output, reasoning, reasoningTokens} =
+          await c.getAssistantResponse({
+            messages: [
+              {
+                role: "system",
+                content: modelPrompt.input,
+              },
+              ...messages,
+            ],
+          });
+        if (reasoning || (reasoningTokens ?? 0) > 0) {
+          assistantTurns.push({
+            turn: i,
+            reasoning: reasoning || null,
+            reasoningTokens: reasoningTokens ?? null,
+          });
+        }
         return output;
       })();
       c.trace?.({
@@ -603,7 +613,7 @@ export const kora = Benchmark.new({
       });
     }
 
-    return runJudges(
+    const result = await runJudges(
       c.judgeModels,
       scenario,
       prompt,
@@ -611,6 +621,7 @@ export const kora = Benchmark.new({
       c.trace,
       c.mechanismJudges
     );
+    return assistantTurns.length > 0 ? {...result, assistantTurns} : result;
   },
   mapTestResultToRunResult(result) {
     const {assessment, mechanismAssessment, judgeAssessments} = result;

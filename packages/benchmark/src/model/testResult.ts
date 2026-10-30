@@ -2,6 +2,7 @@ import {ModelMessage} from "@korabench/core";
 import * as v from "valibot";
 import {PackStamp} from "../packs/packStamp.js";
 import {RunStamp} from "../stamp/runStamp.js";
+import {AssistantTurn} from "./assistantTurn.js";
 import {JudgeAssessment} from "./judgeAssessment.js";
 import {MechanismAssessment} from "./mechanismAssessment.js";
 import {Scenario} from "./scenario.js";
@@ -24,6 +25,9 @@ function buildTestResultSchema(): TestResultSchema {
     assessment: TestAssessment.io,
     mechanismAssessment: MechanismAssessment.io,
     judgeAssessments: v.array(JudgeAssessment.io),
+    // Present only when the tested model returned reasoning, one per turn it
+    // returned some for.
+    assistantTurns: v.optional(v.array(AssistantTurn.io)),
     // Optional: results written before packs / stamps existed carry none.
     packs: v.optional(PackStamp.io),
     stamp: v.optional(RunStamp.io),
@@ -41,6 +45,7 @@ export interface TestResult {
   assessment: TestAssessment;
   mechanismAssessment: MechanismAssessment;
   judgeAssessments: JudgeAssessment[];
+  assistantTurns?: AssistantTurn[];
   packs?: PackStamp;
   stamp?: RunStamp;
 }

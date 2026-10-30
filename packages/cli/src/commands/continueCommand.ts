@@ -1,4 +1,5 @@
 import {
+  AssistantTurn,
   kora,
   Packs,
   RiskTaxonomy,
@@ -306,12 +307,19 @@ export async function continueCommand(
           roles.mechanismJudges,
           roles.childSimulator
         );
-        const testResult = await kora.runTest(
+        const continued = await kora.runTest(
           built.context,
           task.input.scenario,
           task.key,
           task.input.messages
         );
+        const assistantTurns = AssistantTurn.mergeResumed(
+          task.input.assistantTurns,
+          continued.assistantTurns
+        );
+        const testResult = assistantTurns
+          ? {...continued, assistantTurns}
+          : continued;
         outcome = "completed";
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);

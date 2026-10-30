@@ -1,4 +1,4 @@
-import {Scenario, ScenarioPrompt} from "@korabench/benchmark";
+import {AssistantTurn, Scenario, ScenarioPrompt} from "@korabench/benchmark";
 import {ModelMessage} from "@korabench/core";
 import * as fs from "node:fs/promises";
 import * as readline from "node:readline";
@@ -6,13 +6,15 @@ import * as v from "valibot";
 
 // Uses `object` (not `strictObject`) so prod dumps carrying extra fields
 // (riskId, runId, seedId, assessment, behaviorAssessment, key, ageRange, ...)
-// parse without error — we only need the five canonical fields below.
+// parse without error — we only need the five canonical fields below, plus
+// the tested model's recorded reasoning, carried over when present.
 export const ReassessInput = v.object({
   id: v.string(),
   modelId: v.string(),
   scenario: Scenario.io,
   prompt: ScenarioPrompt.io,
   messages: v.array(ModelMessage.io),
+  assistantTurns: v.optional(v.array(AssistantTurn.io)),
 });
 
 export type ReassessInput = v.InferOutput<typeof ReassessInput>;

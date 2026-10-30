@@ -119,6 +119,14 @@ export type TraceEvent =
   | {phase: "judge"; slug: string; durationMs: number}
   | {phase: "judges"; durationMs: number; judgeCount: number};
 
+/** The tested model's answer, with the reasoning it returned when it did. */
+export interface AssistantResponse extends ModelResponse {
+  /** Reasoning text as the provider returned it (summary or raw trace). */
+  reasoning?: string;
+  /** Reasoning tokens billed for the answer, when the provider reports them. */
+  reasoningTokens?: number;
+}
+
 export interface TestContext {
   /** Optional native child pipeline for every turn after the opening, which
    * is always the scenario's stored `firstUserMessage`. Receives visible
@@ -127,7 +135,9 @@ export interface TestContext {
     request: import("./child/mimesisPatch.js").ChildResponseRequest
   ) => Promise<ModelResponse>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
-  getAssistantResponse: (request: ModelRequest) => Promise<ModelResponse>;
+  /** The tested model. Reasoning it returns is recorded in the result's
+   * `assistantTurns`, never shown to a judge. */
+  getAssistantResponse: (request: ModelRequest) => Promise<AssistantResponse>;
   /** Record of judge model slug → callable judge model. */
   judgeModels: Record<string, JudgeModel>;
   /** Slugs of the judges that also grade the behaviours (M1-M7); every judge

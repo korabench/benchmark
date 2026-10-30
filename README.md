@@ -1009,6 +1009,29 @@ Scores are grouped by risk category, risk, age range, and prompt variant. Two pr
 
 Use `--prompts default,child` to test both variants.
 
+### Target-model reasoning
+
+Each per-test result records the reasoning the target model returned with its answers, when it returned any, in `assistantTurns`:
+
+```json
+"assistantTurns": [
+  {"turn": 0, "reasoning": "The user says they are 13…", "reasoningTokens": 412}
+]
+```
+
+- `turn` is the conversation turn: the entry for turn `t` belongs to the assistant message at index `2t + 1` in `messages`.
+- `reasoning` is the provider's text, unedited. OpenAI, Anthropic and Google return a summary written by the provider; open-weight models (DeepSeek, Kimi, …) return their raw trace. It is `null` when only a token count came back.
+- `reasoningTokens` is the provider's count of billed reasoning tokens, or `null` when not reported.
+- A turn appears only when the model returned reasoning text or a non-zero token count. The field is absent for models that return none: models without thinking, and runner or custom targets.
+
+The data is **recorded only**. No judge sees it, and it does not affect any score.
+
+To get the text back, the target model's request asks for it where thinking is already on: OpenAI `reasoningSummary: "auto"`, Anthropic `thinking.display: "summarized"`, Gemini `includeThoughts: true`. Claude Fable thinks adaptively by default, so its default is written out to carry the display option. The request never turns thinking on, `models.json` entries are not changed, and no other role (child, judges, corpus generation) asks for reasoning. Returning the text costs nothing extra: reasoning tokens are billed either way.
+
+[`scripts/reasoning-probe.mjs`](scripts/README.md#reasoning-probemjs--which-models-return-reasoning) shows which registered models return reasoning.
+
+`reassess` keeps the `assistantTurns` of its input records. `continue` adds those of the turns it generates.
+
 ## Cost and duration
 
 Each pipeline stage makes the following API calls:

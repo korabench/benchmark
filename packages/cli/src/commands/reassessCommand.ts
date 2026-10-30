@@ -254,7 +254,7 @@ export async function reassessCommand(
       }
 
       try {
-        const testResult = await runJudges(
+        const judged = await runJudges(
           judgeContext,
           task.input.scenario,
           task.input.prompt,
@@ -262,6 +262,10 @@ export async function reassessCommand(
           undefined,
           roles.mechanismJudges
         );
+        const {assistantTurns} = task.input;
+        const testResult = assistantTurns
+          ? {...judged, assistantTurns}
+          : judged;
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);
         return [

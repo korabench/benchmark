@@ -46,9 +46,14 @@ export async function buildContext(
     getUserResponse: async request => ({
       output: await userModel.getTextResponse(request),
     }),
-    getAssistantResponse: async request => ({
-      output: await targetModel.getTextResponse(request),
-    }),
+    getAssistantResponse: async request => {
+      if (!targetModel.getTextResponseWithReasoning) {
+        return {output: await targetModel.getTextResponse(request)};
+      }
+      const {text, reasoning, reasoningTokens} =
+        await targetModel.getTextResponseWithReasoning(request);
+      return {output: text, reasoning, reasoningTokens};
+    },
     judgeModels: R.mapValues(
       judgeModels,
       (model: Model): JudgeModel => ({

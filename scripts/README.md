@@ -50,6 +50,24 @@ RUN_DIR=data/<run> [JUDGE=<slug>[,<slug>…]] [TARGET=<slug>] \
   node --env-file=.env scripts/complete-run.mjs
 ```
 
+## `reasoning-probe.mjs` — which models return reasoning
+
+Sends one short child-safety prompt to every `models.json` entry (or those named
+in `MODELS`), through the same call the target model uses in `kora run`
+(`getTextResponseWithReasoning`). Prints a Markdown table with, per call, the
+length of the reasoning text returned, the reasoning tokens billed, and any
+error. Use it after adding a model or changing the reasoning-visibility rule in
+`packages/cli/src/models/gatewayModel.ts`; a provider that rejects an option
+shows up as an error. It writes nothing.
+
+```sh
+yarn tsbuild && [MODELS=a,b] [REPEATS=2] \
+  node --env-file=.env scripts/reasoning-probe.mjs
+```
+
+Some reasoning models return an empty summary for short reasoning, OpenAI's
+medium tiers in particular. The token count still shows they reasoned.
+
 ## `age-probe-run.mjs` — age-inference study data
 
 Generates the conversations and probe answers for the age-inference study
