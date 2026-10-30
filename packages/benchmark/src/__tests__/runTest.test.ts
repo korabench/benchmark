@@ -290,6 +290,56 @@ describe("kora.runTest", () => {
     );
   });
 
+  it("records the tested model's reasoning per turn and keeps it from the judges", async () => {
+    const context = createTestContext();
+    let turn = 0;
+    context.getAssistantResponse = vi.fn(async () => {
+      const t = turn++;
+      return t === 1
+        ? {output: `Answer ${t}`}
+        : {
+            output: `Answer ${t}`,
+            reasoning: `SECRET-REASONING-${t}`,
+            reasoningTokens: 40 + t,
+          };
+    });
+
+    const result = await kora.runTest(context, scenario, defaultKey);
+
+    expect(result.assistantTurns).toEqual([
+      {turn: 0, reasoning: "SECRET-REASONING-0", reasoningTokens: 40},
+      {turn: 2, reasoning: "SECRET-REASONING-2", reasoningTokens: 42},
+    ]);
+    expect(result.messages[2 * 2 + 1]!.content).toBe("Answer 2");
+    const judgeRequests = JSON.stringify(
+      context.judgeModel.getResponse.mock.calls
+    );
+    expect(judgeRequests).not.toContain("SECRET-REASONING");
+  });
+
+  it("records token-only reasoning and omits assistantTurns without any", async () => {
+    const tokensOnly = createTestContext();
+    tokensOnly.getAssistantResponse = vi.fn(async () => ({
+      output: "Answer",
+      reasoning: "",
+      reasoningTokens: 12,
+    }));
+    const withTokens = await kora.runTest(tokensOnly, scenario, defaultKey);
+    expect(withTokens.assistantTurns?.[0]).toEqual({
+      turn: 0,
+      reasoning: null,
+      reasoningTokens: 12,
+    });
+
+    const zero = createTestContext();
+    zero.getAssistantResponse = vi.fn(async () => ({
+      output: "Answer",
+      reasoningTokens: 0,
+    }));
+    const none = await kora.runTest(zero, scenario, defaultKey);
+    expect("assistantTurns" in none).toBe(false);
+  });
+
   it("rejects mechanism judges that are not judges", async () => {
     const context: TestContext = {
       ...createTestContext(),

@@ -11,7 +11,7 @@ import {
 import * as v from "valibot";
 import {createLogRetryHandler, RetryOptions, withRetry} from "../retry.js";
 import {createFallbackModel} from "./fallbackModel.js";
-import {Model, StructuredRequest} from "./model.js";
+import {Model, ReasonedTextResponse, StructuredRequest} from "./model.js";
 import {ModelConfig, resolveModelConfig} from "./modelConfig.js";
 import {toProviderSchema} from "./providerSchema.js";
 
@@ -81,6 +81,70 @@ function systemMessage(
         providerOptions: {anthropic: {cacheControl: {type: "ephemeral"}}},
       }
     : {role: "system", content};
+}
+
+//
+// Reasoning visibility.
+//
+// Thinking models bill their reasoning whether or not they return its text;
+// OpenAI, Anthropic (Claude 4.7+) and Google return it only when asked, as a
+// summary. Asking adds no generation cost and changes nothing about how the
+// model thinks, so the tested model asks wherever thinking is already on. It
+// never turns thinking on: a config without it stays without it, except for
+// models that think adaptively by default (Claude Fable), whose default is
+// spelled out so it can carry the display option. Other providers return
+// their reasoning unasked.
+//
+
+const ANTHROPIC_ADAPTIVE_BY_DEFAULT = ["anthropic/claude-fable-"];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function withVisibleReasoning(
+  model: string,
+  providerOptions: ProviderOptions | undefined
+): ProviderOptions | undefined {
+  if (model.startsWith("openai/")) {
+    return {
+      ...providerOptions,
+      openai: {...providerOptions?.["openai"], reasoningSummary: "auto"},
+    };
+  }
+  if (model.startsWith("anthropic/")) {
+    const anthropic = providerOptions?.["anthropic"];
+    const thinking =
+      anthropic?.["thinking"] ??
+      (ANTHROPIC_ADAPTIVE_BY_DEFAULT.some(p => model.startsWith(p))
+        ? {type: "adaptive"}
+        : undefined);
+    if (!isRecord(thinking) || thinking["type"] === "disabled") {
+      return providerOptions;
+    }
+    return {
+      ...providerOptions,
+      anthropic: {...anthropic, thinking: {...thinking, display: "summarized"}},
+    };
+  }
+  if (model.startsWith("google/gemini")) {
+    const google = providerOptions?.["google"];
+    const thinkingConfig = google?.["thinkingConfig"];
+    if (isRecord(thinkingConfig) && thinkingConfig["thinkingBudget"] === 0) {
+      return providerOptions;
+    }
+    return {
+      ...providerOptions,
+      google: {
+        ...google,
+        thinkingConfig: {
+          ...(isRecord(thinkingConfig) ? thinkingConfig : {}),
+          includeThoughts: true,
+        },
+      },
+    };
+  }
+  return providerOptions;
 }
 
 const defaultRetryOptions: RetryOptions = {
@@ -166,58 +230,80 @@ export function createGatewayModelFromConfig(
       result.usage.inputTokenDetails.cacheReadTokens ?? 0;
   }
 
+  async function generateTextResponse(
+    request: ModelRequest,
+    includeReasoning: boolean
+  ): Promise<ReasonedTextResponse> {
+    const maxTokens = request.maxTokens ?? config.maxTokens;
+    const temperature = request.temperature ?? config.temperature;
+    const configOptions = config.providerOptions as ProviderOptions | undefined;
+    const providerOptions = includeReasoning
+      ? withVisibleReasoning(config.model, configOptions)
+      : configOptions;
+
+    const result = await withRetry(
+      () =>
+        generateText({
+          model: gateway(config.model),
+          system: request.messages.find(m => m.role === "system")?.content,
+          messages: request.messages
+            .filter(m => m.role !== "system")
+            .map(m => ({
+              role: m.role as "user" | "assistant",
+              content: m.content,
+            })),
+          maxOutputTokens: maxTokens,
+          temperature,
+          providerOptions: providerOptions as
+            | Record<string, Record<string, never>>
+            | undefined,
+          maxRetries: 0,
+        }).then(result => {
+          if (config.model === "google/gemma-4-31b-it") {
+            if (result.finishReason === "length") {
+              throw new Error("Response truncated: max output tokens reached.");
+            }
+            if (
+              result.finishReason === "content-filter" ||
+              result.finishReason === "error" ||
+              !result.text.trim()
+            ) {
+              throw new Error(
+                `Gemma generation failed (${result.finishReason}): no usable child message.`
+              );
+            }
+          }
+          return result;
+        }),
+      retryOptions
+    );
+
+    record(result);
+    if (options?.rejectTruncated && result.finishReason === "length") {
+      throw new Error("Response truncated: max output tokens reached.");
+    }
+    if (!includeReasoning) {
+      return {text: result.text};
+    }
+    return {
+      text: result.text,
+      reasoning: result.reasoningText || undefined,
+      reasoningTokens: result.usage.outputTokenDetails.reasoningTokens,
+    };
+  }
+
   return {
     served,
     usage,
 
     async getTextResponse(request: ModelRequest): Promise<string> {
-      const maxTokens = request.maxTokens ?? config.maxTokens;
-      const temperature = request.temperature ?? config.temperature;
+      return (await generateTextResponse(request, false)).text;
+    },
 
-      const result = await withRetry(
-        () =>
-          generateText({
-            model: gateway(config.model),
-            system: request.messages.find(m => m.role === "system")?.content,
-            messages: request.messages
-              .filter(m => m.role !== "system")
-              .map(m => ({
-                role: m.role as "user" | "assistant",
-                content: m.content,
-              })),
-            maxOutputTokens: maxTokens,
-            temperature,
-            providerOptions: config.providerOptions as
-              | Record<string, Record<string, never>>
-              | undefined,
-            maxRetries: 0,
-          }).then(result => {
-            if (config.model === "google/gemma-4-31b-it") {
-              if (result.finishReason === "length") {
-                throw new Error(
-                  "Response truncated: max output tokens reached."
-                );
-              }
-              if (
-                result.finishReason === "content-filter" ||
-                result.finishReason === "error" ||
-                !result.text.trim()
-              ) {
-                throw new Error(
-                  `Gemma generation failed (${result.finishReason}): no usable child message.`
-                );
-              }
-            }
-            return result;
-          }),
-        retryOptions
-      );
-
-      record(result);
-      if (options?.rejectTruncated && result.finishReason === "length") {
-        throw new Error("Response truncated: max output tokens reached.");
-      }
-      return result.text;
+    getTextResponseWithReasoning(
+      request: ModelRequest
+    ): Promise<ReasonedTextResponse> {
+      return generateTextResponse(request, true);
     },
 
     async getStructuredResponse<T>(request: StructuredRequest<T>): Promise<T> {

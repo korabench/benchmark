@@ -1,5 +1,5 @@
 import {ModelRequest} from "@korabench/core";
-import {Model, StructuredRequest} from "./model.js";
+import {Model, ReasonedTextResponse, StructuredRequest} from "./model.js";
 
 interface LabeledModel {
   label: string;
@@ -17,7 +17,10 @@ export function createFallbackModel(models: readonly LabeledModel[]): Model {
   }
 
   async function tryChain<T>(
-    method: "getTextResponse" | "getStructuredResponse",
+    method:
+      | "getTextResponse"
+      | "getTextResponseWithReasoning"
+      | "getStructuredResponse",
     invoke: (m: Model) => Promise<T>
   ): Promise<T> {
     let lastError: unknown;
@@ -46,6 +49,15 @@ export function createFallbackModel(models: readonly LabeledModel[]): Model {
   return {
     getTextResponse(request: ModelRequest) {
       return tryChain("getTextResponse", m => m.getTextResponse(request));
+    },
+    getTextResponseWithReasoning(
+      request: ModelRequest
+    ): Promise<ReasonedTextResponse> {
+      return tryChain("getTextResponseWithReasoning", async m =>
+        m.getTextResponseWithReasoning
+          ? m.getTextResponseWithReasoning(request)
+          : {text: await m.getTextResponse(request)}
+      );
     },
     getStructuredResponse<T>(request: StructuredRequest<T>) {
       return tryChain("getStructuredResponse", m =>
