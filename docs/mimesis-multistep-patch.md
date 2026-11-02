@@ -46,6 +46,17 @@ the stored one. Subsequent calls require complete pairs. The full V3 scenario di
 required; missing fields fail before model calls. Saved corpus openings, judge
 criteria and generation notes are excluded from the child/editor source.
 
+**History (recipe v3).** MIMESIS receives the full visible history once, as
+native chat messages: previous child messages use `assistant`, and evaluated-AI
+replies use `user`, because MIMESIS generates the child. The system message
+contains the scenario/profile and instructions, without a second text transcript.
+No messages are truncated or dropped. The editor still receives the canonical
+history (child=`user`, evaluated AI=`assistant`) in `actual_public_history`.
+Recipe v3 removes v2's duplicate transcript and records
+`visible-native-messages-v1`; the opening and editor prompts are unchanged.
+Its new recipe hash and run fingerprint distinguish it from earlier conditions.
+Existing stored openings and completed results are not rewritten.
+
 `TestContext.getChildResponse` is optional. `kora.runTest` and continuation use it
 for every turn after the opening when provided; the opening is always the
 scenario's stored `firstUserMessage`. Contexts without it keep the ordinary
@@ -89,6 +100,11 @@ Prompts and edit rules come from the [versioned research recipe](https://github.
 The port was approved on 26 October 2026 with one intentional history change:
 only final visible messages are replayed; historical private reasoning is
 discarded. It is therefore an adapted condition, not an exact E26 replay.
+On 2 November 2026, Clem approved removing the second, text representation of
+visible history in recipe v3. Versions 1 and 2 included both representations;
+that historical source recipe is preserved in the archive. The v3 change reduces
+input duplication, but its effects on model behaviour and throughput have not
+been measured in a matched live comparison.
 
 The local Python/MLX historical runtime and Modal/vLLM deployment also differ.
 No matched live quality comparison or real-child validation is established by

@@ -252,22 +252,17 @@ function create(options: MimesisPatchOptions) {
     }
     const fields = source(scenario);
     const prompt = recipe.prompts[messages.length ? "continuation" : "opening"];
-    const context = {
-      ...fields,
-      history: messages
-        .map(m => `${m.role === "user" ? "CHILD" : "AI"}: ${m.content}`)
-        .join("\n\n"),
-    };
     const draftRequest: ModelRequest = {
       maxTokens: recipe.draft.maxTokens,
       messages: [
         {
           role: "system",
           content:
-            render(prompt.system, context) +
+            render(prompt.system, fields) +
             "\n\n" +
-            render(prompt.user, context),
+            render(prompt.user, fields),
         },
+        // Replay the visible history once, with MIMESIS playing the child.
         ...messages.map(
           (m): ModelMessage => ({
             role: m.role === "user" ? "assistant" : "user",
