@@ -70,7 +70,8 @@ export async function buildContext(
           `Child patch ${scenario.seed.id}: ${outcome.status}` +
             (outcome.endMarkerRedraws
               ? ` (${outcome.endMarkerRedraws} end-marker redraws)`
-              : "")
+              : "") +
+            (outcome.leaving ? " (leaving)" : "")
         ),
     });
   }

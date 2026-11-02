@@ -133,7 +133,7 @@ export interface TestContext {
    * history. */
   getChildResponse?: (
     request: import("./child/mimesisPatch.js").ChildResponseRequest
-  ) => Promise<ModelResponse>;
+  ) => Promise<import("./child/mimesisPatch.js").ChildResponse>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
   /** The tested model. Reasoning it returns is recorded in the result's
    * `assistantTurns`, never shown to a judge. */

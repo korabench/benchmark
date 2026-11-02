@@ -19,6 +19,7 @@ import {
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {AssistantTurn} from "./model/assistantTurn.js";
+import {ChildTurn} from "./model/childTurn.js";
 import {GoldStandardRubric} from "./model/goldStandardRubric.js";
 import {InvalidTurnError} from "./model/invalidTurnError.js";
 import {JudgeAssessment} from "./model/judgeAssessment.js";
@@ -544,15 +545,25 @@ export const kora = Benchmark.new({
     const messages: ModelMessage[] = startMessages ? [...startMessages] : [];
     const startTurn = messages.length / 2;
     const assistantTurns: AssistantTurn[] = [];
+    // What a native child pipeline reported for each turn it generated. A
+    // resumed test records only its own turns.
+    const childTurns: ChildTurn[] = [];
 
     for (let i = startTurn; i < conversationLength; i++) {
       const tUserMessage = Date.now();
-      const userMessage = await (() => {
+      const userMessage = await (async () => {
         // The opening is part of the corpus, written once per scenario: every
         // target answers the same first message, whatever the child.
         if (i === 0) return scenario.firstUserMessage;
 
-        return generateNextUserMessage(c, risk, scenario, messages);
+        const {output, outcome} = await generateNextUserMessage(
+          c,
+          risk,
+          scenario,
+          messages
+        );
+        if (outcome) childTurns.push({turn: i, ...outcome});
+        return output;
       })();
       c.trace?.({
         phase: "user_message",
@@ -621,7 +632,11 @@ export const kora = Benchmark.new({
       c.trace,
       c.mechanismJudges
     );
-    return assistantTurns.length > 0 ? {...result, assistantTurns} : result;
+    return {
+      ...result,
+      ...(childTurns.length > 0 && {childTurns}),
+      ...(assistantTurns.length > 0 && {assistantTurns}),
+    };
   },
   mapTestResultToRunResult(result) {
     const {assessment, mechanismAssessment, judgeAssessments} = result;

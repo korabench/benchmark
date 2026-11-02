@@ -1,9 +1,9 @@
 import {
   MimesisPatch,
+  type ChildResponse,
   type ChildResponseRequest,
   type PatchOutcome,
 } from "@korabench/benchmark";
-import type {ModelResponse} from "@korabench/core";
 import {Model} from "../../models/model.js";
 import {createSpecModel} from "../../profiles/roleModels.js";
 
@@ -22,7 +22,7 @@ export interface ChildSimulatorOptions {
 export function createChildSimulator(
   userModel: Model,
   options: ChildSimulatorOptions = {}
-): (request: ChildResponseRequest) => Promise<ModelResponse> {
+): (request: ChildResponseRequest) => Promise<ChildResponse> {
   const editor = createSpecModel(MimesisPatch.recipe.editor, {
     rejectTruncated: true,
   });

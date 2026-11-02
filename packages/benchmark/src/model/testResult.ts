@@ -3,6 +3,7 @@ import * as v from "valibot";
 import {PackStamp} from "../packs/packStamp.js";
 import {RunStamp} from "../stamp/runStamp.js";
 import {AssistantTurn} from "./assistantTurn.js";
+import {ChildTurn} from "./childTurn.js";
 import {JudgeAssessment} from "./judgeAssessment.js";
 import {MechanismAssessment} from "./mechanismAssessment.js";
 import {Scenario} from "./scenario.js";
@@ -28,6 +29,9 @@ function buildTestResultSchema(): TestResultSchema {
     // Present only when the tested model returned reasoning, one per turn it
     // returned some for.
     assistantTurns: v.optional(v.array(AssistantTurn.io)),
+    // Present only for a native child pipeline (MIMESIS), one per turn it
+    // generated.
+    childTurns: v.optional(v.array(ChildTurn.io)),
     // Optional: results written before packs / stamps existed carry none.
     packs: v.optional(PackStamp.io),
     stamp: v.optional(RunStamp.io),
@@ -46,6 +50,7 @@ export interface TestResult {
   mechanismAssessment: MechanismAssessment;
   judgeAssessments: JudgeAssessment[];
   assistantTurns?: AssistantTurn[];
+  childTurns?: ChildTurn[];
   packs?: PackStamp;
   stamp?: RunStamp;
 }

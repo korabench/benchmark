@@ -36,6 +36,16 @@ export interface PatchOutcome {
   readonly editCount: number;
   /** Drafts drawn again for carrying an end marker (`endMarker`). */
   readonly endMarkerRedraws: number;
+  /** The editor's judgement that the draft closes the child's side of the
+   * conversation; null when its reply carried no readable flag. Recorded
+   * only: the conversation still runs to its length. */
+  readonly leaving: boolean | null;
+}
+
+/** The visible child message, and the turn's outcome. */
+export interface ChildResponse {
+  readonly output: string;
+  readonly outcome?: PatchOutcome;
 }
 
 export interface MimesisPatchOptions {
@@ -154,15 +164,34 @@ const VCorrection = v.object({
   ),
 });
 
+function editorJson(text: string): unknown {
+  const json = text.trim().startsWith("```")
+    ? text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")
+    : text;
+  return JSON.parse(json);
+}
+
+/** Read apart from the edits, so an invalid edit keeps the flag. */
+function leavingFlag(text: string): boolean | null {
+  try {
+    const data = editorJson(text);
+    return typeof data === "object" &&
+      data !== null &&
+      "leaving" in data &&
+      typeof data.leaving === "boolean"
+      ? data.leaving
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function correction(
   text: string,
   draft: string,
   fields: Record<string, unknown>
 ) {
-  const json = text.trim().startsWith("```")
-    ? text.trim().replace(/^```(?:json)?\s*|\s*```$/g, "")
-    : text;
-  const data = v.parse(VCorrection, JSON.parse(json));
+  const data = v.parse(VCorrection, editorJson(text));
   const allowed = new Set([
     ...Object.keys(fields),
     "actual_public_history",
@@ -209,7 +238,7 @@ function create(options: MimesisPatchOptions) {
   return async ({
     scenario,
     messages,
-  }: ChildResponseRequest): Promise<{output: string}> => {
+  }: ChildResponseRequest): Promise<ChildResponse> => {
     if (
       messages.length % 2 !== 0 ||
       messages.some(
@@ -279,6 +308,7 @@ function create(options: MimesisPatchOptions) {
         },
       ],
     });
+    const leaving = edited.truncated ? null : leavingFlag(edited.output);
     const result = ((): {output: string; outcome: PatchOutcome} => {
       try {
         if (edited.truncated) throw new Error("Editor response truncated.");
@@ -290,6 +320,7 @@ function create(options: MimesisPatchOptions) {
             issueCount: result.issueCount,
             editCount: result.editCount,
             endMarkerRedraws: redraws,
+            leaving,
           },
         };
       } catch {
@@ -300,6 +331,7 @@ function create(options: MimesisPatchOptions) {
             issueCount: 0,
             editCount: 0,
             endMarkerRedraws: redraws,
+            leaving,
           },
         };
       }
@@ -310,7 +342,7 @@ function create(options: MimesisPatchOptions) {
     } catch {
       /* best-effort observability */
     }
-    return {output: result.output};
+    return result;
   };
 }
 

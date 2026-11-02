@@ -70,6 +70,7 @@ const VLedgerRow = v.object({
       issueCount: v.number(),
       editCount: v.number(),
       endMarkerRedraws: v.optional(v.number()),
+      leaving: v.optional(v.nullable(v.boolean())),
     })
   ),
 });
