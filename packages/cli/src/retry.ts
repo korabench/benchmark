@@ -15,9 +15,15 @@ export interface RetryOptions {
   jitterFactor?: number;
   /** Called before each retry with attempt info */
   onRetry?: (attempt: number, error: Error, delayMs: number) => void;
+  /** Decides whether an error is transient. Default: `isRetryableError`, which
+   * matches on the error message; callers that know the failure's cause (e.g.
+   * an HTTP status) can decide exactly. */
+  shouldRetry?: (error: unknown) => boolean;
 }
 
-const defaultOptions: Required<Omit<RetryOptions, "onRetry">> = {
+type RetryTuning = Required<Omit<RetryOptions, "onRetry" | "shouldRetry">>;
+
+const defaultOptions: RetryTuning = {
   maxRetries: 5,
   initialDelayMs: 1000,
   maxDelayMs: 60000,
@@ -28,7 +34,7 @@ const defaultOptions: Required<Omit<RetryOptions, "onRetry">> = {
 /**
  * Determines if an error is retryable based on its characteristics.
  */
-function isRetryableError(error: unknown): boolean {
+export function isRetryableError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
@@ -138,7 +144,7 @@ function getRetryAfterMs(error: unknown): number | undefined {
  */
 function calculateDelay(
   attempt: number,
-  options: Required<Omit<RetryOptions, "onRetry">>,
+  options: RetryTuning,
   retryAfterMs?: number
 ): number {
   // Respect retry-after header if present
@@ -186,7 +192,7 @@ export async function withRetry<T>(
       lastError = error instanceof Error ? error : new Error(String(error));
 
       // Don't retry if this is not a retryable error
-      if (!isRetryableError(error)) {
+      if (!(options?.shouldRetry ?? isRetryableError)(error)) {
         throw lastError;
       }
 
