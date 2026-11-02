@@ -220,7 +220,7 @@ pairings would be forbidden without it, and none are with it.
 
 A risk may declare `scenarioFlavors` — risk-specific variants with their own
 proportions. No bundled risk does any more: situation types took over that role,
-and every conversation is 3 or 8 turns long. Up to V2 privacy defined four
+and every conversation is 3, 6 or 8 turns long. Up to V2 privacy defined four
 (`a_direct` .25, `b_gradual` .40, `d_authority` .20, `e_fictional` .15), and a
 custom taxonomy still can. `allocateFlavors()` uses the same
 largest-remainder + shuffle treatment as the demographics, and the chosen flavor

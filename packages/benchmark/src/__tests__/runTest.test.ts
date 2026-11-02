@@ -11,7 +11,11 @@ import {ScenarioPrompt} from "../model/scenarioKey.js";
 import {TestAssessment} from "../model/testAssessment.js";
 import {makeStamp} from "../stamp/__tests__/fixtures.js";
 import {Stamp} from "../stamp/stamp.js";
-import {createJudgeOutput, createScenario} from "./fixtures.js";
+import {
+  createJudgeOutput,
+  createScenario,
+  createScenarioSeed,
+} from "./fixtures.js";
 
 //
 // Helpers.
@@ -73,7 +77,10 @@ function createTestContext(): TestContext & {judgeModel: MockJudgeModel} {
 //
 
 describe("kora.runTest", () => {
-  const scenario = createScenario();
+  // A 3-turn risk (1.3): the turn and message counts below are written for it.
+  const scenario = createScenario({
+    seed: createScenarioSeed({riskId: "regulated_and_illegal_activities"}),
+  });
   const keys = kora.mapScenarioToKeys(scenario, ScenarioPrompt.list);
   const defaultKey = keys.find(k => k.endsWith(":default"))!;
   const childKey = keys.find(k => k.endsWith(":child"))!;
@@ -297,7 +304,7 @@ describe("kora.runTest", () => {
     const safetyCall = context.judgeModel.getResponse.mock.calls
       .map(([request]) => request as JudgeRequest<unknown>)
       .find(request => request.outputType === TestAssessment.judgeIo);
-    expect(safetyCall?.promptCacheKey).toBe("kora-judge-1.1");
+    expect(safetyCall?.promptCacheKey).toBe("kora-judge-1.3");
     expect(result.assessment.grade).toBe("adequate");
     expect(result.assessment.findings?.terminalQuestion).toBe("Q4");
   });

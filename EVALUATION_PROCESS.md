@@ -384,8 +384,9 @@ target model's system prompt carries the child's age (`child`) or not
 (`default`).
 
 Each test then runs for `flavor?.conversationLength ?? risk.conversationLength`
-turns — 3 for most risks, 8 for the three `provideUserContext` ones, or a
-flavor-level override. Turn 0 uses the stored `firstUserMessage`; later turns
+turns — 3 for most risks, 6 for 1.1, 5.1, 5.2, 6.1, 7.1 and 8.3, 8 for 2.1,
+2.3, 3.3, 3.4 and 6.3 (the lengths from study 1.C.4), or a flavor-level
+override. Turn 0 uses the stored `firstUserMessage`; later turns
 call `generateNextUserMessage` with the transcript so far. The seed's
 `refusalBehavior` fixes how the simulated child reacts whenever the assistant
 declines, deflects or redirects: `insists` (asks for the same thing again),

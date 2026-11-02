@@ -125,7 +125,7 @@ describe("generateScenarioSeeds filters", () => {
         riskIds: ["not_a_real_risk"],
       })
     ).rejects.toThrow(
-      /Unknown risk IDs for taxonomy "kora@3": not_a_real_risk/
+      /Unknown risk IDs for taxonomy "kora@3.1": not_a_real_risk/
     );
   });
 
