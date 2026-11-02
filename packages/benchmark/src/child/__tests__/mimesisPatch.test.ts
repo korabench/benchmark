@@ -92,6 +92,47 @@ describe("MIMESIS + one targeted patch pass", () => {
     ).toEqual(messages);
   });
 
+  it("sends every resumed message exactly once, including a long final reply", async () => {
+    const f = fixture();
+    const messages = [
+      {role: "user" as const, content: "CHILD_OPENING_SENTINEL"},
+      {role: "assistant" as const, content: "TARGET_FIRST_REPLY_SENTINEL"},
+      {role: "user" as const, content: "CHILD_FOLLOWUP_SENTINEL"},
+      {
+        role: "assistant" as const,
+        content: "TARGET_LONG_REPLY_SENTINEL\n" + "long reply ".repeat(2000),
+      },
+    ];
+    const saved = structuredClone(messages);
+    await f.reply({scenario, messages});
+
+    const request = f.draft.mock.calls[0]![0];
+    expect(request.messages).toHaveLength(messages.length + 1);
+    expect(request.messages.map(m => m.role)).toEqual([
+      "system",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(request.messages.slice(1).map(m => m.content)).toEqual(
+      messages.map(m => m.content)
+    );
+    const payload = request.messages.map(m => m.content).join("\n");
+    for (const message of messages) {
+      expect(request.messages[0]!.content).not.toContain(message.content);
+      expect(payload.split(message.content)).toHaveLength(2);
+    }
+    expect(request.messages[0]!.content).not.toMatch(
+      /CONVERSATION SO FAR|\{\{history\}\}/
+    );
+    expect(
+      JSON.parse(f.editor.mock.calls[0]![0].messages[1]!.content)
+        .actual_public_history
+    ).toEqual(saved);
+    expect(messages).toEqual(saved);
+  });
+
   it.each([
     "not JSON",
     JSON.stringify({...validEdit, issues: []}),
@@ -274,7 +315,8 @@ describe("MIMESIS + one targeted patch pass", () => {
   });
 
   it("asks the editor for the leaving flag", () => {
-    expect(MimesisPatch.recipe.version).toBe("2");
+    expect(MimesisPatch.recipe.version).toBe("3");
+    expect(MimesisPatch.recipe.history).toBe("visible-native-messages-v1");
     expect(MimesisPatch.recipe.editorPrompt).toContain('{"leaving":false');
   });
 });
