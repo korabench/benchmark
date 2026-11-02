@@ -76,16 +76,23 @@ it("treats unknown nonempty opt-outs conservatively", () => {
   for (const value of ["0", "false", "no", "off", ""])
     expect(environmentOverrides({DO_NOT_TRACK: value})).toEqual([]);
 });
-it("persists one identity across concurrent initializations with restrictive permissions", async () => {
+it("persists one identity across concurrent initializations", async () => {
   const results = await Promise.all(
     Array.from({length: 8}, () => store.update(withCredentials))
   );
   expect(
     new Set(results.map(value => value.credentials?.installationId)).size
   ).toBe(1);
-  expect((await stat(store.file)).mode & 0o777).toBe(0o600);
-  expect((await stat(directory)).mode & 0o777).toBe(0o700);
 });
+// Windows has no POSIX permission bits: chmod only toggles read-only.
+it.skipIf(process.platform === "win32")(
+  "writes settings with restrictive permissions",
+  async () => {
+    await store.update(withCredentials);
+    expect((await stat(store.file)).mode & 0o777).toBe(0o600);
+    expect((await stat(directory)).mode & 0o777).toBe(0o700);
+  }
+);
 it("disabled reporting does not create settings, prompt, or contact the collector", async () => {
   vi.stubEnv("DO_NOT_TRACK", "yes");
   const fetcher = vi.fn();

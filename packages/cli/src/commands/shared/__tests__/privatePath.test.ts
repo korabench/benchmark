@@ -1,10 +1,11 @@
+import * as path from "node:path";
 import {describe, expect, it} from "vitest";
 import {isPrivatePath, privatePathFor} from "../privatePath.js";
 
 describe("privatePathFor", () => {
   it("inserts .private before the extension", () => {
-    expect(privatePathFor("data/scenarioSeeds.jsonl")).toBe(
-      "data/scenarioSeeds.private.jsonl"
+    expect(privatePathFor(path.join("data", "scenarioSeeds.jsonl"))).toBe(
+      path.join("data", "scenarioSeeds.private.jsonl")
     );
     expect(privatePathFor("scenarios.v2.jsonl")).toBe(
       "scenarios.v2.private.jsonl"

@@ -23,7 +23,9 @@ writeJson("stale.json", {...makeProfile({id: "stale"}), hash: "nope"});
 
 describe("profilesDir", () => {
   it("sits next to models.json", () => {
-    expect(profilesDir("/repo/models.json")).toBe("/repo/profiles");
+    expect(profilesDir(path.join("/repo", "models.json"))).toBe(
+      path.join("/repo", "profiles")
+    );
   });
 });
 
