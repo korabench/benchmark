@@ -18,7 +18,7 @@ import {RiskTaxonomy} from "./riskTaxonomy.js";
 //
 
 const TAXONOMY_ID = "kora";
-const TAXONOMY_VERSION = "3";
+const TAXONOMY_VERSION = "3.1";
 
 //
 // API.
