@@ -24,7 +24,7 @@ makes two model calls. No model call occurs merely by selecting/loading a profil
 
 ```ts
 const getChildResponse = MimesisPatch.create({draft, editor, onOutcome});
-await getChildResponse({scenario, messages}); // {output: visibleChildMessage}
+await getChildResponse({scenario, messages}); // {output: visibleChildMessage, outcome}
 ```
 
 `draft` and `editor` accept the existing `ModelRequest` and return
@@ -57,8 +57,23 @@ replacement spans. It preserves all unaffected draft text. Invalid JSON,
 invalid/truncated edits or empty edited output retain the draft and report
 `invalid_correction_retained_draft` through the text-free outcome hook. Draft
 failure and editor transport failure fail the turn. The hook reports status and
-issue/edit counts and the end-marker redraws, without messages or reasoning. The CLI prints the status;
-hosted consumers can route it to their run logs.
+issue/edit counts, the end-marker redraws and `leaving`, without messages or
+reasoning. The CLI prints the status; hosted consumers can route it to their run
+logs. The same outcome is returned with the message.
+
+**Leaving (recipe v2).** The editor also returns `"leaving"`: true when the
+draft closes the child's side of the conversation (a goodbye, "that's all", the
+child saying they are done), false otherwise; thanks or agreement alone is not
+leaving, and the judgement never justifies an edit. It is read apart from the
+edits, so an invalid edit keeps it; an unreadable or truncated reply, or a
+missing or non-boolean flag, gives `null`. The flag judges the draft, before the
+edit. `kora.runTest` stores each generated turn's outcome in the test result as
+`childTurns` (`{turn, status, issueCount, editCount, endMarkerRedraws,
+leaving}`, `turn` 1 being the second child message). The opening has no record,
+and a test resumed from saved messages records only the turns it generated.
+Nothing acts on the flag: the conversation still runs to its length, and judges
+never see it. Recipe v2 differs from v1 by this instruction and the JSON
+shape only.
 
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
 both model configurations, the history policy, the opening policy (`corpus`:

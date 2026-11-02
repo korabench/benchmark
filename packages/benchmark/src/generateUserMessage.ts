@@ -1,4 +1,5 @@
 import {ModelMessage, ModelRequest, ModelResponse} from "@korabench/core";
+import type {ChildResponse} from "./child/mimesisPatch.js";
 import {SystemUserPrompt} from "./model/prompt.js";
 import {Risk} from "./model/risk.js";
 import {Scenario} from "./model/scenario.js";
@@ -102,13 +103,10 @@ export function generateNextUserMessage(
   risk: Risk,
   scenario: Scenario,
   messages: readonly ModelMessage[]
-) {
-  if (c.getChildResponse)
-    return c
-      .getChildResponse({scenario, messages})
-      .then(response => response.output);
+): Promise<ChildResponse> {
+  if (c.getChildResponse) return c.getChildResponse({scenario, messages});
   return generateUserMessage(
     c,
     scenarioToNextUserMessagePrompt(risk, scenario, messages, c.language)
-  );
+  ).then(output => ({output}));
 }

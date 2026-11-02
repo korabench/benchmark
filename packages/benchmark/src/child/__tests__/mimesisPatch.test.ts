@@ -38,7 +38,7 @@ function fixture(output = JSON.stringify(validEdit), truncated = false) {
 describe("MIMESIS + one targeted patch pass", () => {
   it("generates an opening from the archived source prompts, applies only the exact edit, and excludes saved openings and judging data", async () => {
     const f = fixture();
-    expect(await f.reply({scenario, messages: []})).toEqual({
+    expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: "the green plant is smaller",
     });
     expect(f.draft).toHaveBeenCalledTimes(1);
@@ -67,6 +67,7 @@ describe("MIMESIS + one targeted patch pass", () => {
       issueCount: 1,
       editCount: 1,
       endMarkerRedraws: 0,
+      leaving: null,
     });
   });
 
@@ -118,7 +119,7 @@ describe("MIMESIS + one targeted patch pass", () => {
     "retains and flags the first draft for invalid edits without another content attempt (%s)",
     async output => {
       const f = fixture(output);
-      expect(await f.reply({scenario, messages: []})).toEqual({
+      expect(await f.reply({scenario, messages: []})).toMatchObject({
         output: original,
       });
       expect(f.draft).toHaveBeenCalledTimes(1);
@@ -128,13 +129,16 @@ describe("MIMESIS + one targeted patch pass", () => {
         issueCount: 0,
         editCount: 0,
         endMarkerRedraws: 0,
+        leaving: null,
       });
     }
   );
 
   it("retains a draft for a truncated correction, even when the partial JSON looks valid", async () => {
     const f = fixture(JSON.stringify(validEdit), true);
-    expect(await f.reply({scenario, messages: []})).toEqual({output: original});
+    expect(await f.reply({scenario, messages: []})).toMatchObject({
+      output: original,
+    });
     expect(f.outcome.mock.calls[0]![0].status).toBe(
       "invalid_correction_retained_draft"
     );
@@ -142,7 +146,7 @@ describe("MIMESIS + one targeted patch pass", () => {
 
   it("accepts unchanged and fenced-JSON corrections, plus simultaneous disjoint edits", async () => {
     const unchanged = fixture('{"issues":[],"edits":[]}');
-    expect(await unchanged.reply({scenario, messages: []})).toEqual({
+    expect(await unchanged.reply({scenario, messages: []})).toMatchObject({
       output: original,
     });
     const f = fixture(
@@ -153,7 +157,7 @@ describe("MIMESIS + one targeted patch pass", () => {
         }) +
         "\n```"
     );
-    expect(await f.reply({scenario, messages: []})).toEqual({
+    expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: "the green plant is taller",
     });
   });
@@ -194,7 +198,7 @@ describe("MIMESIS + one targeted patch pass", () => {
     async marked => {
       const f = fixture('{"issues":[],"edits":[]}');
       f.draft.mockResolvedValueOnce({output: marked});
-      expect(await f.reply({scenario, messages: []})).toEqual({
+      expect(await f.reply({scenario, messages: []})).toMatchObject({
         output: original,
       });
       expect(f.draft).toHaveBeenCalledTimes(2);
@@ -208,6 +212,7 @@ describe("MIMESIS + one targeted patch pass", () => {
         issueCount: 0,
         editCount: 0,
         endMarkerRedraws: 1,
+        leaving: null,
       });
     }
   );
@@ -215,7 +220,7 @@ describe("MIMESIS + one targeted patch pass", () => {
   it("cuts the end marker out of the last draft, and fails a draft that is nothing else", async () => {
     const f = fixture('{"issues":[],"edits":[]}');
     f.draft.mockResolvedValue({output: "ok.  [end] see you"});
-    expect(await f.reply({scenario, messages: []})).toEqual({
+    expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: "ok. see you",
     });
     expect(f.draft).toHaveBeenCalledTimes(3);
@@ -229,9 +234,47 @@ describe("MIMESIS + one targeted patch pass", () => {
   it("leaves brackets that are not an end marker alone", async () => {
     const f = fixture('{"issues":[],"edits":[]}');
     f.draft.mockResolvedValue({output: "it's (2x + 3) [the weekend one]"});
-    expect(await f.reply({scenario, messages: []})).toEqual({
+    expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: "it's (2x + 3) [the weekend one]",
     });
     expect(f.draft).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{...validEdit, leaving: true}, true, "changed"],
+    [{issues: [], edits: [], leaving: false}, false, "unchanged"],
+    [
+      {...validEdit, leaving: true, edits: [{before: "missing", after: "x"}]},
+      true,
+      "invalid_correction_retained_draft",
+    ],
+    [{...validEdit, leaving: "yes"}, null, "changed"],
+  ] as const)(
+    "reports the editor's leaving flag apart from its edits (%j)",
+    async (reply, leaving, status) => {
+      const f = fixture(JSON.stringify(reply));
+      const response = await f.reply({scenario, messages: []});
+      expect(response.outcome).toMatchObject({status, leaving});
+      expect(f.outcome).toHaveBeenCalledWith(response.outcome);
+    }
+  );
+
+  it("has no leaving flag for unreadable or truncated editor replies", async () => {
+    const unreadable = fixture("not JSON");
+    expect(
+      (await unreadable.reply({scenario, messages: []})).outcome?.leaving
+    ).toBeNull();
+    const truncated = fixture(
+      JSON.stringify({...validEdit, leaving: true}),
+      true
+    );
+    expect(
+      (await truncated.reply({scenario, messages: []})).outcome?.leaving
+    ).toBeNull();
+  });
+
+  it("asks the editor for the leaving flag", () => {
+    expect(MimesisPatch.recipe.version).toBe("2");
+    expect(MimesisPatch.recipe.editorPrompt).toContain('{"leaving":false');
   });
 });

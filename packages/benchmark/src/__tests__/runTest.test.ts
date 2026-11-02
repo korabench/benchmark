@@ -1,7 +1,10 @@
 import {ModelRequest, ModelResponse} from "@korabench/core";
+import * as v from "valibot";
 import {describe, expect, it, vi} from "vitest";
 import {JudgeModel, JudgeRequest, TestContext} from "../benchmark.js";
 import {kora} from "../kora.js";
+import {AssistantTurn} from "../model/assistantTurn.js";
+import {ChildTurn} from "../model/childTurn.js";
 import {InvalidTurnError} from "../model/invalidTurnError.js";
 import {Mechanism} from "../model/mechanism.js";
 import {ScenarioPrompt} from "../model/scenarioKey.js";
@@ -96,6 +99,62 @@ describe("kora.runTest", () => {
     );
     expect(histories).toEqual([2, 4]);
     expect(resumed.messages.slice(0, 2)).toEqual(first.messages.slice(0, 2));
+  });
+
+  it("records the native child's outcome for each turn it generated, and none without one", async () => {
+    const context = createTestContext();
+    context.getChildResponse = vi.fn(async ({messages}) => ({
+      output: `Native child turn ${messages.length / 2}`,
+      outcome: {
+        status: "unchanged" as const,
+        issueCount: 0,
+        editCount: 0,
+        endMarkerRedraws: 0,
+        leaving: messages.length === 4,
+      },
+    }));
+    const result = await kora.runTest(context, scenario, defaultKey);
+    expect(result.childTurns).toEqual([
+      expect.objectContaining({turn: 1, leaving: false}),
+      expect.objectContaining({turn: 2, leaving: true}),
+    ]);
+    const resumed = await kora.runTest(
+      context,
+      scenario,
+      defaultKey,
+      result.messages.slice(0, 4)
+    );
+    expect(resumed.childTurns?.map(t => t.turn)).toEqual([2]);
+    const plain = await kora.runTest(createTestContext(), scenario, defaultKey);
+    expect("childTurns" in plain).toBe(false);
+    expect(v.parse(v.array(ChildTurn.io), result.childTurns)).toEqual(
+      result.childTurns
+    );
+  });
+
+  it("records the child's outcomes and the target's reasoning side by side", async () => {
+    const context = createTestContext();
+    context.getChildResponse = vi.fn(async ({messages}) => ({
+      output: `Native child turn ${messages.length / 2}`,
+      outcome: {
+        status: "unchanged" as const,
+        issueCount: 0,
+        editCount: 0,
+        endMarkerRedraws: 0,
+        leaving: false,
+      },
+    }));
+    context.getAssistantResponse = vi.fn(async () => ({
+      output: "Answer",
+      reasoning: "Thinking.",
+      reasoningTokens: 5,
+    }));
+    const result = await kora.runTest(context, scenario, defaultKey);
+    expect(result.childTurns?.map(t => t.turn)).toEqual([1, 2]);
+    expect(result.assistantTurns?.map(t => t.turn)).toEqual([0, 1, 2]);
+    expect(v.parse(v.array(AssistantTurn.io), result.assistantTurns)).toEqual(
+      result.assistantTurns
+    );
   });
 
   it("omits the stamp when none is configured", async () => {

@@ -119,7 +119,7 @@ describe("generateNextUserMessage", () => {
       messages
     );
 
-    expect(result).toBe("What do you think about that?");
+    expect(result).toEqual({output: "What do you think about that?"});
     expect(context.getUserResponse).toHaveBeenCalledTimes(1);
   });
 });

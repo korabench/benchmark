@@ -1165,7 +1165,10 @@ The [Bench V3 — Experimental profile](docs/mimesis-multistep-patch.md) writes 
 child turn after the opening with a MIMESIS draft followed by one GPT-6-Luna edit
 pass. The opening comes from the corpus, written once with the same recipe by
 [`revise-openings`](#switching-the-child-model). It uses visible history only and
-leaves the default profile unchanged.
+leaves the default profile unchanged. Each test result then carries
+`childTurns`: one record per child turn the run generated, with the editor's
+outcome and its `leaving` flag (the child is ending the chat). The flag is
+recorded only; the conversation still runs to its length.
 
 ## License
 
