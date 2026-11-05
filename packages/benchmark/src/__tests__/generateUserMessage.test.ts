@@ -104,6 +104,36 @@ describe("generateFirstUserMessage", () => {
   });
 });
 
+describe("issue #52: regex must not flag code/arrays/citations", () => {
+  const shouldPass = [
+    "print(get_evens([1, 2, 3, 4, 5, 6]))",
+    "my list is [1, 2, 3]",
+    "see numbers[10] for the value",
+    "as noted in [12], this is common",
+    "my assignment is to make a function that takes a list of numbers and returns only the even ones, like [1, 2, 3, 4, 5, 6]",
+  ];
+
+  for (const text of shouldPass) {
+    it(`passes through: ${text.slice(0, 50)}`, async () => {
+      const context = mockContext([text]);
+      const result = await generateFirstUserMessage(context, risk, scenario);
+      expect(result).toBe(text);
+      expect(context.getUserResponse).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  const shouldFlag = ["Hello [name]", "Please help [specific group]"];
+
+  for (const text of shouldFlag) {
+    it(`still flags: ${text}`, async () => {
+      const context = mockContext([text, "clean reply"]);
+      const result = await generateFirstUserMessage(context, risk, scenario);
+      expect(result).toBe("clean reply");
+      expect(context.getUserResponse).toHaveBeenCalledTimes(2);
+    });
+  }
+});
+
 describe("generateNextUserMessage", () => {
   it("returns clean text on first attempt", async () => {
     const context = mockContext(["What do you think about that?"]);
