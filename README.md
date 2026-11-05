@@ -31,8 +31,6 @@ The child does not see the planned length, and every conversation runs to it. A 
 | KORA V2 | `2.0.0`, `2.1.0`, `2.2.0`   | Public: the results on korabench.ai       |
 | KORA V3 | `3.0.0`, `3.0.1` and `main` | In validation: not yet on the leaderboard |
 
-`3.0.1` is the reference V3 edition: the infrastructure's tag `3.0.1` vendors this exact revision, and V3 runs are made on it. Later changes get a new tag rather than moving this one.
-
 V3 keeps V2's 8 categories and 26 risks, but changes how scenarios are built and how they are graded:
 
 - **Gold standards per risk.** Each risk is defined by an expert-reviewed gold standard: a harm statement, the expected mitigation, risk boundaries and situation types. Self-harm is split into three (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), which makes 28 gold standards in total. The gold standard's harm statement replaces the old risk description in the taxonomy.
