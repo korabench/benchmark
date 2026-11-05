@@ -69,6 +69,10 @@ For example, to evaluate `gpt-4o`:
 yarn kora run gpt-4o
 ```
 
+> **Choose a judge and child from another provider.** Avoid using a model from the target's provider as the judge or the child simulator: LLMs tend to favor models from their own provider, a self-preference behavior documented in research and seen in our own tests. The `kora` profile's judges come from OpenAI and Anthropic and its child, Gemma, comes from Google. To evaluate a model from one of these providers, including the `gpt-4o` example above, replace the matching role with a [local profile](#testing-a-model-configuration-local-profiles) or an [override](#overrides).
+>
+> **Child models in V2.2.0.** At tag `2.2.0`, DeepSeek and Gemma are the only LLMs that work properly as the child simulator. The default is `gemma-4-31b-it`. To evaluate a Google model, use `deepseek-v3.2` instead: `yarn kora run <target-model> deepseek-v3.2`.
+
 ### Global options
 
 These apply to every command and must be given before the command name:
