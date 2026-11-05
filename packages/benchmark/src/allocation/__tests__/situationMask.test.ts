@@ -4,7 +4,7 @@ import {Motivation} from "../../model/motivation.js";
 import {MotivationUseMask} from "../../model/motivationUseMask.js";
 import {PopulationDistribution} from "../../model/populationDistribution.js";
 import {RiskCategory} from "../../model/riskCategory.js";
-import {RiskSignalType} from "../../model/scenarioSeed.js";
+import {RiskSignalType, SeedUse} from "../../model/scenarioSeed.js";
 import {SituationMask} from "../../model/situationMask.js";
 import {SituationTypes} from "../../model/situationTypes.js";
 import {
@@ -314,5 +314,80 @@ describe("situation mask in the allocation (75 seeds per risk)", () => {
     expect(forbiddenByMotivation(masked).length).toBe(
       forbiddenByMotivation(without).length
     );
+  });
+});
+
+describe("situation mask in a small allocation", () => {
+  const randomSeeds = R.range(0, 20);
+
+  it("leaves no forbidden use where too few seeds leave room to trade", () => {
+    [1, 2, 3, 4, 5].forEach(total =>
+      randomSeeds.forEach(randomSeed =>
+        expect(
+          forbiddenBySituation(allocateCorpus(mask, total, randomSeed)),
+          `total ${total}, random seed ${randomSeed}`
+        ).toEqual([])
+      )
+    );
+  });
+
+  it("moves a use no trade can place to the one its rule names", () => {
+    // At one seed per risk, a share holds at most one seed: no trade exists,
+    // so every use the mask changes is a relabel.
+    const relabeled = randomSeeds.flatMap(randomSeed => {
+      const without = allocateCorpus(undefined, 1, randomSeed);
+      const masked = allocateCorpus(mask, 1, randomSeed);
+      expect(masked.map(situationKey)).toEqual(without.map(situationKey));
+      return masked.flatMap((seed, i) => {
+        const from = without[i]!.assignment.use;
+        return seed.assignment.use === from
+          ? []
+          : [{riskId: seed.riskId, seed: seed.assignment, from}];
+      });
+    });
+
+    expect(relabeled.length).toBeGreaterThan(0);
+    relabeled.forEach(({riskId, seed, from}) =>
+      expect(seed.use, `${riskId} / ${seed.situation!.situationType}`).toBe(
+        SituationMask.relabeledUseFor(
+          mask,
+          riskId,
+          seed.situation!.situationType,
+          from
+        )
+      )
+    );
+  });
+
+  it("throws when a rule forbids a use and names none to relabel to", () => {
+    const entry = situationTypes[0]!;
+    const risk = RiskCategory.listAll()
+      .flatMap(category => category.risks)
+      .find(r => r.id === entry.riskId)!;
+    // Every use is forbidden for every situation type of the risk, with no
+    // replacement: no trade and no relabel can place a seed.
+    const noRelabel: SituationMask = {
+      use: entry.goldStandards.flatMap(goldStandard =>
+        SituationTypes.allocated(goldStandard).map(type => ({
+          riskId: risk.id,
+          situationType: type.name,
+          forbidden: [...SeedUse.list],
+          reason: "test",
+        }))
+      ),
+      riskSignalType: [],
+    };
+    expect(() =>
+      allocateSeedAssignments({
+        risk,
+        distribution: PopulationDistribution.default(),
+        motivations: Motivation.listAll(),
+        total: 3,
+        rng: makeRng(1),
+        useMask,
+        situationTypes,
+        situationMask: noRelabel,
+      })
+    ).toThrow("no trade or allowed relabelTo");
   });
 });
