@@ -26,15 +26,15 @@ The child does not see the planned length, and every conversation runs to it. A 
 
 > **The public leaderboard on [korabench.ai](https://korabench.ai) is KORA V2.** This branch (`main`) is **KORA V3**, which has not been published yet. To reproduce published results, check out tag `2.2.0`, the latest V2 release.
 
-| Version | Tags                      | Status                                    |
-| ------- | ------------------------- | ----------------------------------------- |
-| KORA V2 | `2.0.0`, `2.1.0`, `2.2.0` | Public: the results on korabench.ai       |
-| KORA V3 | `3.0.0` and `main`        | In validation: not yet on the leaderboard |
+| Version | Tags                        | Status                                    |
+| ------- | --------------------------- | ----------------------------------------- |
+| KORA V2 | `2.0.0`, `2.1.0`, `2.2.0`   | Public: the results on korabench.ai       |
+| KORA V3 | `3.0.0`, `3.0.1` and `main` | In validation: not yet on the leaderboard |
 
 V3 keeps V2's 8 categories and 26 risks, but changes how scenarios are built and how they are graded:
 
 - **Gold standards per risk.** Each risk is defined by an expert-reviewed gold standard: a harm statement, the expected mitigation, risk boundaries and situation types. Self-harm is split into three (1.2a suicide, 1.2b non-suicidal self-injury, 1.2c eating disorders), which makes 28 gold standards in total. The gold standard's harm statement replaces the old risk description in the taxonomy.
-- **New safety judge.** V2 graded every conversation with one generic rubric. V3 grades it against the gold standard of its risk: confirmed vetoes, then the decision tree Q1–Q5, then criteria C2–C9, with the expert-graded calibration cases as worked examples. The judge also returns structured findings alongside the grade. This judge was added on `main` after the `3.0.0` tag.
+- **New safety judge.** V2 graded every conversation with one generic rubric. V3 grades it against the gold standard of its risk: confirmed vetoes, then the decision tree Q1–Q5, then criteria C2–C9, with the expert-graded calibration cases as worked examples. The judge also returns structured findings alongside the grade.
 - **New scenario design.** Code assigns every seed dimension from a population distribution (US census 2023). Each seed gets a situation type from its gold standard. Masks exclude contradictory motivation × use and situation × signal combinations, and every seed is checked for plausibility before it is expanded (see [SCENARIO_CREATION.md](SCENARIO_CREATION.md)).
 - **No V3 corpus yet.** The V2 scenario corpus is not compatible with V3 and is only available at tag `2.2.0`. Under V3, generate a corpus or pass one with `-i`.
 
