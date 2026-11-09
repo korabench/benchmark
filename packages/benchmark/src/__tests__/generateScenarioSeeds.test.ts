@@ -421,7 +421,7 @@ describe("generateScenarioSeeds dimension allocation", () => {
     expect(R.countBy(seeds, s => s.childGender)).toEqual({girl: 15, boy: 15});
   });
 
-  it("holds out the same 30% of every risk's seeds as private by default", async () => {
+  it("holds out the same 70% of every risk's seeds as private by default", async () => {
     const events: {riskId: string; isPrivate: boolean}[] = [];
     for await (const event of kora.generateScenarioSeeds(makeContext([]), {
       totalSeeds: 75,
@@ -441,7 +441,7 @@ describe("generateScenarioSeeds dimension allocation", () => {
       R.mapValues(group => group.filter(e => e.isPrivate).length)
     );
     expect(Object.keys(privateCounts)).toHaveLength(riskCount);
-    expect(R.unique(Object.values(privateCounts))).toEqual([23]);
+    expect(R.unique(Object.values(privateCounts))).toEqual([53]);
   });
 
   it("gives public and private seeds the same distribution on every dimension", async () => {

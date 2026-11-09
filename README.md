@@ -112,7 +112,7 @@ yarn kora generate-seeds [model]
 | `--distribution <preset-or-path>` | Target population for age band, gender, SES and race/ethnicity. Preset name or path to a JSON distribution file (default: `us-children-2020`: US children aged 7–17, from the 2020 Census for age, gender and race/ethnicity and from America's Children 2023 for family income).          |
 | `--random-seed <int>`             | RNG seed making the allocation of every seed dimension reproducible. When absent, one is drawn, printed, and kept for a resumed run.                                                                                                                                                       |
 | `--validator <models>`            | Override the profile's `seedValidation` role, which checks every seed (default: from profile, which falls back to `judges`). Comma-separated for a fallback chain. See [Seed validation](#seed-validation).                                                                                |
-| `--private-ratio <fraction>`      | Share of each risk's seeds held out as private, between 0 and 1 (default: `0.3`). See [Private seeds](#private-seeds). `0` keeps every seed public.                                                                                                                                        |
+| `--private-ratio <fraction>`      | Share of each risk's seeds held out as private, between 0 and 1 (default: `0.7`). See [Private seeds](#private-seeds). `0` keeps every seed public.                                                                                                                                        |
 
 `--seeds-per-task` was removed along with the age × motivation grid it belonged to; passing it fails with a pointer to `--total-seeds`.
 
@@ -191,17 +191,18 @@ The validator is shown the child's gender, race/ethnicity and income, which it n
 
 #### Private seeds
 
-By default 30% of each risk's seeds are held out as **private**: they are never committed, so a model cannot have seen them or the scenarios built from them. The held-out seeds go to a sibling of the output file with `.private.` before the extension, which `.gitignore` excludes everywhere (`*.private.*`):
+By default 70% of each risk's seeds are held out as **private**: they are never committed, so a model cannot have seen them or the scenarios built from them. The held-out seeds go to a sibling of the output file with `.private.` before the extension, which `.gitignore` excludes everywhere (`*.private.*`):
 
 | File                               | Content                   | Committed |
 | ---------------------------------- | ------------------------- | --------- |
-| `data/scenarioSeeds.jsonl`         | public seeds (about 70%)  | yes       |
-| `data/scenarioSeeds.private.jsonl` | private seeds (about 30%) | no        |
+| `data/scenarioSeeds.jsonl`         | public seeds (about 30%)  | yes       |
+| `data/scenarioSeeds.private.jsonl` | private seeds (about 70%) | no        |
 | `data/scenarios.jsonl`             | public scenarios          | yes       |
 | `data/scenarios.private.jsonl`     | private scenarios         | no        |
 
-- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 30%, to within one seed. A type never holds out its last public seed, so every situation type stays present in the public seeds. Which seeds are held out is then balanced over the whole corpus, so that public and private seeds follow the same distribution on every dimension (each value holds out its share to within about one seed). The split changes no assignment: public and private seeds together still match the allocated counts exactly.
-- The per-risk count is 30% of the risk's seeds rounded to the nearest integer, so every risk holds out the same number: 23 of 75 seeds, 598 of 1,950 overall.
+- The private seeds of a risk are picked at random by code after every dimension is allocated, and spread over the risk's situation types so that each type holds out its own 70%, to within one seed. A type never holds out its last public seed, so every situation type stays present in the public seeds. Which seeds are held out is then balanced over the whole corpus, so that public and private seeds follow the same distribution on every dimension (each value holds out its share to within about one seed). The split changes no assignment: public and private seeds together still match the allocated counts exactly.
+- The per-risk count is 70% of the risk's seeds rounded to the nearest integer, so every risk holds out the same number: 53 of 75 seeds, 1,378 of 1,950 overall. The default was 30% until decision D1 (9 November 2026) flipped it.
+- A corpus already generated is re-split without regenerating anything by `scripts/resplit/resplit-public.mjs`, which keeps public every seed already shown outside KORA. The V3.0 corpus (`data/seeds-v7.1`) was re-split this way to 585 public and 1,365 private seeds. See [scripts/README.md](scripts/README.md#resplitresplit-publicmjs--re-split-a-corpus-public--private).
 - `expand-scenarios` reads the private sibling of its input when there is one and writes the scenarios of private seeds to the private sibling of its output. Passing a `.private.` file as input makes every scenario private.
 - `run` reads only the file it is given: pass `-i data/scenarios.private.jsonl` to run the held-out set. Results embed their scenarios in full, so keep the results of a private run out of anything published.
 - In production (`kora-infra`), private scenarios are run by uploading `scenarios.private.jsonl` as a scenario set on HQ. A file whose name carries `.private.` is marked private on upload, and every run drawn from it is private: never served by the public website, never published or exported, with its results read on HQ only.

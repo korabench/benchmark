@@ -374,16 +374,16 @@ signal type from all of it, and what the signal type means when the child's
 message is benign by design is an open question, not a contradiction between
 two definitions.
 
-### 8. Private split — 30% per risk, spread over situation types, balanced on every dimension
+### 8. Private split — 70% per risk, spread over situation types, balanced on every dimension
 
-Once every risk is allocated, 30% of each risk's seeds are marked private
-(`--private-ratio`, default 0.3). The count is rounded to the nearest
-integer, so every risk holds out the same number: 23 of 75 (22.5 rounded up),
-598 of 1,950 over the corpus.
+Once every risk is allocated, 70% of each risk's seeds are marked private
+(`--private-ratio`, default 0.7 since decision D1 of 9 November 2026, 0.3
+before). The count is rounded to the nearest integer, so every risk holds out
+the same number: 53 of 75 (52.5 rounded up), 1,378 of 1,950 over the corpus.
 
 With situation types, the risk's private seeds are spread over them
 (`selectPrivateIndicesByGroup`): each situation type of each gold standard
-holds out its own 30%, to within one seed (largest remainder, the leftover
+holds out its own 70%, to within one seed (largest remainder, the leftover
 seeds drawn at random), and the seeds are drawn uniformly within the type. A
 type never holds out its last public seed, so that every situation type stays
 present in the public seeds: a type with a single seed keeps it public. A
@@ -398,12 +398,12 @@ type of the same risk (of the same risk, without situation types) trade places
 whenever that brings the private seeds closer to the overall private share on
 every dimension value at once — age band, exact age, gender, race/ethnicity,
 SES, motivation, social context, risk signal type, use, refusal behavior and
-flavor. The trades stop when none helps. Each value then holds out its 30%
-(30.67% at 75 per risk) to within about one seed over the full corpus, so
+flavor. The trades stop when none helps. Each value then holds out its 70%
+(70.67% at 75 per risk) to within about one seed over the full corpus, so
 public and private seeds follow the same distribution. Trading within a
 situation type leaves the counts per risk and per situation type untouched.
-The balance holds over the corpus, not inside each risk: 23 private seeds
-cannot carry 30% of each of 10 motivations.
+The balance holds over the corpus, not inside each risk: one risk's 22
+public seeds cannot carry each of 10 motivations in proportion.
 
 The split only labels assignments, it does not change them: the dimensions
 above keep their exact counts over public and private seeds together.
@@ -414,6 +414,13 @@ The seed itself carries no privacy field: the file it sits in is what marks it.
 
 The split draws from the RNG after all allocations, so `--private-ratio` never
 changes which assignments a given `--random-seed` produces.
+
+A corpus generated before D1 is re-split, without regenerating any seed or
+scenario, by `scripts/resplit/resplit-public.mjs`: it keeps public every seed
+already shown outside KORA, adds public seeds by gold standard and age band,
+covers every situation type, keeps the other seed fields balanced and applies
+the near-duplicate text rule. The V3.0 corpus (`data/seeds-v7.1`) is split
+this way, 585 public and 1,365 private; see `scripts/README.md`.
 
 ### Reproducibility
 

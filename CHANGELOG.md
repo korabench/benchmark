@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+Seeds are now 70% private and 30% public by default (`--private-ratio`, was 0.3), per decision D1 of 9 November 2026. A new script, `scripts/resplit/resplit-public.mjs`, re-splits an existing corpus without regenerating it: it keeps public every seed already shown outside KORA (`scripts/resplit/exposed.txt`, Round A's 390), and fills the public share by gold standard and age band while covering every situation type, balancing the other seed fields and skipping near-duplicates. The V3.0 corpus (seeds-v7.1) becomes 585 public / 1,365 private; its seeds and scenarios are unchanged, only the file they sit in.
+
 A conversation now stops once the child says they are leaving (the `leaving` flag of the MIMESIS child, V3): the target answers that message and no turn follows. The judges now stop at the child's leaving message: the target's answer is recorded for later analysis but not graded (3.0.2 graded it). Until 3.0.2 the conversation ran to its length and was graded whole. Runs made before keep their conversations and grades.
 
 The Benchmark CLI now includes default-on basic usage telemetry and voluntary identification to help KORA understand adoption and sustain the open-source project. The first interactive command offers sharing an organization, website, or email, continuing without identification, or disabling all telemetry. Every feature remains available after opting out.
