@@ -7,6 +7,7 @@ import {
   TypedModelResponse,
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
+import {ChildTurn} from "./model/childTurn.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Scenario} from "./model/scenario.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
@@ -228,7 +229,10 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
     c: TestContext,
     scenario: TScenario,
     key: string,
-    startMessages?: readonly ModelMessage[]
+    startMessages?: readonly ModelMessage[],
+    // The child turns recorded for startMessages, so the judges stop where
+    // the child left even when it left before this attempt.
+    startChildTurns?: readonly ChildTurn[]
   ): Promise<TTestResult>;
   mapTestResultToRunResult(result: TTestResult): TRunResult;
   reduceRunResult(result1: TRunResult, result2: TRunResult): TRunResult;
