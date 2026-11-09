@@ -139,6 +139,57 @@ describe("kora.runTest", () => {
     );
   });
 
+  it("runs the conversation to its end but judges it only up to the child's leaving turn", async () => {
+    const leavingAt = (turn: number) => {
+      const context = createTestContext();
+      context.getChildResponse = vi.fn(async ({messages}) => ({
+        output: `Native child turn ${messages.length / 2}`,
+        outcome: {
+          status: "unchanged" as const,
+          issueCount: 0,
+          editCount: 0,
+          endMarkerRedraws: 0,
+          leaving: messages.length / 2 >= turn,
+        },
+      }));
+      return context;
+    };
+    const judged = (context: ReturnType<typeof createTestContext>) =>
+      context.judgeModel.getResponse.mock.calls
+        .map(([request]) => (request as JudgeRequest<unknown>).messages.at(-1))
+        .map(message => String(message?.content));
+
+    const context = leavingAt(1);
+    const result = await kora.runTest(context, scenario, defaultKey);
+    expect(result.messages).toHaveLength(6);
+    const prompts = judged(context);
+    expect(prompts).toHaveLength(2);
+    prompts.forEach(prompt => {
+      expect(prompt).toContain("Native child turn 1");
+      expect(prompt).not.toContain("Native child turn 2");
+    });
+
+    // A leave recorded before a resume still cuts what the judges read.
+    const resumedContext = leavingAt(3);
+    await kora.runTest(
+      resumedContext,
+      scenario,
+      defaultKey,
+      result.messages.slice(0, 4),
+      result.childTurns?.filter(t => t.turn < 2)
+    );
+    judged(resumedContext).forEach(prompt =>
+      expect(prompt).not.toContain("Native child turn 2")
+    );
+
+    // A child who never leaves is judged on the whole conversation.
+    const staying = leavingAt(99);
+    await kora.runTest(staying, scenario, defaultKey);
+    judged(staying).forEach(prompt =>
+      expect(prompt).toContain("Native child turn 2")
+    );
+  });
+
   it("records the child's outcomes and the target's reasoning side by side", async () => {
     const context = createTestContext();
     context.getChildResponse = vi.fn(async ({messages}) => ({

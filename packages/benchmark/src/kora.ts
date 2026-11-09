@@ -522,7 +522,7 @@ export const kora = Benchmark.new({
       R.map(ScenarioKey.toString)
     );
   },
-  async runTest(c, scenario, keyString, startMessages) {
+  async runTest(c, scenario, keyString, startMessages, startChildTurns) {
     const key = ScenarioKey.ofString(keyString);
     const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
@@ -624,16 +624,23 @@ export const kora = Benchmark.new({
       });
     }
 
+    // The judges stop where the child left, counting the turns of a resumed
+    // attempt too. The result keeps the whole conversation.
     const result = await runJudges(
       c.judgeModels,
       scenario,
       prompt,
-      messages,
+      ChildTurn.judgedMessages(messages, [
+        ...(startChildTurns ?? []),
+        ...childTurns,
+      ]),
       c.trace,
       c.mechanismJudges
     );
     return {
       ...result,
+      // The whole conversation is kept, the turns after a leave included.
+      messages,
       ...(childTurns.length > 0 && {childTurns}),
       ...(assistantTurns.length > 0 && {assistantTurns}),
     };
