@@ -84,9 +84,10 @@ leaving}`, `turn` 1 being the second child message). The opening has no record,
 and a test resumed from saved messages records only the turns it generated.
 The first turn flagged as leaving ends the conversation: the target answers
 it and no turn follows, whatever the conversation's length. The judges read up
-to that answer, also when a resumed test carries turns recorded past it; they
-never see the flag itself. Recipe v2 differs from v1 by this instruction and the JSON
-shape only.
+to the child's leaving message, without the answer, which is recorded for
+later analysis; the same holds when a resumed test carries turns recorded past
+the leave. They never see the flag itself. Recipe v2 differs from v1 by this
+instruction and the JSON shape only.
 
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
 both model configurations, the history policy, the opening policy (`corpus`:

@@ -1181,9 +1181,9 @@ leaves the default profile unchanged. Each test result then carries
 `childTurns`: one record per child turn the run generated, with the editor's
 outcome and its `leaving` flag (the child is ending the chat). Once a child
 turn is flagged as leaving, the target answers it and the conversation stops
-there, before its length. The judges read the conversation up to that answer,
-so a test resumed from turns recorded past the leave is judged on the same
-part.
+there, before its length. The answer is recorded but not graded: the judges
+read the conversation up to the child's leaving message, also when a test is
+resumed from turns recorded past it.
 
 ## License
 

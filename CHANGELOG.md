@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-A conversation now stops once the child says they are leaving (the `leaving` flag of the MIMESIS child, V3): the target answers that message and no turn follows. Until 3.0.2 the conversation ran to its length; 3.0.2 already judged only up to the target's answer to the leaving message, and that rule still applies to a test resumed from turns recorded past the leave. Runs made before keep their conversations and grades.
+A conversation now stops once the child says they are leaving (the `leaving` flag of the MIMESIS child, V3): the target answers that message and no turn follows. The judges now stop at the child's leaving message: the target's answer is recorded for later analysis but not graded (3.0.2 graded it). Until 3.0.2 the conversation ran to its length and was graded whole. Runs made before keep their conversations and grades.
 
 The Benchmark CLI now includes default-on basic usage telemetry and voluntary identification to help KORA understand adoption and sustain the open-source project. The first interactive command offers sharing an organization, website, or email, continuing without identification, or disabling all telemetry. Every feature remains available after opting out.
 

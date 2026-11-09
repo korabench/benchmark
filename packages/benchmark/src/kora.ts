@@ -631,9 +631,9 @@ export const kora = Benchmark.new({
       });
     }
 
-    // The judges stop where the child left, counting the turns of a resumed
-    // attempt too. Since the conversation now stops there, this only cuts a
-    // conversation resumed from turns recorded before the stop.
+    // The judges stop at the child's leaving message, counting the turns of a
+    // resumed attempt too. The AI's answer to it is kept in the result but
+    // not graded.
     const result = await runJudges(
       c.judgeModels,
       scenario,

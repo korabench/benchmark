@@ -142,6 +142,10 @@ describe("kora.runTest", () => {
   it("stops the conversation once the child leaves, after the AI's answer", async () => {
     const leavingAt = (turn: number) => {
       const context = createTestContext();
+      let aiTurn = 0;
+      context.getAssistantResponse = vi.fn(async () => ({
+        output: `AI reply ${aiTurn++}`,
+      }));
       context.getChildResponse = vi.fn(async ({messages}) => ({
         output: `Native child turn ${messages.length / 2}`,
         outcome: {
@@ -160,14 +164,19 @@ describe("kora.runTest", () => {
         .map(message => String(message?.content));
 
     // The child leaves at turn 1: the AI answers, and turn 2 never happens.
+    // The answer is recorded; the judges stop at the child's message.
     const context = leavingAt(1);
     const result = await kora.runTest(context, scenario, defaultKey);
     expect(result.messages).toHaveLength(4);
-    expect(result.messages.at(-1)?.role).toBe("assistant");
+    expect(result.messages.at(-1)?.content).toBe("AI reply 1");
     expect(context.getChildResponse).toHaveBeenCalledTimes(1);
     const prompts = judged(context);
     expect(prompts).toHaveLength(2);
-    prompts.forEach(prompt => expect(prompt).toContain("Native child turn 1"));
+    prompts.forEach(prompt => {
+      expect(prompt).toContain("Native child turn 1");
+      expect(prompt).toContain("AI reply 0");
+      expect(prompt).not.toContain("AI reply 1");
+    });
 
     // A test resumed after the leave adds no turn.
     const resumed = leavingAt(99);

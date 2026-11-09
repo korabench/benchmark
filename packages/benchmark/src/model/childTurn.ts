@@ -41,16 +41,16 @@ function leftAtTurn(childTurns: readonly ChildTurn[]): number | undefined {
 }
 
 /**
- * What the judges read: the conversation up to the child's leaving message
- * and the AI's answer to it. The conversation itself still runs to its full
- * length; the turns after the child has left are not graded.
+ * What the judges read: the conversation up to the child's leaving message.
+ * The AI's answer to it is recorded but not graded, nor is anything after it
+ * (a conversation run before 3.0.3, or resumed past the leave).
  */
 function judgedMessages<T>(
   messages: readonly T[],
   childTurns: readonly ChildTurn[]
 ): readonly T[] {
   const turn = leftAtTurn(childTurns);
-  return turn === undefined ? messages : messages.slice(0, 2 * turn + 2);
+  return turn === undefined ? messages : messages.slice(0, 2 * turn + 1);
 }
 
 export const ChildTurn = {

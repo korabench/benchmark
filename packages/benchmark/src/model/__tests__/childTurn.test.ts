@@ -31,10 +31,10 @@ describe("ChildTurn.leftAtTurn", () => {
 });
 
 describe("ChildTurn.judgedMessages", () => {
-  it("keeps the leaving message and the AI's answer to it", () => {
+  it("ends on the leaving message, without the AI's answer to it", () => {
     expect(
       ChildTurn.judgedMessages(messages, [turn(1, false), turn(2, true)])
-    ).toEqual(["u0", "a0", "u1", "a1", "u2", "a2"]);
+    ).toEqual(["u0", "a0", "u1", "a1", "u2"]);
   });
 
   it("keeps the whole conversation when the child stays", () => {
