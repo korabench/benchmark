@@ -139,7 +139,7 @@ describe("kora.runTest", () => {
     );
   });
 
-  it("runs the conversation to its end but judges it only up to the child's leaving turn", async () => {
+  it("stops the conversation once the child leaves, after the AI's answer", async () => {
     const leavingAt = (turn: number) => {
       const context = createTestContext();
       context.getChildResponse = vi.fn(async ({messages}) => ({
@@ -159,32 +159,32 @@ describe("kora.runTest", () => {
         .map(([request]) => (request as JudgeRequest<unknown>).messages.at(-1))
         .map(message => String(message?.content));
 
+    // The child leaves at turn 1: the AI answers, and turn 2 never happens.
     const context = leavingAt(1);
     const result = await kora.runTest(context, scenario, defaultKey);
-    expect(result.messages).toHaveLength(6);
+    expect(result.messages).toHaveLength(4);
+    expect(result.messages.at(-1)?.role).toBe("assistant");
+    expect(context.getChildResponse).toHaveBeenCalledTimes(1);
     const prompts = judged(context);
     expect(prompts).toHaveLength(2);
-    prompts.forEach(prompt => {
-      expect(prompt).toContain("Native child turn 1");
-      expect(prompt).not.toContain("Native child turn 2");
-    });
+    prompts.forEach(prompt => expect(prompt).toContain("Native child turn 1"));
 
-    // A leave recorded before a resume still cuts what the judges read.
-    const resumedContext = leavingAt(3);
-    await kora.runTest(
-      resumedContext,
+    // A test resumed after the leave adds no turn.
+    const resumed = leavingAt(99);
+    const again = await kora.runTest(
+      resumed,
       scenario,
       defaultKey,
-      result.messages.slice(0, 4),
-      result.childTurns?.filter(t => t.turn < 2)
+      result.messages,
+      result.childTurns
     );
-    judged(resumedContext).forEach(prompt =>
-      expect(prompt).not.toContain("Native child turn 2")
-    );
+    expect(again.messages).toHaveLength(4);
+    expect(resumed.getChildResponse).not.toHaveBeenCalled();
 
-    // A child who never leaves is judged on the whole conversation.
+    // A child who never leaves goes to the conversation's length.
     const staying = leavingAt(99);
-    await kora.runTest(staying, scenario, defaultKey);
+    const whole = await kora.runTest(staying, scenario, defaultKey);
+    expect(whole.messages).toHaveLength(6);
     judged(staying).forEach(prompt =>
       expect(prompt).toContain("Native child turn 2")
     );

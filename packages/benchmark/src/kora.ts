@@ -549,7 +549,14 @@ export const kora = Benchmark.new({
     // resumed test records only its own turns.
     const childTurns: ChildTurn[] = [];
 
-    for (let i = startTurn; i < conversationLength; i++) {
+    // The conversation stops once the child has said they are leaving: the AI
+    // answers that message, and no turn follows. A resumed attempt counts the
+    // turns it was given.
+    const hasLeft = () =>
+      ChildTurn.leftAtTurn([...(startChildTurns ?? []), ...childTurns]) !==
+      undefined;
+
+    for (let i = startTurn; i < conversationLength && !hasLeft(); i++) {
       const tUserMessage = Date.now();
       const userMessage = await (async () => {
         // The opening is part of the corpus, written once per scenario: every
@@ -625,7 +632,8 @@ export const kora = Benchmark.new({
     }
 
     // The judges stop where the child left, counting the turns of a resumed
-    // attempt too. The result keeps the whole conversation.
+    // attempt too. Since the conversation now stops there, this only cuts a
+    // conversation resumed from turns recorded before the stop.
     const result = await runJudges(
       c.judgeModels,
       scenario,

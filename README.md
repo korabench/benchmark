@@ -1179,8 +1179,11 @@ pass. The opening comes from the corpus, written once with the same recipe by
 [`revise-openings`](#switching-the-child-model). It uses visible history only and
 leaves the default profile unchanged. Each test result then carries
 `childTurns`: one record per child turn the run generated, with the editor's
-outcome and its `leaving` flag (the child is ending the chat). The flag is
-recorded only; the conversation still runs to its length.
+outcome and its `leaving` flag (the child is ending the chat). Once a child
+turn is flagged as leaving, the target answers it and the conversation stops
+there, before its length. The judges read the conversation up to that answer,
+so a test resumed from turns recorded past the leave is judged on the same
+part.
 
 ## License
 
