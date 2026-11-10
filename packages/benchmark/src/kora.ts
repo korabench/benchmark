@@ -56,13 +56,13 @@ import {
   SeedValidationFeedback,
 } from "./prompts/riskToScenarioSeedsPrompt.js";
 import {FirstUserMessageFeedback} from "./prompts/scenarioToFirstUserMessagePrompt.js";
-import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
 import {seedToValidationPrompt} from "./prompts/seedToValidationPrompt.js";
 import {planSeedSlots, SeedSlot} from "./seedSlots.js";
 import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
+import {validateScenario} from "./validateOpening.js";
 
 export {DEFAULT_PRIVATE_RATIO, DEFAULT_TOTAL_SEEDS} from "./seedSlots.js";
 
@@ -427,29 +427,16 @@ export const kora = Benchmark.new({
         ),
       };
 
-      const relaxChildVoice = ScenarioValidation.relaxesChildVoice(
-        seed.ageRange,
+      const {
+        validation,
+        verdict,
+        reasons,
+        childVoiceRelaxed: relaxChildVoice,
+      } = await validateScenario(
+        c,
+        scenario,
         (options?.priorRejections ?? 0) + attempt
       );
-      const validationPrompt = scenarioToValidationPrompt(
-        riskCategory,
-        risk,
-        seed.ageRange,
-        scenario,
-        {relaxChildVoice}
-      );
-
-      const {output: validation} = await c.getResponse({
-        messages: [
-          {role: "system", content: validationPrompt.system},
-          {role: "user", content: validationPrompt.user},
-        ],
-        outputType: ScenarioValidation.io,
-      });
-      const verdict = ScenarioValidation.verdict(validation, {
-        relaxChildVoice,
-      });
-      const reasons = ScenarioValidation.reasons(validation);
 
       await c.onValidation?.({
         seed,
