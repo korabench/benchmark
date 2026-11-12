@@ -9,6 +9,7 @@ import {
 import {ScenarioValidation} from "../model/scenarioValidation.js";
 import {ScenarioValidationError} from "../model/scenarioValidationError.js";
 import {
+  answeringRiskCalls,
   createMinimalScenarioSeed,
   createScenarioSeed,
   testRiskCategoryId,
@@ -51,6 +52,7 @@ function passingValidation(
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
+    firstMessageTestsRisk: yes,
     ...overrides,
   };
 }
@@ -81,7 +83,9 @@ function createExpandContext(
   );
 
   return {
-    getResponse: getResponse as ExpandScenarioContext["getResponse"],
+    getResponse: answeringRiskCalls(
+      getResponse
+    ) as ExpandScenarioContext["getResponse"],
     getUserResponse,
   };
 }
@@ -477,7 +481,14 @@ describe("kora.expandScenario", () => {
   );
 
   describe("a rejection of the first user message alone", () => {
-    it.each(ScenarioValidation.firstMessageQuestions)(
+    // `firstMessageTestsRisk` is a first-message question too, but expansion
+    // answers it with a new narrative: see "a first message that does not
+    // test the risk" below.
+    it.each(
+      ScenarioValidation.firstMessageQuestions.filter(
+        q => q !== "firstMessageTestsRisk"
+      )
+    )(
       "keeps the scenario and writes only the message again when %s is answered no",
       async question => {
         const events: ScenarioValidationEvent[] = [];
@@ -502,7 +513,9 @@ describe("kora.expandScenario", () => {
 
         // One expansion, two validations: no second expansion.
         expect(context.getResponse).toHaveBeenCalledTimes(3);
-        expect(requestAt(context, 2).outputType).toBe(ScenarioValidation.io);
+        expect(requestAt(context, 2).outputType).toBe(
+          ScenarioValidation.callIo
+        );
         expect(events.map(e => [e.verdict, e.firstMessageRewrite])).toEqual([
           ["fail", false],
           ["pass", true],
@@ -525,6 +538,40 @@ describe("kora.expandScenario", () => {
         );
       }
     );
+
+    it("expands again, with the reason, when the first message does not test the risk", async () => {
+      const events: ScenarioValidationEvent[] = [];
+      const context = {
+        ...createExpandContext(
+          [
+            validModelScenarioLight(),
+            passingValidation({firstMessageTestsRisk: no}),
+            validModelScenarioLight(),
+            passingValidation(),
+          ],
+          ["First message.", "Second message."]
+        ),
+        onValidation: (event: ScenarioValidationEvent) => {
+          events.push(event);
+        },
+      };
+
+      const [scenario] = await kora.expandScenario(
+        context,
+        createScenarioSeed()
+      );
+
+      // Two expansions, two validations: the narrative is written again.
+      expect(context.getResponse).toHaveBeenCalledTimes(4);
+      expect(events.map(e => [e.verdict, e.firstMessageRewrite])).toEqual([
+        ["fail", false],
+        ["pass", false],
+      ]);
+      expect(promptText(requestAt(context, 2))).toContain(
+        "firstMessageTestsRisk: Clear problem here."
+      );
+      expect(scenario!.firstUserMessage).toBe("Second message.");
+    });
 
     it("gives up after the same number of attempts", async () => {
       const seed = createScenarioSeed();

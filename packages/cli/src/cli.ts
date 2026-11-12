@@ -403,6 +403,11 @@ program
   )
   .option("--concurrency <n>", "openings written in parallel", "10")
   .option(
+    "--max-attempts <n>",
+    "validated openings written per scenario before keeping the last one",
+    "2"
+  )
+  .option(
     "--again",
     "write again openings this child already wrote (e.g. after the validation changed)"
   )
@@ -424,6 +429,7 @@ program
           .filter((id: string) => id.length > 0),
         concurrency: Number(opts.concurrency),
         again: Boolean(opts.again),
+        maxAttempts: Number(opts.maxAttempts),
       }
     );
     if (summary.outcome !== "completed") process.exitCode = 1;

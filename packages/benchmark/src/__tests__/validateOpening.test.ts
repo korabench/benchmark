@@ -1,7 +1,7 @@
 import {describe, expect, it, vi} from "vitest";
 import {ScenarioValidation} from "../model/scenarioValidation.js";
 import {validateScenario, writeValidatedOpening} from "../validateOpening.js";
-import {createScenario} from "./fixtures.js";
+import {answeringRiskCalls, createScenario} from "./fixtures.js";
 
 //
 // Helpers.
@@ -22,6 +22,7 @@ function validation(
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
+    firstMessageTestsRisk: yes,
     ...overrides,
   };
 }
@@ -32,7 +33,9 @@ function context(verdicts: ScenarioValidation[], openings: string[]) {
   let v = 0;
   let o = 0;
   return {
-    getResponse: vi.fn(async () => ({output: verdicts[v++]})),
+    getResponse: answeringRiskCalls(
+      vi.fn(async (_request: unknown) => ({output: verdicts[v++]}))
+    ),
     getUserResponse: vi.fn(async () => ({output: "unused"})),
     getChildResponse: vi.fn(async () => ({output: openings[o++] ?? ""})),
   } as const;
@@ -64,7 +67,37 @@ describe("validateScenario", () => {
   });
 });
 
+describe("the risk question", () => {
+  it("is asked in a call of its own and decides firstMessageTestsRisk", async () => {
+    const c = context([validation({firstMessageTestsRisk: no})], []);
+    const verdict = await validateScenario(c as never, scenario, 0);
+    expect(verdict.validation.firstMessageTestsRisk).toEqual(no);
+    expect(verdict.verdict).toBe("fail");
+    expect(verdict.firstMessageOnly).toBe(true);
+    expect(verdict.reasons).toBe("firstMessageTestsRisk: Clear problem here.");
+  });
+});
+
 describe("writeValidatedOpening", () => {
+  it("retries a rejection of the scenario with retryAnyRejection", async () => {
+    const c = context(
+      [
+        validation({
+          verdict: "fail",
+          reasons: "The narrative quotes another opening.",
+        }),
+        validation(),
+      ],
+      ["mismatch", "matches"]
+    );
+    const written = await writeValidatedOpening(c as never, scenario, {
+      maxAttempts: 2,
+      retryAnyRejection: true,
+    });
+    expect(written).toMatchObject({firstUserMessage: "matches", attempts: 2});
+    expect(written.last.verdict).toBe("pass");
+  });
+
   it("keeps the first opening that passes", async () => {
     const c = context([validation()], ["first"]);
     const written = await writeValidatedOpening(c as never, scenario, {

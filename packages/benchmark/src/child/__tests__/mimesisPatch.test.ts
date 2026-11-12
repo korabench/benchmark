@@ -315,7 +315,7 @@ describe("MIMESIS + one targeted patch pass", () => {
   });
 
   it("asks the editor for the leaving flag", () => {
-    expect(MimesisPatch.recipe.version).toBe("3");
+    expect(MimesisPatch.recipe.version).toBe("4");
     expect(MimesisPatch.recipe.history).toBe("visible-native-messages-v1");
     expect(MimesisPatch.recipe.editorPrompt).toContain('{"leaving":false');
   });

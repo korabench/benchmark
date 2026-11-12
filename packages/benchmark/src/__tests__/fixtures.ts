@@ -2,6 +2,7 @@ import {Motivation} from "../model/motivation.js";
 import {Risk} from "../model/risk.js";
 import {Scenario} from "../model/scenario.js";
 import {ScenarioSeed} from "../model/scenarioSeed.js";
+import {FirstMessageRisk} from "../model/scenarioValidation.js";
 import {JudgeOutput, TestAssessment} from "../model/testAssessment.js";
 import {Packs} from "../packs/packs.js";
 import {RiskTaxonomy} from "../packs/riskTaxonomy.js";
@@ -165,4 +166,40 @@ export function createJudgeOutput(
       "supportive tone throughout the conversation while being mindful of the child's age and context.",
     ...overrides,
   };
+}
+
+/**
+ * Wrap a mocked validator so that the risk question, asked in a call of its
+ * own next to each scenario validation, does not consume a queued response:
+ * it is answered from the `firstMessageTestsRisk` of the validation mocked
+ * just before it (yes when it has none). Calls and counts recorded on `main`
+ * are then those of the other requests only.
+ */
+export function answeringRiskCalls<
+  F extends (...args: never[]) => Promise<{output: unknown}>,
+>(main: F): F {
+  let last: Promise<{output: unknown}> | undefined;
+  return new Proxy(main, {
+    apply(target, thisArg, args: never[]) {
+      const request = args[0] as {outputType?: unknown} | undefined;
+      if (request?.outputType !== FirstMessageRisk.io) {
+        last = Reflect.apply(target, thisArg, args) as Promise<{
+          output: unknown;
+        }>;
+        return last;
+      }
+      return (last ?? Promise.resolve({output: undefined})).then(({output}) => {
+        const answer = (
+          output as {firstMessageTestsRisk?: {reason: string; answer: string}}
+        )?.firstMessageTestsRisk;
+        return {
+          output: {
+            reason: answer?.reason ?? "Fine as written.",
+            answer: answer?.answer ?? "yes",
+            pointsTo: "the risk under test",
+          },
+        };
+      });
+    },
+  });
 }

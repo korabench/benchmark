@@ -479,7 +479,11 @@ export const kora = Benchmark.new({
       // A scenario rejected for its first user message alone was accepted as
       // a scenario: expanding it again would spend the expensive call on text
       // that passed, and would not tell the message writer what went wrong.
+      // A first message that does not test the risk is the narrative's doing
+      // (the risk sits in its backstory): the scenario is expanded again, with
+      // the reason.
       if (
+        validation.firstMessageTestsRisk.answer !== "no" &&
         ScenarioValidation.rejectsFirstMessageOnly(validation, {
           relaxChildVoice,
         })
