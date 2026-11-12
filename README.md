@@ -222,6 +222,8 @@ yarn kora expand-scenarios "gpt-5.2:high,gpt-5.5:medium,claude-sonnet-4.6:limite
 
 For `expand-scenarios`, the primary `[model]` chain advances on **both** thrown errors _and_ `ScenarioValidationError` (when the model returns valid JSON but the content fails the validator). The `[user-model]` chain only advances on thrown errors, since first-message generation is plain text with no structural validator.
 
+**One child per conversation.** When the profile names a `childSimulator`, the opening is written by that child (the profile's `user` model through the recipe: MIMESIS draft plus one editor pass, English only), the same child that writes every later turn of a run; `expansionUser` is then not used. The opening is validated like any other: a rejection of the first message alone draws it again from the simulator, whose fixed recipe takes no rejection reasons, up to the same number of attempts. A profile without a `childSimulator` keeps the `expansionUser` and the first-user-message prompt.
+
 ### `seeds-report`
 
 Compares a seeds file with the allocation planned for the same options and random seed, and writes the comparison next to it as `<seeds>.allocation-report.md` (counts only, so it can be committed with the public seeds).
@@ -249,7 +251,7 @@ yarn kora expand-scenarios [model] [user-model]
 | Argument / Option     | Description                                                                                                                                                                                                                                                                               |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `[model]`             | Override the profile's `expansion` role with `models.json` slug(s) (default: from profile). Comma-separated for a per-task fallback chain — escalates on both thrown errors _and_ `ScenarioValidationError` (e.g. when the model returns valid JSON but the content fails the validator). |
-| `[user-model]`        | Override the profile's `expansionUser` role, used for the first user message (default: from profile). Comma-separated for a per-call fallback chain (escalates only on thrown errors).                                                                                                    |
+| `[user-model]`        | Override the profile's `expansionUser` role, used for the first user message when the profile has no `childSimulator` (default: from profile). Comma-separated for a per-call fallback chain (escalates only on thrown errors).                                                                                                    |
 | `-i, --input <path>`  | Input seeds JSONL file (default: `data/scenarioSeeds.jsonl`)                                                                                                                                                                                                                              |
 | `-o, --output <path>` | Output scenarios JSONL file (default: `data/scenarios.jsonl`)                                                                                                                                                                                                                             |
 | `--risk-ids <ids>`    | Comma-separated risk IDs to restrict expansion to (default: all seeds in the input file)                                                                                                                                                                                                  |
@@ -546,7 +548,7 @@ role, so the file alone is a complete record of what ran:
 | `seeds`          | `generate-seeds`                 | Fallback chain (first model tried first)                                  |
 | `seedValidation` | `generate-seeds`                 | Fallback chain, seed plausibility check; optional, falls back to `judges` |
 | `expansion`      | `expand-scenarios`               | Fallback chain; also produces the validation verdict                      |
-| `expansionUser`  | `expand-scenarios`               | Fallback chain, first user message                                        |
+| `expansionUser`  | `expand-scenarios`               | Fallback chain, first user message (unused with a `childSimulator`)       |
 | `user`           | `run` (and the `reassess` label) | Single model, child simulator                                             |
 | `judges`         | `run`, `reassess`, `continue`    | Concurrent judges; each grades safety, and run counts pool their grades   |
 | `mechanismJudges` | `run`, `reassess`, `continue`   | Names of `judges` that also grade the behaviours; optional, all judges    |
@@ -618,7 +620,7 @@ evidence of which snapshot actually answered.
 
 ### Switching the child model
 
-A scenario's opening (`firstUserMessage`) is part of the corpus. Every run sends it as is, whatever the profile: each target answers the same first message, and it is the message experts review. The child model writes every later turn live. So switching the child model (a profile's `user` role, or its `childSimulator`) means writing the openings again, into a new corpus:
+A scenario's opening (`firstUserMessage`) is part of the corpus. Every run sends it as is, whatever the profile: each target answers the same first message, and it is the message experts review. The child model writes every later turn live. So switching the child model (a profile's `user` role, or its `childSimulator`) means writing the openings again, into a new corpus. A corpus expanded under the new profile already has them (see "One child per conversation"); `revise-openings` is for an existing corpus, and unlike expansion it does not run the scenario validation on the openings it writes:
 
 ```bash
 mkdir data/seeds-v7.1

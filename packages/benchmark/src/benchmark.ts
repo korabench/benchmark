@@ -93,6 +93,10 @@ export interface ExpandScenarioContext {
     request: TypedModelRequest<T>
   ) => Promise<TypedModelResponse<T>>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
+  /** The profile's child simulator, when it names one. The opening is then
+   * written by the same child that writes every later turn of a run, and
+   * validated like any other opening; `getUserResponse` is not used for it. */
+  getChildResponse?: TestContext["getChildResponse"];
   /** Natural language the simulated child writes in (e.g. "Estonian"). The
    * scenario itself stays English; only the generated first user message is
    * translated. Undefined keeps the default English. */

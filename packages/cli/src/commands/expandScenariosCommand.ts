@@ -1,6 +1,7 @@
 import {
   ExpandScenarioContext,
   kora,
+  MimesisPatch,
   Packs,
   relabelSignalType,
   relabelUse,
@@ -35,6 +36,7 @@ import {
   hasCachedFiles,
   listCachedFiles,
 } from "./shared/cacheStamp.js";
+import {createChildSimulator} from "./shared/childSimulator.js";
 import {workSummary} from "./shared/executionSummary.js";
 import {
   buildPassRateReport,
@@ -117,8 +119,21 @@ export async function expandScenariosCommand(
   const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
   const {roles} = effective;
   console.log(`Profile: ${describeProfileRef(effective.ref)}`);
+  // With a child simulator, the opening is written by the child that writes
+  // every later turn of a run (the profile's user model through the recipe),
+  // not by `expansionUser`: one child per conversation.
+  const childSimulator = roles.childSimulator
+    ? MimesisPatch.recipeRef()
+    : undefined;
+  if (childSimulator && language && language !== "English") {
+    throw new Error("MIMESIS patch supports English conversations only.");
+  }
   console.log(
-    `Expanding scenarios using ${chainLabel(roles.expansion)} (user: ${chainLabel(roles.expansionUser)})...`
+    `Expanding scenarios using ${chainLabel(roles.expansion)} (opening: ${
+      childSimulator
+        ? `${roles.user.name} through ${childSimulator.id}@${childSimulator.version}`
+        : chainLabel(roles.expansionUser)
+    })...`
   );
   const riskIdFilter = resolveRiskIdFilter(riskIds);
   // Private seeds expand into private scenarios: both stay out of the published
@@ -166,6 +181,9 @@ export async function expandScenariosCommand(
     model: createSpecModel(spec),
   }));
   const userModel = createChainModel(roles.expansionUser).model;
+  const getChildResponse = childSimulator
+    ? createChildSimulator(createSpecModel(roles.user, {rejectTruncated: true}))
+    : undefined;
 
   const outputDir = path.dirname(outputFilePath);
   const tempDir = path.join(outputDir, ".kora-expand-tmp");
@@ -276,6 +294,7 @@ export async function expandScenariosCommand(
               getUserResponse: async request => ({
                 output: await userModel.getTextResponse(request),
               }),
+              ...(getChildResponse ? {getChildResponse} : {}),
               onValidation: event => {
                 if (event.verdict === "fail") {
                   rejections++;

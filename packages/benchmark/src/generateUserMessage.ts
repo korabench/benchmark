@@ -85,13 +85,29 @@ async function generateUserMessage(
  * Write the child's opening message. With `feedback`, a message written
  * earlier for this seed was rejected by the scenario validation: the writer is
  * shown it and the reasons.
+ *
+ * With a child simulator (`getChildResponse`), the opening is the simulator's
+ * own, so that one child writes the whole conversation. Its recipe is fixed
+ * and takes no feedback: a rejected opening is drawn again, and one that keeps
+ * a bracketed placeholder too, up to the same number of attempts.
  */
-export function generateFirstUserMessage(
+export async function generateFirstUserMessage(
   c: UserResponseContext,
   risk: Risk,
   scenario: Scenario,
   feedback?: FirstUserMessageFeedback
-) {
+): Promise<string> {
+  if (c.getChildResponse) {
+    for (let attempt = 1; ; attempt++) {
+      const {output} = await c.getChildResponse({scenario, messages: []});
+      if (!hasPlaceholder(output)) return output;
+      if (attempt === maxAttempts) {
+        throw new Error(
+          `Opening still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
+        );
+      }
+    }
+  }
   return generateUserMessage(
     c,
     scenarioToFirstUserMessagePrompt(risk, scenario, c.language, feedback)

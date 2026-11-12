@@ -412,6 +412,24 @@ describe("kora.expandScenario", () => {
     expect(scenario!.firstUserMessage).toBe("hey can u help me with smth");
   });
 
+  it("validates the child simulator's opening when the profile has one", async () => {
+    const context = {
+      ...createExpandContext(
+        [validModelScenarioLight(), passingValidation()],
+        ["written by the expansion user model"]
+      ),
+      getChildResponse: vi.fn(async () => ({output: "opening by the child"})),
+    };
+
+    const [scenario] = await kora.expandScenario(context, createScenarioSeed());
+
+    expect(promptText(requestAt(context, 1))).toContain(
+      "): opening by the child"
+    );
+    expect(scenario!.firstUserMessage).toBe("opening by the child");
+    expect(context.getUserResponse).not.toHaveBeenCalled();
+  });
+
   const firstMessageQuestions: readonly string[] =
     ScenarioValidation.firstMessageQuestions;
 

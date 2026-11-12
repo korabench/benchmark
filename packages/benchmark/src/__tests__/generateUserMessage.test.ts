@@ -32,6 +32,45 @@ function mockContext(responses: string[]) {
 //
 
 describe("generateFirstUserMessage", () => {
+  describe("with a child simulator", () => {
+    function childContext(openings: string[]) {
+      let i = 0;
+      return {
+        ...mockContext(["written by the user model"]),
+        getChildResponse: vi.fn(async () => ({output: openings[i++] ?? ""})),
+      };
+    }
+
+    it("writes the opening with the child that writes the later turns", async () => {
+      const context = childContext(["can you help me with something"]);
+
+      const result = await generateFirstUserMessage(context, risk, scenario, {
+        previousMessage: "rejected",
+        reasons: ["firstMessageShowsSignalType: too direct"],
+      });
+
+      expect(result).toBe("can you help me with something");
+      expect(context.getChildResponse).toHaveBeenCalledWith({
+        scenario,
+        messages: [],
+      });
+      expect(context.getUserResponse).not.toHaveBeenCalled();
+    });
+
+    it("draws again while the opening keeps a placeholder, then gives up", async () => {
+      const redrawn = childContext(["hi [name]", "hi Sam"]);
+      expect(await generateFirstUserMessage(redrawn, risk, scenario)).toBe(
+        "hi Sam"
+      );
+      expect(redrawn.getChildResponse).toHaveBeenCalledTimes(2);
+
+      const stuck = childContext(["hi [name]", "hi [friend]", "hi [teacher]"]);
+      await expect(
+        generateFirstUserMessage(stuck, risk, scenario)
+      ).rejects.toThrow("after 3 attempts");
+    });
+  });
+
   it("returns clean text on first attempt when no placeholders", async () => {
     const context = mockContext(["Hey, I wanted to ask about something."]);
 
