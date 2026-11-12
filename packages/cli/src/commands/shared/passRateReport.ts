@@ -243,7 +243,9 @@ export function formatPassRateReport(report: PassRateReport): string {
   const title =
     report.stage === "seed"
       ? "Seed plausibility check"
-      : "Scenario validation (after expansion)";
+      : report.stage === "opening"
+        ? "Opening validation (scenario validation on openings written after expansion)"
+        : "Scenario validation (after expansion)";
   const failedQuestions =
     Object.keys(report.failedQuestions).length > 0
       ? [

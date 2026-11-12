@@ -69,3 +69,4 @@ export * from "./seedsReport.js";
 export * from "./stamp/runStamp.js";
 export * from "./stamp/stamp.js";
 export * from "./validateAssistantTurn.js";
+export * from "./validateOpening.js";

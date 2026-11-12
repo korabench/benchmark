@@ -23,6 +23,7 @@ import {seedsReportCommand} from "./commands/seedsReportCommand.js";
 import {InputKind} from "./commands/shared/validateInputFile.js";
 import {statsCommand} from "./commands/statsCommand.js";
 import {validateCommand} from "./commands/validateCommand.js";
+import {validateOpeningsCommand} from "./commands/validateOpeningsCommand.js";
 import {configurePacks} from "./packs/loadPack.js";
 import {loadProfile, profilesDir} from "./profiles/loadProfile.js";
 import {Profiles} from "./profiles/profiles.js";
@@ -401,6 +402,10 @@ program
     "comma-separated risk IDs to restrict the revision to (the output then holds only those scenarios)"
   )
   .option("--concurrency <n>", "openings written in parallel", "10")
+  .option(
+    "--again",
+    "write again openings this child already wrote (e.g. after the validation changed)"
+  )
   // A corpus maintenance step, not a benchmark stage: kept out of the
   // telemetry contract shared with infra.
   .action(async (userModel, opts) => {
@@ -413,6 +418,42 @@ program
       opts.output,
       {
         reason: opts.reason,
+        riskIds: opts.riskIds
+          ?.split(",")
+          .map((id: string) => id.trim())
+          .filter((id: string) => id.length > 0),
+        concurrency: Number(opts.concurrency),
+        again: Boolean(opts.again),
+      }
+    );
+    if (summary.outcome !== "completed") process.exitCode = 1;
+  });
+
+program
+  .command("validate-openings")
+  .description(
+    "run expansion's scenario validation on every scenario of a corpus as it stands, opening included, without changing it; verdicts and report next to the input"
+  )
+  .argument(
+    "[expansion-model]",
+    "override the profile's expansion role (the validator) with models.json slug(s)"
+  )
+  .requiredOption("-i, --input <path>", "input scenarios JSONL file")
+  .option(
+    "--risk-ids <ids>",
+    "comma-separated risk IDs to restrict the validation to"
+  )
+  .option("--concurrency <n>", "validations run in parallel", "10")
+  // A corpus maintenance step, not a benchmark stage: kept out of the
+  // telemetry contract shared with infra.
+  .action(async (expansionModel, opts) => {
+    prepareCommand("validate-openings");
+    const summary = await validateOpeningsCommand(
+      program,
+      modelsJsonPath,
+      {expansion: optionalCsv(expansionModel)},
+      opts.input,
+      {
         riskIds: opts.riskIds
           ?.split(",")
           .map((id: string) => id.trim())

@@ -43,7 +43,9 @@ export interface PopulationRow {
   private: boolean;
 }
 
-export type ValidationStage = "seed" | "expansion";
+/** `opening`: an opening written or checked after expansion
+ * (`revise-openings`, `validate-openings`), by the scenario validation. */
+export type ValidationStage = "seed" | "expansion" | "opening";
 
 export interface ValidationAttempt {
   stage: ValidationStage;
