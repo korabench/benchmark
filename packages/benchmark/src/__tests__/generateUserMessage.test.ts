@@ -50,9 +50,14 @@ describe("generateFirstUserMessage", () => {
       });
 
       expect(result).toBe("can you help me with something");
+      // The child is told what was rejected, like the plain user model.
       expect(context.getChildResponse).toHaveBeenCalledWith({
         scenario,
         messages: [],
+        feedback: {
+          previousMessage: "rejected",
+          reasons: ["firstMessageShowsSignalType: too direct"],
+        },
       });
       expect(context.getUserResponse).not.toHaveBeenCalled();
     });

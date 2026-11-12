@@ -87,9 +87,10 @@ async function generateUserMessage(
  * shown it and the reasons.
  *
  * With a child simulator (`getChildResponse`), the opening is the simulator's
- * own, so that one child writes the whole conversation. Its recipe is fixed
- * and takes no feedback: a rejected opening is drawn again, and one that keeps
- * a bracketed placeholder too, up to the same number of attempts.
+ * own, so that one child writes the whole conversation. It is given the
+ * same feedback: its draft model and its editor are both shown the rejected
+ * opening and the reasons. An opening that keeps a bracketed placeholder is
+ * drawn again, up to the same number of attempts.
  */
 export async function generateFirstUserMessage(
   c: UserResponseContext,
@@ -99,7 +100,11 @@ export async function generateFirstUserMessage(
 ): Promise<string> {
   if (c.getChildResponse) {
     for (let attempt = 1; ; attempt++) {
-      const {output} = await c.getChildResponse({scenario, messages: []});
+      const {output} = await c.getChildResponse({
+        scenario,
+        messages: [],
+        ...(feedback ? {feedback} : {}),
+      });
       if (!hasPlaceholder(output)) return output;
       if (attempt === maxAttempts) {
         throw new Error(

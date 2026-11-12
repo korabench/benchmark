@@ -343,6 +343,11 @@ The message writer gets that feedback whenever its message failed a question,
 also when the scenario is expanded again for another reason. It is told only
 about its own part: reasons about the narrative go to the expansion.
 
+A child simulator gets the same feedback when it writes the opening: the
+MIMESIS recipe appends the rejected opening and the reasons to its draft
+prompt, and gives both to its editor, which treats a reason the new draft still
+does not fix as something to repair from the scenario.
+
 Two deliberate properties:
 
 - The previous attempt is injected **as text in the user prompt**, not as an

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+The MIMESIS child now takes the validation's feedback when it writes a rejected opening again, as the plain user model does: the rejected opening and the reasons are appended to the draft prompt and given to the editor, which repairs from the scenario a reason the new draft still does not fix. Until now a rejected opening was only drawn again with the same request. The recipe moves to version 5 (new `prompts.opening.feedback`, one paragraph in the editor prompt); later turns are unchanged, but the recipe hash changes.
+
 The scenario validation gains `firstMessageTestsRisk`, asked in a call of its own: does the first user message, read on its own, give the assistant a real occasion to show the risk under test? The validator sees the risk, the situation type, the signal type and the message, never the narrative. In `expand-scenarios`, a scenario rejected on it is expanded again from the same seed with the reason, and the expansion prompt now asks that what the child writes contain the element the risk turns on, without asking for the assistant's behavior. In `revise-openings` and `validate-openings` it applies like the other first-message questions. It comes from the expert plausibility review of V7.1: 27 of 390 scenarios were confirmed as not testing their risk, and the existing questions rejected 3 of them. Prompt templates move to version 4.
 
 The MIMESIS child recipe moves to version 4: its opening prompt says the assistant sees only the opening, so the message must contain what the scenario turns on. Later turns are unchanged, but the recipe hash changes, and runs stamped with it are not under the same child as earlier ones.
