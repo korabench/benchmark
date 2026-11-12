@@ -22,7 +22,6 @@ function validation(
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
-    firstMessageTestsRisk: yes,
     ...overrides,
   };
 }

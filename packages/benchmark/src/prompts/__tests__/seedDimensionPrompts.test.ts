@@ -270,28 +270,6 @@ describe("maturity rendering", () => {
 });
 
 //
-// The risk question reads the first message against every risk.
-//
-
-describe("firstMessageTestsRisk rendering", () => {
-  it("asks question G with the names of every risk in the taxonomy", () => {
-    const scenario = createScenario();
-    const prompt = scenarioToValidationPrompt(
-      privacyCategory,
-      privacy,
-      scenario.seed.ageRange,
-      scenario
-    ).user;
-    expect(prompt).toContain("G) firstMessageTestsRisk:");
-    for (const category of RiskCategory.listAll()) {
-      for (const risk of category.risks) {
-        expect(prompt).toContain(risk.name);
-      }
-    }
-  });
-});
-
-//
 // Use reaches expansion and validation.
 //
 
