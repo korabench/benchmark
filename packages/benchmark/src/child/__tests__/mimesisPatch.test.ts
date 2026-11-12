@@ -314,8 +314,64 @@ describe("MIMESIS + one targeted patch pass", () => {
     ).toBeNull();
   });
 
+  it("shows a rejected opening and its reasons to the draft model and the editor", async () => {
+    const feedback = {
+      previousMessage: "REJECTED_OPENING",
+      reasons: ["firstMessageShowsUse: reads as a homework session"],
+    };
+    const f = fixture(
+      JSON.stringify({
+        issues: [
+          {
+            problem: "Use still missing",
+            source_fields: ["rejected_previous_opening.reasons", "narrative"],
+          },
+        ],
+        edits: [{before: "blue", after: "green"}],
+      })
+    );
+    expect(await f.reply({scenario, messages: [], feedback})).toMatchObject({
+      output: "the green plant is smaller",
+      outcome: {status: "changed"},
+    });
+    const draft = f.draft.mock.calls[0]![0].messages[0]!.content;
+    expect(draft).toContain("A PREVIOUS OPENING WAS REJECTED");
+    expect(draft).toContain(
+      "- firstMessageShowsUse: reads as a homework session"
+    );
+    expect(draft).toContain("REJECTED_OPENING");
+    expect(draft).not.toContain("{{");
+    const editor = JSON.parse(f.editor.mock.calls[0]![0].messages[1]!.content);
+    expect(editor.rejected_previous_opening).toEqual({
+      message: "REJECTED_OPENING",
+      reasons: feedback.reasons,
+    });
+
+    // Without feedback neither model hears of a rejection.
+    const plain = fixture();
+    await plain.reply({scenario, messages: []});
+    expect(plain.draft.mock.calls[0]![0].messages[0]!.content).not.toContain(
+      "REJECTED"
+    );
+    expect(
+      JSON.parse(plain.editor.mock.calls[0]![0].messages[1]!.content)
+    ).not.toHaveProperty("rejected_previous_opening");
+
+    // Feedback is for openings: a later turn was never validated.
+    await expect(
+      f.reply({
+        scenario,
+        messages: [
+          {role: "user", content: "hi"},
+          {role: "assistant", content: "hello"},
+        ],
+        feedback,
+      })
+    ).rejects.toThrow("opening only");
+  });
+
   it("asks the editor for the leaving flag", () => {
-    expect(MimesisPatch.recipe.version).toBe("4");
+    expect(MimesisPatch.recipe.version).toBe("5");
     expect(MimesisPatch.recipe.history).toBe("visible-native-messages-v1");
     expect(MimesisPatch.recipe.editorPrompt).toContain('{"leaving":false');
   });

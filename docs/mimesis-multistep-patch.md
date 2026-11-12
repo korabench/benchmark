@@ -39,6 +39,16 @@ is drawn again with the same request, up to three draws in all. A marker the
 third draw still carries is cut out, and a draft that is nothing else fails the
 turn. An edit that would add one is invalid, and the draft is kept.
 
+An opening can be asked for with `feedback`: an opening the scenario validation
+rejected, and the reasons (`expand-scenarios` and `revise-openings` pass it when
+they write a rejected opening again). The recipe's `prompts.opening.feedback`
+text, with both, is appended to the draft prompt, and the editor receives them
+as `rejected_previous_opening`: a reason the new draft still does not fix counts
+as a discrepancy to repair from the scenario, by an insertion when something is
+missing. The draft model is fine-tuned and follows such instructions loosely,
+so the editor is the part that acts on the reasons. A later turn takes no
+feedback. Recipe version 5.
+
 `messages` contains only visible conversation history: child=`user`, evaluated
 AI=`assistant`. Empty history generates an opening, which only
 `revise-openings` asks for: it writes the opening into the corpus, and runs send
