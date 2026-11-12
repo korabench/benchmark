@@ -109,6 +109,16 @@ that historical source recipe is preserved in the archive. The v3 change reduces
 input duplication, but its effects on model behaviour and throughput have not
 been measured in a matched live comparison.
 
+Recipe v4 (12 November 2026) adds three sentences to the opening prompt, and
+changes nothing in later turns: the assistant sees only the opening, so the
+message itself must contain what the scenario turns on, taken from the
+situation and never invented; where the situation type is defined by what the
+assistant does, the child never asks for that behaviour. Measured on 47 V7.1
+openings that failed the risk question: one draw with these sentences passed
+an independent reading 19 times, against 10 for a draw without them. This
+departs from the research recipe, and its effect on later turns (none
+intended) has not been measured.
+
 The local Python/MLX historical runtime and Modal/vLLM deployment also differ.
 No matched live quality comparison or real-child validation is established by
 this implementation or its mocked tests. Exact remote Luna revisions and

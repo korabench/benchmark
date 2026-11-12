@@ -60,10 +60,11 @@ import {
 // replaced text is kept in the record's `revisions`.
 //
 // Each opening is validated as expansion validates its own (the scenario
-// validation, by the profile's expansion model): one rejected on the
-// first-message questions alone is written again, up to the same number of
-// attempts. The scenario and its seed never change, so a rejection of the
-// scenario itself is recorded and not retried, and nothing is relabeled. An
+// validation, by the profile's expansion model): a rejected one is written
+// again, up to `--max-attempts`. That includes a rejection of the scenario
+// itself: it passed at expansion, so the new opening is what the validator
+// objects to (typically a narrative that describes another opening). The
+// scenario and its seed never change, and nothing is relabeled. An
 // opening that still fails is kept, and named in the validation report next to
 // the output: the corpus is written either way.
 //
@@ -76,8 +77,9 @@ import {
 // scenario has its opening, in input order.
 //
 
-/** Validated openings per scenario, as `expandScenario` gives each model. */
-const maxOpeningAttempts = 2;
+/** Validated openings per scenario, as `expandScenario` gives each model;
+ * `--max-attempts` overrides it. */
+const defaultMaxOpeningAttempts = 2;
 
 /** One ledger line: a scenario's new opening and how it was written. */
 const VLedgerRow = v.object({
@@ -188,7 +190,8 @@ async function writeOpening(
   withChildSimulator: boolean,
   ledger: Ledger,
   isPrivate: boolean,
-  priorRejections: number
+  priorRejections: number,
+  maxAttempts: number
 ): Promise<Omit<LedgerRow, "seedId" | "stampHash">> {
   const language = scenario.stamp?.language;
   if (withChildSimulator && language && language !== "English") {
@@ -220,8 +223,10 @@ async function writeOpening(
       : {}),
   };
   const written = await writeValidatedOpening(context, scenario, {
-    maxAttempts: maxOpeningAttempts,
+    maxAttempts,
     priorRejections,
+    // The scenario passed validation at expansion; only its opening changed.
+    retryAnyRejection: true,
     onVerdict: ({firstUserMessage, verdict}) =>
       ledger.record({
         stage: "opening",
@@ -253,6 +258,8 @@ export interface ReviseOpeningsOptions {
   concurrency?: number;
   /** Write again openings this child already wrote. */
   again?: boolean;
+  /** Validated openings per scenario (default 2). */
+  maxAttempts?: number;
 }
 
 export async function reviseOpeningsCommand(
@@ -387,7 +394,8 @@ export async function reviseOpeningsCommand(
             withChildSimulator,
             validationLedger,
             isPrivatePath(inputFilePath),
-            priorRejections[scenario.seed.id] ?? 0
+            priorRejections[scenario.seed.id] ?? 0,
+            options.maxAttempts ?? defaultMaxOpeningAttempts
           );
           const row: LedgerRow = {
             seedId: scenario.seed.id,

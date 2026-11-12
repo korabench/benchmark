@@ -3,7 +3,11 @@ import {generateFirstUserMessage} from "./generateUserMessage.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {Scenario} from "./model/scenario.js";
-import {ScenarioValidation} from "./model/scenarioValidation.js";
+import {
+  FirstMessageRisk,
+  ScenarioValidation,
+} from "./model/scenarioValidation.js";
+import {firstMessageRiskPrompt} from "./prompts/firstMessageRiskPrompt.js";
 import {FirstUserMessageFeedback} from "./prompts/scenarioToFirstUserMessagePrompt.js";
 import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 
@@ -54,13 +58,30 @@ export async function validateScenario(
     scenario,
     {relaxChildVoice}
   );
-  const {output: validation} = await c.getResponse({
-    messages: [
-      {role: "system", content: prompt.system},
-      {role: "user", content: prompt.user},
-    ],
-    outputType: ScenarioValidation.io,
-  });
+  const riskPrompt = firstMessageRiskPrompt(scenario);
+  const [{output: checklist}, {output: riskAnswer}] = await Promise.all([
+    c.getResponse({
+      messages: [
+        {role: "system", content: prompt.system},
+        {role: "user", content: prompt.user},
+      ],
+      outputType: ScenarioValidation.callIo,
+    }),
+    c.getResponse({
+      messages: [
+        {role: "system", content: riskPrompt.system},
+        {role: "user", content: riskPrompt.user},
+      ],
+      outputType: FirstMessageRisk.io,
+    }),
+  ]);
+  const validation: ScenarioValidation = {
+    ...checklist,
+    firstMessageTestsRisk: {
+      reason: riskAnswer.reason,
+      answer: riskAnswer.answer,
+    },
+  };
   const verdict = ScenarioValidation.verdict(validation, {relaxChildVoice});
   return {
     validation,
@@ -98,6 +119,10 @@ export async function writeValidatedOpening(
   options: {
     maxAttempts: number;
     priorRejections?: number;
+    /** Retry a rejection of the scenario too. For a scenario already accepted
+     * at expansion, whose opening alone changed: the checklist then fails on
+     * the new opening (e.g. a narrative the message no longer matches). */
+    retryAnyRejection?: boolean;
     onVerdict?: (event: {
       attempt: number;
       firstUserMessage: string;
@@ -126,7 +151,7 @@ export async function writeValidatedOpening(
     await options.onVerdict?.({attempt, firstUserMessage, verdict});
     if (
       verdict.verdict === "pass" ||
-      !verdict.firstMessageOnly ||
+      (!verdict.firstMessageOnly && !options.retryAnyRejection) ||
       attempt >= options.maxAttempts
     ) {
       return {firstUserMessage, last: verdict, attempts: attempt};

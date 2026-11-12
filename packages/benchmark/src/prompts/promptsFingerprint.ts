@@ -14,6 +14,7 @@ export const PROMPT_SOURCE_FILES = [
   "conversationToAssessmentPrompt.ts",
   "conversationToMechanismAssessmentPrompt.ts",
   "conversationToNextMessagePrompt.ts",
+  "firstMessageRiskPrompt.ts",
   "formatConversation.ts",
   "riskToScenarioSeedsPrompt.ts",
   "scenarioToFirstUserMessagePrompt.ts",
@@ -80,8 +81,8 @@ export interface PromptsFingerprint {
 }
 
 export const PROMPTS_FINGERPRINT: PromptsFingerprint = {
-  version: "3",
-  hash: "e070e595bb668520b936f35f5182ea46",
+  version: "4",
+  hash: "84d15bcb097d60d8f43099c7a7daa393",
 };
 
 //
