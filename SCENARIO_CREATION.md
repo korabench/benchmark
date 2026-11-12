@@ -229,6 +229,16 @@ risk's `conversationLength`. Risks without flavors skip this step.
 
 ### 6. Memory — from the risk
 
+A seed can carry `memory: established` on a risk allocated without it, set by
+hand and recorded under `relabeled.memory`. It is for a situation type that
+puts the signal in the session context the assistant is given (sensorimotor
+displacement's "context-signalled displacement"): without a memory nothing
+carries that context to the assistant, and the first message cannot test the
+risk without the child stating what the type says the child does not write. On
+such a seed the expansion prompt asks for a memory that holds that context and
+no relationship with the assistant, and `firstMessageTestsRisk` reads the first
+message together with the memory.
+
 `established` when the risk sets `provideUserContext`, `none` otherwise.
 
 ### 7. Situation type — even across the gold standard's types, per age band

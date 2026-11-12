@@ -402,6 +402,10 @@ const VScenarioSeed = v.strictObject({
     v.strictObject({
       riskSignalType: v.optional(v.strictObject({from: VRiskSignalType})),
       use: v.optional(v.strictObject({from: VSeedUse})),
+      // Set by hand, never by `expand-scenarios`: a seed whose situation
+      // type puts the signal in the session context, on a risk allocated
+      // without memory, has no channel for it (V7.1 repair, 12 Nov 2026).
+      memory: v.optional(v.strictObject({from: VSeedMemory})),
     })
   ),
   scenarioFlavorId: v.optional(
