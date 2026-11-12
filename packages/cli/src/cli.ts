@@ -402,6 +402,10 @@ program
     "comma-separated risk IDs to restrict the revision to (the output then holds only those scenarios)"
   )
   .option("--concurrency <n>", "openings written in parallel", "10")
+  .option(
+    "--again",
+    "write again openings this child already wrote (e.g. after the validation changed)"
+  )
   // A corpus maintenance step, not a benchmark stage: kept out of the
   // telemetry contract shared with infra.
   .action(async (userModel, opts) => {
@@ -419,6 +423,7 @@ program
           .map((id: string) => id.trim())
           .filter((id: string) => id.length > 0),
         concurrency: Number(opts.concurrency),
+        again: Boolean(opts.again),
       }
     );
     if (summary.outcome !== "completed") process.exitCode = 1;

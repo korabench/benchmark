@@ -51,6 +51,7 @@ function passingValidation(
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
+    firstMessageTestsRisk: yes,
     ...overrides,
   };
 }

@@ -67,6 +67,10 @@ import {
 // opening that still fails is kept, and named in the validation report next to
 // the output: the corpus is written either way.
 //
+// An opening this child already wrote is not written again, unless `again`
+// is set: the validation changed, and the openings are written again to pass
+// the new one.
+//
 // Each opening is appended to a ledger as soon as it is written, so a run that
 // stops part-way resumes where it was. The output is written once every
 // scenario has its opening, in input order.
@@ -247,6 +251,8 @@ export interface ReviseOpeningsOptions {
   reason: string;
   riskIds?: readonly string[];
   concurrency?: number;
+  /** Write again openings this child already wrote. */
+  again?: boolean;
 }
 
 export async function reviseOpeningsCommand(
@@ -323,9 +329,9 @@ export async function reviseOpeningsCommand(
       writerKey(last.childSimulator, last.stamp.models.user?.name) === writer
     );
   });
-  if (alreadyRevised.length > 0) {
+  if (alreadyRevised.length > 0 && !options.again) {
     throw new Error(
-      `${alreadyRevised.length} scenario(s) already have openings by this child (e.g. ${alreadyRevised[0]!.seed.id}): nothing to revise.`
+      `${alreadyRevised.length} scenario(s) already have openings by this child (e.g. ${alreadyRevised[0]!.seed.id}): nothing to revise. Pass --again to write them again.`
     );
   }
 
