@@ -13,6 +13,8 @@ export interface SeedSituation {
   situationType: string;
   /** What the situation type means for this gold standard, when listed. */
   situationDescription?: string;
+  /** The type puts its signal in the session context (`signalInContext`). */
+  signalInContext?: true;
 }
 
 /**
@@ -128,6 +130,7 @@ export function allocateSituations(
       goldStandardName: goldStandard.name,
       situationType: type.name,
       ...(type.description ? {situationDescription: type.description} : {}),
+      ...(type.signalInContext ? {signalInContext: true as const} : {}),
     };
   });
 }
