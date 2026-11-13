@@ -8,6 +8,7 @@ import {
   relabelSignalType,
   relabelUse,
   RiskTaxonomy,
+  RunStamp,
   Scenario,
   ScenarioSeed,
   ScenarioValidation,
@@ -33,6 +34,11 @@ import {
   createSpecModel,
 } from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
+import {
+  AcceptanceStep,
+  buildAcceptanceRecord,
+  writeAcceptanceRecord,
+} from "./shared/acceptanceRecord.js";
 import {assertResumable, hasCachedFiles} from "./shared/cacheStamp.js";
 import {createChildSimulator} from "./shared/childSimulator.js";
 import {workSummary} from "./shared/executionSummary.js";
@@ -377,6 +383,8 @@ export async function expandScenariosCommand(
   let reusedCount = 0;
   // Seeds left without a scenario this run, written next to the output.
   const rejected: RejectedSeed[] = [];
+  // How far each seed went before it passed (the acceptance record).
+  const steps = new Map<string, AcceptanceStep>();
   // Seeds whose text was written again this run (`regenerateSeed`).
   const regeneratedSeeds: ScenarioSeed[] = [];
   const seedWriter = createChainModel(roles.seeds).model;
@@ -521,6 +529,7 @@ export async function expandScenariosCommand(
           throw new Error("No expansion model configured.");
         };
 
+        let step: AcceptanceStep = "attempts";
         let outcome = await expandWithChain();
         if ("error" in outcome && outcome.stuckOnSignalType) {
           const relabeled = relabelSignalType(current);
@@ -529,6 +538,7 @@ export async function expandScenariosCommand(
               `\n[relabel] seed ${seed.id}: every attempt rejected the first user message on the risk signal type; ${current.riskSignalType} → ${relabeled.riskSignalType}, trying again`
             );
             current = relabeled;
+            step = "relabeled";
             outcome = await expandWithChain();
           }
         }
@@ -539,6 +549,7 @@ export async function expandScenariosCommand(
               `\n[relabel] seed ${seed.id}: every attempt rejected the scenario on a use its situation type forbids; ${current.use} → ${relabeled.use}, trying again`
             );
             current = relabeled;
+            step = "relabeled";
             outcome = await expandWithChain();
           }
         }
@@ -564,6 +575,7 @@ export async function expandScenariosCommand(
               `\n[regenerate] seed ${seed.id}: no scenario passed; its text was written again in its slot, trying again`
             );
             current = regenerated;
+            step = "regenerated";
             regeneratedSeeds.push(regenerated);
             outcome = await expandWithChain();
           }
@@ -574,6 +586,7 @@ export async function expandScenariosCommand(
             tempFile,
             JSON.stringify(outcome.scenarios, null, 2)
           );
+          steps.set(seed.id, step);
           progress.increment(true);
           return [];
         }
@@ -633,6 +646,30 @@ export async function expandScenariosCommand(
       privateSeedIds,
       rejected,
     });
+  for (const seed of ordered) {
+    if (!steps.has(seed.id)) {
+      steps.set(
+        seed.id,
+        rejected.some(r => r.seedId === seed.id) ? "rejected" : "earlier run"
+      );
+    }
+  }
+  const acceptancePaths = await writeAcceptanceRecord(
+    outputFilePath,
+    buildAcceptanceRecord({
+      stamp,
+      stampHash: RunStamp.hash(stamp),
+      ...(childSimulator ? {childSimulator} : {}),
+      steps,
+      scenarios: publicCount + privateCount,
+      rejected,
+      report: buildPassRateReport({
+        stage: "expansion",
+        rows: await readLedger(paths.ledger),
+      }),
+    })
+  );
+  console.log(`Acceptance record → ${acceptancePaths.md} (and .json)`);
   if (regeneratedSeeds.length > 0) {
     const regeneratedPaths = regeneratedPathsFor(outputFilePath);
     const lines = (isPrivate: boolean) =>
