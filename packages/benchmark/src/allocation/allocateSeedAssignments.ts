@@ -78,11 +78,52 @@ interface Args {
    * Situation type × use and × risk signal type mask. When given, the uses and
    * the signal types are reordered among the seeds so that no seed gets a
    * value forbidden for its situation type; situation types stay where they
-   * are, and the counts per use are the same either way. No seed ever keeps a
-   * forbidden signal type: where reordering cannot place one, the seed is
-   * given an allowed signal type and the counts per signal type give way.
+   * are. No seed ever keeps a forbidden value: where reordering cannot place
+   * one, the seed is given an allowed signal type, or the use its rule names
+   * (`relabelTo`), and the counts of that dimension give way. For uses that
+   * only happens in a share with few seeds.
    */
   situationMask?: SituationMask;
+}
+
+/**
+ * Move every use the trades left forbidden for its seed's situation type to
+ * the use the rule names (`relabelTo`), the one `expand-scenarios` would move
+ * the seed to anyway (`relabelUse`). Without it, the seed would keep a use its
+ * situation type contradicts and fail `showsUse` on every attempt.
+ *
+ * It runs after `swapAwayForbidden`, on the uses no trade could move, which
+ * only a share with few seeds leaves; the counts per use then give way. It
+ * draws nothing. It throws when the mask names no replacement for the pair,
+ * or names one it forbids too: such a rule leaves nothing to assign.
+ */
+function relabelForbiddenUses(
+  uses: readonly SeedUse[],
+  situations: readonly SeedSituation[],
+  situationMask: SituationMask,
+  riskId: string
+): readonly SeedUse[] {
+  return uses.map((use, i) => {
+    const {situationType} = situations[i]!;
+    if (SituationMask.allowsUse(situationMask, riskId, situationType, use)) {
+      return use;
+    }
+    const to = SituationMask.relabeledUseFor(
+      situationMask,
+      riskId,
+      situationType,
+      use
+    );
+    if (
+      to === undefined ||
+      !SituationMask.allowsUse(situationMask, riskId, situationType, to)
+    ) {
+      throw new Error(
+        `relabelForbiddenUses: seed ${i} of risk ${riskId} holds use "${use}", which situation type "${situationType}" forbids, and no trade or allowed relabelTo can replace it.`
+      );
+    }
+    return to;
+  });
 }
 
 /**
@@ -97,11 +138,13 @@ interface Args {
  * type is the other: its counts are fixed per age band, so it depends on the
  * age band and on nothing else. Last, `situationMask` trades uses and risk
  * signal types between seeds to avoid the values it forbids for a situation
- * type: the situation types do not move, and the use marginal does not change.
- * The risk signal type marginal is the one that gives way: a signal type no
- * trade can place (too few seeds of the share have a situation type that
- * allows it) is replaced by one the seed's situation type allows, so the
- * share ends with fewer seeds of that signal type than an even third.
+ * type: the situation types do not move. The risk signal type marginal is the
+ * one that gives way: a signal type no trade can place (too few seeds of the
+ * share have a situation type that allows it) is replaced by one the seed's
+ * situation type allows, so the share ends with fewer seeds of that signal
+ * type than an even third. The use marginal gives way only in a share too
+ * small for any trade: a use no trade can place is relabeled to the one its
+ * rule names (`relabelTo`).
  *
  *  - age band, gender, SES, race/ethnicity: the population distribution
  *  - exact age: even within the assigned band
@@ -174,24 +217,31 @@ function allocateShare(
       : "none";
 
   // Trades that avoid a forbidden situation pair never create a forbidden
-  // motivation × use pair.
+  // motivation × use pair. Trades first, so that the counts move as little as
+  // possible; then every use still forbidden is relabeled. A seed never keeps
+  // a use its situation type contradicts.
   const maskedUses =
     situations && situationMask
-      ? swapAwayForbidden(
-          uses,
-          (i, use) =>
-            (!useMask ||
-              MotivationUseMask.allowed(
-                useMask,
-                seedMotivations[i]!.name,
+      ? relabelForbiddenUses(
+          swapAwayForbidden(
+            uses,
+            (i, use) =>
+              (!useMask ||
+                MotivationUseMask.allowed(
+                  useMask,
+                  seedMotivations[i]!.name,
+                  use
+                )) &&
+              SituationMask.allowsUse(
+                situationMask,
+                risk.id,
+                situations[i]!.situationType,
                 use
-              )) &&
-            SituationMask.allowsUse(
-              situationMask,
-              risk.id,
-              situations[i]!.situationType,
-              use
-            )
+              )
+          ),
+          situations,
+          situationMask,
+          risk.id
         )
       : uses;
   // Trades first, so that the counts move as little as possible; then every

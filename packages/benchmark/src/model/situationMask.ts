@@ -12,11 +12,12 @@ import {RiskSignalType, SeedUse} from "./scenarioSeed.js";
 //
 // It shapes which seed of a risk carries which use and which signal type
 // (see `allocation/swapAwayForbidden.ts`). Which situation type a seed has is
-// never changed, and neither is how many seeds of the risk receive each use.
-// The risk signal type is held more strictly: no seed is ever given a signal
-// type its situation type forbids, and where trading cannot arrange that, the
-// number of seeds per signal type gives way
-// (see `allocation/reassignForbidden.ts`). Like the motivation × use mask, it
+// never changed. No seed is ever given a use or a signal type its situation
+// type forbids. Where trading cannot arrange that, the number of seeds per
+// signal type gives way (see `allocation/reassignForbidden.ts`); the number
+// per use gives way only in a risk with too few seeds for any trade, where the
+// seed gets the use its rule names (`relabelTo`, see
+// `relabelForbiddenUses` in `allocation/allocateSeedAssignments.ts`). Like the motivation × use mask, it
 // is seed-generation input, not part of the pack.
 //
 // A pair belongs here when the two definitions contradict each other, not
@@ -29,10 +30,11 @@ function rule<T extends string>(values: readonly [T, ...T[]]) {
     situationType: v.string(),
     forbidden: v.pipe(v.array(v.picklist(values)), v.minLength(1)),
     /**
-     * The value a seed of this type is moved to by `expand-scenarios` when it
-     * holds a forbidden one and every attempt rejected it on that dimension
-     * (`relabelUse`): a corpus allocated before the rule, or a pair a trade
-     * could not clear. Use rules name one; signal rules move to the nearest
+     * The value a seed of this type is moved to when it holds a forbidden one:
+     * by `generate-seeds` when no trade can clear the pair
+     * (`relabelForbiddenUses`), and by `expand-scenarios` when every attempt
+     * rejected it on that dimension (`relabelUse`), as in a corpus allocated
+     * before the rule. Use rules name one; signal rules move to the nearest
      * allowed value instead.
      */
     relabelTo: v.optional(v.picklist(values)),

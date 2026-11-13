@@ -333,14 +333,21 @@ steps:
 1. `swapAwayForbidden()` (`allocation/swapAwayForbidden.ts`): a seed holding a
    forbidden use or signal type trades it with another seed of the same risk
    (of the same gold standard, for an umbrella risk) that may hold it.
-2. `reassignForbidden()` (`allocation/reassignForbidden.ts`), for the risk
-   signal type only: a seed still holding a forbidden signal type, because no
-   trade exists, is given one its situation type allows — the one the fewest
-   seeds of the risk hold at that point.
+2. A seed still holding a forbidden value, because no trade exists, is given
+   an allowed one:
+   - its risk signal type, by `reassignForbidden()`
+     (`allocation/reassignForbidden.ts`): the one its situation type allows
+     that the fewest seeds of the risk hold at that point;
+   - its use, by `relabelForbiddenUses()`
+     (`allocation/allocateSeedAssignments.ts`): the one the rule names
+     (`relabelTo`), the use `expand-scenarios` would relabel the seed to. A
+     use rule without `relabelTo` that no trade can satisfy is an error.
 
-**No seed is given a risk signal type its situation type forbids**, at any
-number of seeds per risk. Of the dimensions, the signal type is the one whose
-counts give way to that. Values also give way after allocation, for a seed
+**No seed is given a risk signal type or a use its situation type forbids**,
+at any number of seeds per risk. Of the dimensions, the signal type is the one
+whose counts give way to that; the use counts give way only where a risk has
+too few seeds for any trade (at 1–5 seeds per risk, most allocations have such
+a seed; at 10, a few; at 75, none). Values also give way after allocation, for a seed
 every expansion attempt rejects: `expand-scenarios` relabels its signal type
 to the nearest value its situation type allows, or its use to the one the
 rule names (`relabelTo`) when the mask forbids the pair, once per dimension,
@@ -353,8 +360,9 @@ session is, from the use's scope. The seed keeps the assigned values under
 - **Situation types do not move.** Each seed keeps the situation type it was
   allocated, so the counts per gold standard, situation type and age band are
   the allocated ones, for all 134 situation types.
-- **The counts per use do not move** either: the result is a permutation
-  within the risk.
+- **The counts per use do not move** either, except at a handful of seeds per
+  risk: the trades are a permutation within the risk, and the relabel only
+  applies where no trade exists.
 - **The counts per signal type move only where they have to**: where fewer
   seeds of a risk have a situation type that allows a value than an even third
   would need. At 75 seeds per risk that is `ambiguous` in three risks, each
