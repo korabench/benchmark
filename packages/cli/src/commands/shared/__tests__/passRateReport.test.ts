@@ -5,7 +5,11 @@ import {
   formatPassRateReport,
   tallyPassRates,
 } from "../passRateReport.js";
-import {PopulationRow, ValidationAttempt} from "../validationLedger.js";
+import {
+  PopulationRow,
+  standingRejections,
+  ValidationAttempt,
+} from "../validationLedger.js";
 
 function population(riskId: string, ageRange: string): PopulationRow {
   return {
@@ -264,5 +268,48 @@ describe("buildPassRateReport", () => {
     );
     expect(markdown).toContain("| addressesAI | 3 |");
     expect(markdown).toContain("- c (r1, 13to17; 3 attempts): addressesAI");
+  });
+});
+
+describe("rechecked rejections", () => {
+  const recheck = (row: ValidationAttempt): ValidationAttempt => ({
+    ...row,
+    recheck: true,
+  });
+  // e: rejected, the recheck takes it back. f: rejected twice, then passes.
+  const rechecked: ValidationAttempt[] = [
+    attempt("e", 1, "fail", "r1", "7to9"),
+    recheck(attempt("e", 2, "pass", "r1", "7to9")),
+    attempt("f", 1, "fail", "r1", "7to9"),
+    recheck(attempt("f", 2, "fail", "r1", "7to9")),
+    attempt("f", 3, "pass", "r1", "7to9"),
+  ];
+
+  it("counts a rejection and its recheck as one attempt, decided by the recheck", () => {
+    expect(tallyPassRates(rechecked, () => "all")).toEqual([
+      {
+        group: "all",
+        slots: 2,
+        firstAttemptPassed: 1,
+        passed: 2,
+        stuck: 0,
+        firstAttemptPassRate: 0.5,
+        passRate: 1,
+        meanAttempts: 1.5,
+      },
+    ]);
+  });
+
+  it("reports how many rejections were rechecked and taken back", () => {
+    const report = buildPassRateReport({stage: "seed", rows: rechecked});
+    expect(report.rechecked).toBe(2);
+    expect(report.overturned).toBe(1);
+    expect(formatPassRateReport(report)).toContain(
+      "## Rejections validated twice"
+    );
+  });
+
+  it("counts only the rejections that stand", () => {
+    expect(standingRejections(rechecked)).toEqual({e: 0, f: 1});
   });
 });

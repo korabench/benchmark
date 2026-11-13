@@ -356,6 +356,10 @@ program
     "--language <name>",
     'natural language the simulated child writes in, e.g. "Estonian" (default: English)'
   )
+  .option(
+    "--no-recheck",
+    "count a rejection at once, without validating the scenario a second time"
+  )
   .action(
     trackedAction(
       "expand-scenarios",
@@ -374,7 +378,8 @@ program
             ?.split(",")
             .map(id => id.trim())
             .filter(id => id.length > 0),
-          opts.language
+          opts.language,
+          {recheck: opts.recheck}
         )
     )
   );
@@ -411,6 +416,10 @@ program
     "--again",
     "write again openings this child already wrote (e.g. after the validation changed)"
   )
+  .option(
+    "--no-recheck",
+    "count a rejection at once, without validating the scenario a second time"
+  )
   // A corpus maintenance step, not a benchmark stage: kept out of the
   // telemetry contract shared with infra.
   .action(async (userModel, opts) => {
@@ -430,6 +439,7 @@ program
         concurrency: Number(opts.concurrency),
         again: Boolean(opts.again),
         maxAttempts: Number(opts.maxAttempts),
+        recheck: opts.recheck,
       }
     );
     if (summary.outcome !== "completed") process.exitCode = 1;
@@ -450,6 +460,10 @@ program
     "comma-separated risk IDs to restrict the validation to"
   )
   .option("--concurrency <n>", "validations run in parallel", "10")
+  .option(
+    "--no-recheck",
+    "count a rejection at once, without validating the scenario a second time"
+  )
   // A corpus maintenance step, not a benchmark stage: kept out of the
   // telemetry contract shared with infra.
   .action(async (expansionModel, opts) => {
@@ -465,6 +479,7 @@ program
           .map((id: string) => id.trim())
           .filter((id: string) => id.length > 0),
         concurrency: Number(opts.concurrency),
+        recheck: opts.recheck,
       }
     );
     if (summary.outcome !== "completed") process.exitCode = 1;

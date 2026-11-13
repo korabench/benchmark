@@ -3,7 +3,8 @@ import {
   RiskTaxonomy,
   Scenario,
   ScenarioValidation,
-  validateScenario,
+  validateConfirmed,
+  verdictsOf,
 } from "@korabench/benchmark";
 import {Script} from "@korabench/core";
 import * as path from "node:path";
@@ -61,6 +62,9 @@ export function openingValidationPathsFor(
 export interface ValidateOpeningsOptions {
   riskIds?: readonly string[];
   concurrency?: number;
+  /** Validate a rejected opening a second time (`validateConfirmed`).
+   * Default true. */
+  recheck?: boolean;
 }
 
 export async function validateOpeningsCommand(
@@ -113,29 +117,33 @@ export async function validateOpeningsCommand(
       options.concurrency ?? 10,
       async (scenario: Scenario) => {
         try {
-          const verdict = await validateScenario(
+          const confirmed = await validateConfirmed(
             {
               getResponse: async request => ({
                 output: await validator.getStructuredResponse(request),
               }),
             },
             scenario,
-            0
+            0,
+            {recheck: options.recheck}
           );
-          await ledger.record({
-            stage: "opening",
-            key: scenario.seed.id,
-            seedId: scenario.seed.id,
-            verdict: verdict.verdict,
-            questions: ScenarioValidation.questionsOf(verdict.validation),
-            reasons: verdict.reasons,
-            generatorModel: "stored",
-            validatorModel: validatorLabel,
-            ...(verdict.verdict === "fail"
-              ? {rejected: {firstUserMessage: scenario.firstUserMessage}}
-              : {}),
-            population: populationRowOf(scenario.seed, isPrivate),
-          });
+          for (const {verdict, recheck} of verdictsOf(confirmed)) {
+            await ledger.record({
+              stage: "opening",
+              key: scenario.seed.id,
+              seedId: scenario.seed.id,
+              verdict: verdict.verdict,
+              questions: ScenarioValidation.questionsOf(verdict.validation),
+              reasons: verdict.reasons,
+              ...(recheck ? {recheck: true} : {}),
+              generatorModel: "stored",
+              validatorModel: validatorLabel,
+              ...(verdict.verdict === "fail"
+                ? {rejected: {firstUserMessage: scenario.firstUserMessage}}
+                : {}),
+              population: populationRowOf(scenario.seed, isPrivate),
+            });
+          }
           progress.increment(true);
         } catch (error) {
           const message =

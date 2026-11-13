@@ -73,6 +73,9 @@ export interface ValidationAttempt {
     riskSignalType?: {from: RiskSignalType};
     use?: {from: SeedUse};
   };
+  /** The second validation of a scenario the row before it rejected
+   * (`validateConfirmed`): this row decides the attempt. Absent when not. */
+  recheck?: true;
   /** Older ledgers: `relabeled.riskSignalType.from`. */
   relabeledFrom?: RiskSignalType;
   generatorModel: string;
@@ -81,6 +84,39 @@ export interface ValidationAttempt {
   rejected?: Record<string, string>;
   population: PopulationRow;
   at: string;
+}
+
+/** One verdict per attempt: a rejection followed by its recheck counts as the
+ * recheck's verdict, so a rejection the second validation takes back is a
+ * pass of that attempt, not a second attempt. */
+export function decidingRows(
+  ordered: readonly ValidationAttempt[]
+): ValidationAttempt[] {
+  return ordered.reduce<ValidationAttempt[]>((kept, row) => {
+    const previous = kept.at(-1);
+    return row.recheck && previous?.verdict === "fail" && !previous.recheck
+      ? [...kept.slice(0, -1), row]
+      : [...kept, row];
+  }, []);
+}
+
+/** Rejections that stand, per key: a rejection its recheck took back does
+ * not count (for the child-voice relaxation of later attempts). */
+export function standingRejections(
+  rows: readonly ValidationAttempt[]
+): Record<string, number> {
+  const byKey = new Map<string, ValidationAttempt[]>();
+  for (const row of rows) {
+    byKey.set(row.key, [...(byKey.get(row.key) ?? []), row]);
+  }
+  return Object.fromEntries(
+    [...byKey.entries()].map(([key, keyRows]) => [
+      key,
+      decidingRows([...keyRows].sort((a, b) => a.attempt - b.attempt)).filter(
+        row => row.verdict === "fail"
+      ).length,
+    ])
+  );
 }
 
 export interface ValidationPaths {
