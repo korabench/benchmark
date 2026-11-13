@@ -31,11 +31,7 @@ import {
   createSpecModel,
 } from "../profiles/roleModels.js";
 import {buildRunStamp} from "../stamp/buildRunStamp.js";
-import {
-  assertResumable,
-  hasCachedFiles,
-  listCachedFiles,
-} from "./shared/cacheStamp.js";
+import {assertResumable, hasCachedFiles} from "./shared/cacheStamp.js";
 import {createChildSimulator} from "./shared/childSimulator.js";
 import {workSummary} from "./shared/executionSummary.js";
 import {
@@ -50,6 +46,7 @@ import {
   openLedger,
   populationRowOf,
   readLedger,
+  standingRejections,
   validationPathsFor,
 } from "./shared/validationLedger.js";
 
@@ -107,6 +104,116 @@ async function privateSeedFiles(seedsFilePath: string): Promise<string[]> {
     : [];
 }
 
+// Written to the temp folder when seeds were rejected (see the end of
+// `expandScenariosCommand`). Not a scenario file.
+const rejectedMarker = "rejected.marker.json";
+
+/** A seed left without a scenario, as written to the reject file. */
+export interface RejectedSeed {
+  seedId: string;
+  riskId: string;
+  /** "rejected": every attempt was rejected by the validation. "error": the
+   * expansion failed (model error, placeholders left in the opening). */
+  outcome: "rejected" | "error";
+  /** The validator's reasons for the last rejection, or the error. */
+  reasons: string;
+  /** The seed as last tried, relabels included. */
+  seed: ScenarioSeed;
+}
+
+/** `data/scenarios.jsonl` → `data/scenarios.rejected.jsonl`, and the private
+ * seeds' rejects in `data/scenarios.rejected.private.jsonl`. */
+export function rejectedPathsFor(outputFilePath: string): {
+  public: string;
+  private: string;
+} {
+  const {dir, name} = path.parse(outputFilePath);
+  const base = name.replace(/\.private$/, "");
+  return {
+    public: path.join(dir, `${base}.rejected.jsonl`),
+    private: path.join(dir, `${base}.rejected.private.jsonl`),
+  };
+}
+
+async function writeRejected(
+  paths: {public: string; private: string},
+  rows: readonly RejectedSeed[],
+  privateSeedIds: ReadonlySet<string>
+): Promise<void> {
+  const lines = (isPrivate: boolean) =>
+    rows
+      .filter(row => privateSeedIds.has(row.seedId) === isPrivate)
+      .map(row => JSON.stringify(row) + "\n")
+      .join("");
+  await fs.writeFile(paths.public, lines(false));
+  if (privateSeedIds.size > 0) {
+    await fs.writeFile(paths.private, lines(true));
+  }
+}
+
+/**
+ * Write the corpus from the temp folder: every seed that has a scenario, in
+ * input order, to the public or private output, and the rejected seeds to
+ * their own files. The temp folder is left as it is.
+ */
+export async function writeExpansionOutputs(args: {
+  ordered: readonly ScenarioSeed[];
+  tempDir: string;
+  outputFilePath: string;
+  privateOutputFilePath: string;
+  hasPrivateSeeds: boolean;
+  privateSeedIds: ReadonlySet<string>;
+  rejected: readonly RejectedSeed[];
+}): Promise<{
+  publicCount: number;
+  privateCount: number;
+  rejectedPaths: {public: string; private: string};
+}> {
+  const {ordered, tempDir, outputFilePath, privateOutputFilePath} = args;
+  await fs.mkdir(path.dirname(outputFilePath), {recursive: true});
+  let publicCount = 0;
+  let privateCount = 0;
+  await fs.writeFile(outputFilePath, "");
+  if (args.hasPrivateSeeds) {
+    await fs.writeFile(privateOutputFilePath, "");
+  }
+  for (const seed of ordered) {
+    const content = await fs
+      .readFile(path.join(tempDir, `${seed.id}.json`), "utf-8")
+      .catch(() => undefined);
+    if (content === undefined) {
+      continue;
+    }
+    const scenarios = JSON.parse(content) as Scenario[];
+    for (const scenario of scenarios) {
+      const isPrivate = args.privateSeedIds.has(scenario.seed.id);
+      await fs.appendFile(
+        isPrivate ? privateOutputFilePath : outputFilePath,
+        JSON.stringify(scenario) + "\n"
+      );
+      if (isPrivate) {
+        privateCount++;
+      } else {
+        publicCount++;
+      }
+    }
+  }
+  const rejectedPaths = rejectedPathsFor(outputFilePath);
+  const position = new Map(ordered.map((seed, i) => [seed.id, i]));
+  await writeRejected(
+    rejectedPaths,
+    R.sortBy([...args.rejected], row => position.get(row.seedId) ?? 0),
+    args.privateSeedIds
+  );
+  return {publicCount, privateCount, rejectedPaths};
+}
+
+export interface ExpandScenariosOptions {
+  /** Validate a rejected scenario a second time, and count it rejected only
+   * when both verdicts fail (`validateConfirmed`). Default true. */
+  recheck?: boolean;
+}
+
 export async function expandScenariosCommand(
   _program: Program,
   modelsJsonPath: string,
@@ -114,7 +221,8 @@ export async function expandScenariosCommand(
   seedsFilePath: string,
   outputFilePath: string,
   riskIds?: readonly string[],
-  language?: string
+  language?: string,
+  options?: ExpandScenariosOptions
 ) {
   const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
   const {roles} = effective;
@@ -209,10 +317,7 @@ export async function expandScenariosCommand(
   const priorRows = (await readLedger(paths.ledger)).filter(
     row => row.stage === "expansion"
   );
-  const priorRejections = R.countBy(
-    priorRows.filter(row => row.verdict === "fail"),
-    row => row.key
-  );
+  const priorRejections = standingRejections(priorRows);
   // Seeds an earlier run relabeled: each relabel is applied again, the same
   // way, before their chain starts.
   const priorRelabels = new Map<string, {signal: boolean; use: boolean}>();
@@ -244,6 +349,8 @@ export async function expandScenariosCommand(
   );
   let failureCount = 0;
   let reusedCount = 0;
+  // Seeds left without a scenario this run, written next to the output.
+  const rejected: RejectedSeed[] = [];
   await consume(
     flatTransform(
       10,
@@ -296,7 +403,13 @@ export async function expandScenariosCommand(
               }),
               ...(getChildResponse ? {getChildResponse} : {}),
               onValidation: event => {
-                if (event.verdict === "fail") {
+                // A rejection counts once it stands: a recheck that passes
+                // takes the first verdict back.
+                if (event.recheck) {
+                  if (event.verdict === "pass") {
+                    rejections--;
+                  }
+                } else if (event.verdict === "fail") {
                   rejections++;
                 }
                 return ledger.record({
@@ -310,6 +423,7 @@ export async function expandScenariosCommand(
                   ...(event.firstMessageRewrite
                     ? {firstMessageRewrite: true}
                     : {}),
+                  ...(event.recheck ? {recheck: true} : {}),
                   ...(current.relabeled ? {relabeled: current.relabeled} : {}),
                   // The expansion model validates its own output.
                   generatorModel: label,
@@ -334,6 +448,7 @@ export async function expandScenariosCommand(
             try {
               const scenarios = await kora.expandScenario(context, current, {
                 priorRejections: rejections,
+                recheck: options?.recheck,
               });
               return {scenarios};
             } catch (error) {
@@ -405,10 +520,24 @@ export async function expandScenariosCommand(
           console.error(
             `\nExpansion failed for seed ${seed.id} (all models exhausted): ${message.slice(0, 300)}`
           );
+          rejected.push({
+            seedId: seed.id,
+            riskId: seed.riskId,
+            outcome: "error",
+            reasons: message,
+            seed: current,
+          });
         } else {
           console.error(
             `\nValidation failed for seed ${seed.id} (all models exhausted): ${outcome.error.lastReasons}`
           );
+          rejected.push({
+            seedId: seed.id,
+            riskId: seed.riskId,
+            outcome: "rejected",
+            reasons: outcome.error.lastReasons,
+            seed: current,
+          });
         }
         failureCount++;
         progress.increment(false);
@@ -421,48 +550,35 @@ export async function expandScenariosCommand(
   progress.finish();
   await reportValidation();
 
+  // The output holds every seed that has a scenario, in input order, whether
+  // or not other seeds were rejected: a rejected seed does not hold back the
+  // corpus. Rejected seeds go to their own file, with the reasons; the temp
+  // folder is kept so that a re-run tries only them.
+  const ordered: ScenarioSeed[] = [];
+  for await (const seed of readSeedsFromFiles(seedPaths, riskIdFilter)) {
+    ordered.push(seed);
+  }
+  const {publicCount, privateCount, rejectedPaths} =
+    await writeExpansionOutputs({
+      ordered,
+      tempDir,
+      outputFilePath,
+      privateOutputFilePath,
+      hasPrivateSeeds: privateSeedPaths.length > 0,
+      privateSeedIds,
+      rejected,
+    });
   if (failureCount > 0) {
-    console.log(
-      `\n${failureCount} seeds failed validation. Temp files kept at ${tempDir} for restart.`
+    // Marks the temp folder as a run in progress even when no seed passed,
+    // so that the next run resumes (ledger and relabels kept) instead of
+    // starting over.
+    await fs.writeFile(
+      path.join(tempDir, rejectedMarker),
+      JSON.stringify(rejected.map(row => row.seedId)) + "\n"
     );
-    console.log(`Re-run the command to retry failed seeds.`);
-    return workSummary(
-      "seed",
-      totalSeeds,
-      totalSeeds - failureCount,
-      failureCount,
-      reusedCount
-    );
+  } else {
+    await fs.rm(tempDir, {recursive: true, force: true});
   }
-
-  // Build final output from temp files.
-  await fs.mkdir(outputDir, {recursive: true});
-  const tempFiles = await listCachedFiles(tempDir);
-  let publicCount = 0;
-  let privateCount = 0;
-
-  await fs.writeFile(outputFilePath, "");
-  if (privateSeedPaths.length > 0) {
-    await fs.writeFile(privateOutputFilePath, "");
-  }
-  for (const file of tempFiles) {
-    const content = await fs.readFile(path.join(tempDir, file), "utf-8");
-    const scenarios = JSON.parse(content) as Scenario[];
-    for (const scenario of scenarios) {
-      const isPrivate = privateSeedIds.has(scenario.seed.id);
-      await fs.appendFile(
-        isPrivate ? privateOutputFilePath : outputFilePath,
-        JSON.stringify(scenario) + "\n"
-      );
-      if (isPrivate) {
-        privateCount++;
-      } else {
-        publicCount++;
-      }
-    }
-  }
-
-  await fs.rm(tempDir, {recursive: true, force: true});
 
   console.log(
     privateOutputFilePath === outputFilePath || privateCount === 0
@@ -470,6 +586,12 @@ export async function expandScenariosCommand(
       : `\nExpanded ${publicCount} public scenarios → ${outputFilePath}\n` +
           `Expanded ${privateCount} private scenarios → ${privateOutputFilePath}`
   );
+  if (failureCount > 0) {
+    console.log(
+      `\n${failureCount} seed(s) have no scenario: ${rejectedPaths.public}${privateSeedIds.size > 0 ? ` (private seeds: ${rejectedPaths.private})` : ""}, with the reasons. Temp files kept at ${tempDir}: re-run the same command to try only them.`
+    );
+    process.exitCode = 1;
+  }
   return workSummary(
     "seed",
     totalSeeds,

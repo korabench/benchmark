@@ -1,5 +1,8 @@
 import type {ExpandScenarioContext} from "./benchmark.js";
-import {generateFirstUserMessage} from "./generateUserMessage.js";
+import {
+  generateFirstUserMessage,
+  PlaceholderError,
+} from "./generateUserMessage.js";
 import {Risk} from "./model/risk.js";
 import {RiskCategory} from "./model/riskCategory.js";
 import {Scenario} from "./model/scenario.js";
@@ -34,6 +37,9 @@ export interface OpeningVerdict {
   /** Failed, and only on the questions about the first user message: a new
    * opening can fix it. A failure on the scenario cannot be fixed that way. */
   readonly firstMessageOnly: boolean;
+  /** The first verdict, a fail, when this verdict is its second validation
+   * (`validateConfirmed`). Absent when the scenario was validated once. */
+  readonly rechecked?: OpeningVerdict;
 }
 
 /** One validation call on `scenario` as it stands, opening included.
@@ -96,6 +102,67 @@ export async function validateScenario(
   };
 }
 
+/**
+ * The verdict a decision rests on: a rejected scenario is validated a second
+ * time, and the second verdict decides. The validator is not stable (asked
+ * again on the same V7.1 scenarios, it took back 59 of 409 rejections), so a
+ * single "fail" is not enough to rewrite or re-expand a scenario. A pass is
+ * not asked twice. Costs one more validation per first rejection.
+ */
+export async function validateConfirmed(
+  c: Pick<ExpandScenarioContext, "getResponse">,
+  scenario: Scenario,
+  rejections: number,
+  options?: {recheck?: boolean}
+): Promise<OpeningVerdict> {
+  const first = await validateScenario(c, scenario, rejections);
+  if (first.verdict === "pass" || options?.recheck === false) {
+    return first;
+  }
+  const second = await validateScenario(c, scenario, rejections);
+  return {...second, rechecked: first};
+}
+
+/** Every verdict behind `verdict`, in the order they were given, each with
+ * whether it is a recheck: the ledger records both. */
+export function verdictsOf(
+  verdict: OpeningVerdict
+): readonly {readonly verdict: OpeningVerdict; readonly recheck: boolean}[] {
+  return verdict.rechecked
+    ? [
+        {verdict: verdict.rechecked, recheck: false},
+        {verdict, recheck: true},
+      ]
+    : [{verdict, recheck: false}];
+}
+
+/** The opening, or the placeholder error that stopped it. */
+export async function openingOrPlaceholder(
+  c: OpeningValidationContext,
+  risk: Risk,
+  scenario: Scenario,
+  feedback: FirstUserMessageFeedback | undefined
+): Promise<
+  | {firstUserMessage: string; placeholder?: undefined}
+  | {placeholder: PlaceholderError}
+> {
+  try {
+    return {
+      firstUserMessage: await generateFirstUserMessage(
+        c,
+        risk,
+        scenario,
+        feedback
+      ),
+    };
+  } catch (error) {
+    if (error instanceof PlaceholderError) {
+      return {placeholder: error};
+    }
+    throw error;
+  }
+}
+
 export interface WrittenOpening {
   readonly firstUserMessage: string;
   /** The verdict on the opening kept: the last one written. */
@@ -123,10 +190,15 @@ export async function writeValidatedOpening(
      * at expansion, whose opening alone changed: the checklist then fails on
      * the new opening (e.g. a narrative the message no longer matches). */
     retryAnyRejection?: boolean;
+    /** See `validateConfirmed`. Default true. */
+    recheck?: boolean;
+    /** Called once per verdict: twice for a rechecked opening, the second
+     * with `recheck` set. */
     onVerdict?: (event: {
       attempt: number;
       firstUserMessage: string;
       verdict: OpeningVerdict;
+      recheck: boolean;
     }) => void | Promise<void>;
   }
 ): Promise<WrittenOpening> {
@@ -137,18 +209,35 @@ export async function writeValidatedOpening(
   let feedback: FirstUserMessageFeedback | undefined;
   let rejections = options.priorRejections ?? 0;
   for (let attempt = 1; ; attempt++) {
-    const firstUserMessage = await generateFirstUserMessage(
-      c,
-      risk,
-      scenario,
-      feedback
-    );
-    const verdict = await validateScenario(
+    const written = await openingOrPlaceholder(c, risk, scenario, feedback);
+    if (written.placeholder) {
+      // An unfilled template is a rejected opening, not an error: written
+      // again with the reason, as long as attempts remain.
+      if (attempt >= options.maxAttempts) {
+        throw written.placeholder;
+      }
+      rejections++;
+      feedback = {
+        previousMessage: written.placeholder.output,
+        reasons: [PlaceholderError.reason],
+      };
+      continue;
+    }
+    const {firstUserMessage} = written;
+    const verdict = await validateConfirmed(
       c,
       {...scenario, firstUserMessage},
-      rejections
+      rejections,
+      {recheck: options.recheck}
     );
-    await options.onVerdict?.({attempt, firstUserMessage, verdict});
+    for (const given of verdictsOf(verdict)) {
+      await options.onVerdict?.({
+        attempt,
+        firstUserMessage,
+        verdict: given.verdict,
+        recheck: given.recheck,
+      });
+    }
     if (
       verdict.verdict === "pass" ||
       (!verdict.firstMessageOnly && !options.retryAnyRejection) ||

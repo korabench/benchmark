@@ -1,6 +1,12 @@
 import {describe, expect, it, vi} from "vitest";
+import {PlaceholderError} from "../generateUserMessage.js";
 import {ScenarioValidation} from "../model/scenarioValidation.js";
-import {validateScenario, writeValidatedOpening} from "../validateOpening.js";
+import {
+  validateConfirmed,
+  validateScenario,
+  verdictsOf,
+  writeValidatedOpening,
+} from "../validateOpening.js";
 import {answeringRiskCalls, createScenario} from "./fixtures.js";
 
 //
@@ -78,6 +84,70 @@ describe("the risk question", () => {
   });
 });
 
+describe("validateConfirmed", () => {
+  const rejected = validation({verdict: "fail", reasons: "Implausible."});
+
+  it("asks once when the scenario passes", async () => {
+    const c = context([validation(), rejected], []);
+    const verdict = await validateConfirmed(c as never, scenario, 0);
+    expect(verdict.verdict).toBe("pass");
+    expect(verdict.rechecked).toBeUndefined();
+    expect(verdictsOf(verdict)).toHaveLength(1);
+  });
+
+  it("passes a rejection the second validation takes back, and keeps both", async () => {
+    const c = context([rejected, validation()], []);
+    const verdict = await validateConfirmed(c as never, scenario, 0);
+    expect(verdict.verdict).toBe("pass");
+    expect(verdict.rechecked?.verdict).toBe("fail");
+    expect(
+      verdictsOf(verdict).map(v => [v.verdict.verdict, v.recheck])
+    ).toEqual([
+      ["fail", false],
+      ["pass", true],
+    ]);
+  });
+
+  it("rejects only when both validations fail, on the second one's reasons", async () => {
+    const second = validation({verdict: "fail", reasons: "Still implausible."});
+    const c = context([rejected, second], []);
+    const verdict = await validateConfirmed(c as never, scenario, 0);
+    expect(verdict.verdict).toBe("fail");
+    expect(verdict.reasons).toContain("Still implausible.");
+  });
+
+  it("asks once with recheck off", async () => {
+    const c = context([rejected, validation()], []);
+    const verdict = await validateConfirmed(c as never, scenario, 0, {
+      recheck: false,
+    });
+    expect(verdict.verdict).toBe("fail");
+    expect(verdict.rechecked).toBeUndefined();
+  });
+});
+
+describe("writeValidatedOpening with recheck", () => {
+  it("reports both verdicts of a rechecked opening, the second marked", async () => {
+    const c = context(
+      [validation({firstMessageShowsUse: no}), validation()],
+      ["first"]
+    );
+    const events: [string, boolean][] = [];
+    const written = await writeValidatedOpening(c as never, scenario, {
+      maxAttempts: 2,
+      onVerdict: e => {
+        events.push([e.verdict.verdict, e.recheck]);
+      },
+    });
+    expect(written.attempts).toBe(1);
+    expect(written.last.verdict).toBe("pass");
+    expect(events).toEqual([
+      ["fail", false],
+      ["pass", true],
+    ]);
+  });
+});
+
 describe("writeValidatedOpening", () => {
   it("retries a rejection of the scenario with retryAnyRejection", async () => {
     const c = context(
@@ -91,6 +161,7 @@ describe("writeValidatedOpening", () => {
       ["mismatch", "matches"]
     );
     const written = await writeValidatedOpening(c as never, scenario, {
+      recheck: false,
       maxAttempts: 2,
       retryAnyRejection: true,
     });
@@ -101,6 +172,7 @@ describe("writeValidatedOpening", () => {
   it("keeps the first opening that passes", async () => {
     const c = context([validation()], ["first"]);
     const written = await writeValidatedOpening(c as never, scenario, {
+      recheck: false,
       maxAttempts: 2,
     });
     expect(written).toMatchObject({firstUserMessage: "first", attempts: 1});
@@ -114,6 +186,7 @@ describe("writeValidatedOpening", () => {
     );
     const verdicts: string[] = [];
     const written = await writeValidatedOpening(c as never, scenario, {
+      recheck: false,
       maxAttempts: 2,
       onVerdict: e => {
         verdicts.push(`${e.firstUserMessage}:${e.verdict.verdict}`);
@@ -128,6 +201,7 @@ describe("writeValidatedOpening", () => {
   it("does not retry a rejection of the scenario itself", async () => {
     const c = context([validation({showsUse: no})], ["only"]);
     const written = await writeValidatedOpening(c as never, scenario, {
+      recheck: false,
       maxAttempts: 2,
     });
     expect(written.attempts).toBe(1);
@@ -144,9 +218,38 @@ describe("writeValidatedOpening", () => {
       ["one", "two"]
     );
     const written = await writeValidatedOpening(c as never, scenario, {
+      recheck: false,
       maxAttempts: 2,
     });
     expect(written).toMatchObject({firstUserMessage: "two", attempts: 2});
     expect(written.last.verdict).toBe("fail");
+  });
+});
+
+describe("an opening that keeps a placeholder", () => {
+  it("is written again with the reason, not an error", async () => {
+    const openings = ["hi [name]", "hi [friend]", "hi [teacher]", "hi Sam"];
+    let o = 0;
+    const getChildResponse = vi.fn(async (request: {feedback?: unknown}) => ({
+      output: openings[o++] ?? "",
+      feedback: request.feedback,
+    }));
+    const c = {...context([validation()], []), getChildResponse};
+    const written = await writeValidatedOpening(c as never, scenario, {
+      maxAttempts: 2,
+      recheck: false,
+    });
+    expect(written.firstUserMessage).toBe("hi Sam");
+    expect(getChildResponse.mock.calls[3]![0].feedback).toEqual({
+      previousMessage: "hi [teacher]",
+      reasons: [PlaceholderError.reason],
+    });
+  });
+
+  it("throws the placeholder once the attempts are spent", async () => {
+    const c = context([validation()], ["a [x1]", "b [x2]", "c [x3]"]);
+    await expect(
+      writeValidatedOpening(c as never, scenario, {maxAttempts: 1})
+    ).rejects.toBeInstanceOf(PlaceholderError);
   });
 });

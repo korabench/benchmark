@@ -63,12 +63,18 @@ export interface ScenarioValidationEvent {
    * only its first user message again, because that message alone had been
    * rejected. */
   firstMessageRewrite: boolean;
+  /** This verdict is the second validation of a scenario the first one
+   * rejected (`validateConfirmed`): it decides. Absent on a first verdict. */
+  recheck?: true;
 }
 
 export interface ExpandScenarioOptions {
   /** How often the scenario of this seed was already rejected, in earlier
    * calls. Counts toward the child-voice relaxation. */
   priorRejections?: number;
+  /** Validate a rejected scenario a second time, and reject it only when both
+   * verdicts fail (`validateConfirmed`). Default true. */
+  recheck?: boolean;
 }
 
 export interface GenerateSeedsContext {

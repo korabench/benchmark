@@ -14,8 +14,8 @@ import {
   TraceEvent,
 } from "./benchmark.js";
 import {
-  generateFirstUserMessage,
   generateNextUserMessage,
+  PlaceholderError,
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {AssistantTurn} from "./model/assistantTurn.js";
@@ -62,7 +62,11 @@ import {planSeedSlots, SeedSlot} from "./seedSlots.js";
 import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
-import {validateScenario} from "./validateOpening.js";
+import {
+  openingOrPlaceholder,
+  validateConfirmed,
+  verdictsOf,
+} from "./validateOpening.js";
 
 export {DEFAULT_PRIVATE_RATIO, DEFAULT_TOTAL_SEEDS} from "./seedSlots.js";
 
@@ -417,38 +421,54 @@ export const kora = Benchmark.new({
         ...modelScenario,
         ...stampField(),
       };
+      const opening = await openingOrPlaceholder(
+        c,
+        risk,
+        draft,
+        messageFeedback
+      );
+      if (opening.placeholder) {
+        // An unfilled template: the scenario stands, its opening is written
+        // again with the reason, as after any first-message rejection.
+        lastReasons = PlaceholderError.reason;
+        keptScenario = modelScenario;
+        messageFeedback = {
+          previousMessage: opening.placeholder.output,
+          reasons: [PlaceholderError.reason],
+        };
+        continue;
+      }
       const scenario: Scenario = {
         ...draft,
-        firstUserMessage: await generateFirstUserMessage(
-          c,
-          risk,
-          draft,
-          messageFeedback
-        ),
+        firstUserMessage: opening.firstUserMessage,
       };
 
+      const confirmed = await validateConfirmed(
+        c,
+        scenario,
+        (options?.priorRejections ?? 0) + attempt,
+        {recheck: options?.recheck}
+      );
+      for (const given of verdictsOf(confirmed)) {
+        await c.onValidation?.({
+          seed,
+          attempt: attempt + 1,
+          maxAttempts,
+          scenario,
+          validation: given.verdict.validation,
+          verdict: given.verdict.verdict,
+          reasons: given.verdict.reasons,
+          childVoiceRelaxed: given.verdict.childVoiceRelaxed,
+          firstMessageRewrite,
+          ...(given.recheck ? {recheck: true as const} : {}),
+        });
+      }
       const {
         validation,
         verdict,
         reasons,
         childVoiceRelaxed: relaxChildVoice,
-      } = await validateScenario(
-        c,
-        scenario,
-        (options?.priorRejections ?? 0) + attempt
-      );
-
-      await c.onValidation?.({
-        seed,
-        attempt: attempt + 1,
-        maxAttempts,
-        scenario,
-        validation,
-        verdict,
-        reasons,
-        childVoiceRelaxed: relaxChildVoice,
-        firstMessageRewrite,
-      });
+      } = confirmed;
 
       if (verdict === "pass") {
         return [scenario];

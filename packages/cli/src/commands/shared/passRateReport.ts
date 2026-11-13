@@ -2,6 +2,7 @@ import {ValidationAnswer} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import * as R from "remeda";
 import {
+  decidingRows,
   PopulationRow,
   ValidationAttempt,
   ValidationPaths,
@@ -63,6 +64,10 @@ export interface PassRateReport {
   /** Slots whose pass came after their risk signal type was relabeled, with
    * the assigned value and the one they passed with. */
   relabeledPasses: readonly RelabeledSlot[];
+  /** Rejections validated a second time (`recheck` rows), and how many of
+   * those the second verdict passed. */
+  rechecked: number;
+  overturned: number;
   stuck: readonly StuckSlot[];
 }
 
@@ -80,7 +85,7 @@ function slotOutcomes(rows: readonly ValidationAttempt[]): SlotOutcome[] {
     R.groupBy(row => row.key),
     R.entries(),
     R.map(([key, slotRows]) => {
-      const ordered = R.sortBy(slotRows, row => row.attempt);
+      const ordered = decidingRows(R.sortBy(slotRows, row => row.attempt));
       const firstPass = ordered.findIndex(row => row.verdict === "pass");
       return {
         key,
@@ -219,6 +224,9 @@ export function buildPassRateReport(args: {
       row => row.questions?.childWouldWrite?.answer === "no"
     ).length,
     relabeledPasses,
+    rechecked: rows.filter(row => row.recheck).length,
+    overturned: rows.filter(row => row.recheck && row.verdict === "pass")
+      .length,
     stuck,
   };
 }
@@ -282,6 +290,15 @@ export function formatPassRateReport(report: PassRateReport): string {
           "",
         ]
       : [];
+  const rechecked =
+    report.rechecked > 0
+      ? [
+          "## Rejections validated twice",
+          "",
+          `${report.rechecked} rejection(s) were validated a second time before counting; the second verdict passed ${report.overturned} of them. Only a scenario both verdicts reject is rewritten or expanded again.`,
+          "",
+        ]
+      : [];
   const stuck =
     report.stuck.length > 0
       ? [
@@ -314,6 +331,7 @@ export function formatPassRateReport(report: PassRateReport): string {
     ...failedQuestions,
     ...relaxed,
     ...relabeled,
+    ...rechecked,
     ...stuck,
   ].join("\n");
 }

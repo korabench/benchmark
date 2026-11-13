@@ -45,6 +45,7 @@ import {
   openLedger,
   populationRowOf,
   readLedger as readValidationLedger,
+  standingRejections,
   validationPathsFor,
   type Ledger,
 } from "./shared/validationLedger.js";
@@ -110,6 +111,14 @@ const VLedgerRow = v.object({
 });
 
 type LedgerRow = v.InferOutput<typeof VLedgerRow>;
+
+/** The scenarios whose opening could not be written: `x/scenarios.jsonl` →
+ * `x/scenarios.rejected.jsonl`, and `x/s.private.jsonl` →
+ * `x/s.private.rejected.jsonl`, private like its output. */
+export function rejectedOpeningsPathFor(outputFilePath: string): string {
+  const {dir, name} = path.parse(outputFilePath);
+  return path.join(dir, `${name}.rejected.jsonl`);
+}
 
 /**
  * One ledger per output, always private: `x/scenarios.jsonl` →
@@ -191,7 +200,8 @@ async function writeOpening(
   ledger: Ledger,
   isPrivate: boolean,
   priorRejections: number,
-  maxAttempts: number
+  maxAttempts: number,
+  recheck: boolean
 ): Promise<Omit<LedgerRow, "seedId" | "stampHash">> {
   const language = scenario.stamp?.language;
   if (withChildSimulator && language && language !== "English") {
@@ -227,7 +237,8 @@ async function writeOpening(
     priorRejections,
     // The scenario passed validation at expansion; only its opening changed.
     retryAnyRejection: true,
-    onVerdict: ({firstUserMessage, verdict}) =>
+    recheck,
+    onVerdict: ({firstUserMessage, verdict, recheck: isRecheck}) =>
       ledger.record({
         stage: "opening",
         key: scenario.seed.id,
@@ -236,6 +247,7 @@ async function writeOpening(
         questions: ScenarioValidation.questionsOf(verdict.validation),
         reasons: verdict.reasons,
         ...(verdict.childVoiceRelaxed ? {childVoiceRelaxed: true} : {}),
+        ...(isRecheck ? {recheck: true} : {}),
         generatorModel: withChildSimulator
           ? MimesisPatch.recipeRef().id
           : "user",
@@ -260,6 +272,9 @@ export interface ReviseOpeningsOptions {
   again?: boolean;
   /** Validated openings per scenario (default 2). */
   maxAttempts?: number;
+  /** Validate a rejected opening a second time (`validateConfirmed`).
+   * Default true. */
+  recheck?: boolean;
 }
 
 export async function reviseOpeningsCommand(
@@ -275,7 +290,10 @@ export async function reviseOpeningsCommand(
   if (path.resolve(inputFilePath) === path.resolve(outputFilePath)) {
     throw new Error("The output must be a new file, not the input.");
   }
-  if (await fileExists(outputFilePath)) {
+  // An output written with openings that failed is unfinished: its reject
+  // file says so, and a re-run of the same command completes it.
+  const rejectedPath = rejectedOpeningsPathFor(outputFilePath);
+  if ((await fileExists(outputFilePath)) && !(await fileExists(rejectedPath))) {
     throw new Error(
       `${outputFilePath} already exists: revise-openings never overwrites a corpus. Choose a new path.`
     );
@@ -370,18 +388,17 @@ export async function reviseOpeningsCommand(
   const validationLedger = await openLedger(validationPaths.ledger, {
     fresh: done.size === 0,
   });
-  const priorRejections = R.countBy(
+  const priorRejections = standingRejections(
     (await readValidationLedger(validationPaths.ledger)).filter(
-      row => row.stage === "opening" && row.verdict === "fail"
-    ),
-    row => row.key
+      row => row.stage === "opening"
+    )
   );
   await fs.mkdir(path.dirname(outputFilePath), {recursive: true});
   const progress = Script.progress(scenarios.length, text =>
     process.stdout.write(text)
   );
   R.times(scenarios.length - pending.length, () => progress.increment(true));
-  const failures: string[] = [];
+  const failures: {seedId: string; reasons: string}[] = [];
   await consume(
     transform(
       options.concurrency ?? 10,
@@ -395,7 +412,8 @@ export async function reviseOpeningsCommand(
             validationLedger,
             isPrivatePath(inputFilePath),
             priorRejections[scenario.seed.id] ?? 0,
-            options.maxAttempts ?? defaultMaxOpeningAttempts
+            options.maxAttempts ?? defaultMaxOpeningAttempts,
+            options.recheck ?? true
           );
           const row: LedgerRow = {
             seedId: scenario.seed.id,
@@ -411,7 +429,7 @@ export async function reviseOpeningsCommand(
           console.error(
             `\nOpening failed for seed ${scenario.seed.id}: ${message.slice(0, 300)}`
           );
-          failures.push(scenario.seed.id);
+          failures.push({seedId: scenario.seed.id, reasons: message});
           progress.increment(false);
         }
       },
@@ -421,21 +439,13 @@ export async function reviseOpeningsCommand(
   progress.finish();
 
   const reused = scenarios.length - pending.length;
-  if (failures.length > 0) {
-    console.log(
-      `\n${failures.length} opening(s) failed. Re-run the same command to retry them; ${ledgerPath} keeps the others.`
-    );
-    return workSummary(
-      "seed",
-      scenarios.length,
-      scenarios.length - failures.length,
-      failures.length,
-      reused
-    );
-  }
-
+  // The corpus is written whatever failed: a scenario whose opening could not
+  // be written keeps its stored one, and is listed in the reject file.
   const revised = scenarios.map(scenario => {
-    const row = done.get(scenario.seed.id)!;
+    const row = done.get(scenario.seed.id);
+    if (!row) {
+      return scenario;
+    }
     return reviseOpening(scenario, row.firstUserMessage, {
       reason: row.manualFill ? `${reason}; ${row.manualFill}` : reason,
       ...(childSimulator ? {childSimulator} : {}),
@@ -446,7 +456,7 @@ export async function reviseOpeningsCommand(
     outputFilePath,
     revised.map(scenario => JSON.stringify(scenario) + "\n").join("")
   );
-  const rows = scenarios.map(s => done.get(s.seed.id)!);
+  const rows = scenarios.flatMap(s => done.get(s.seed.id) ?? []);
   const outcomes = R.countBy(
     rows.flatMap(row => row.outcome ?? []),
     outcome => outcome.status
@@ -471,5 +481,30 @@ export async function reviseOpeningsCommand(
   console.log(
     `Report → ${validationPaths.reportMd} (and .json); every verdict → ${validationPaths.ledger}`
   );
+  if (failures.length > 0) {
+    await fs.writeFile(
+      rejectedPath,
+      failures
+        .map(
+          failure =>
+            JSON.stringify({
+              seedId: failure.seedId,
+              reasons: failure.reasons,
+            }) + "\n"
+        )
+        .join("")
+    );
+    console.log(
+      `\n${failures.length} opening(s) could not be written; those scenarios keep their stored opening and are listed in ${rejectedPath}. Re-run the same command to retry them.`
+    );
+    return workSummary(
+      "seed",
+      scenarios.length,
+      scenarios.length - failures.length,
+      failures.length,
+      reused
+    );
+  }
+  await fs.rm(rejectedPath, {force: true});
   return workSummary("seed", scenarios.length, scenarios.length, 0, reused);
 }

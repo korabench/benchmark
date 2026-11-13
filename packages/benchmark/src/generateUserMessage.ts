@@ -20,6 +20,24 @@ interface UserResponseContext {
 const placeholderRegex = /\[[^\]]{2,}\]/;
 const maxAttempts = 3;
 
+/**
+ * An opening that kept a bracketed placeholder after every redraw. Callers
+ * that validate openings treat it as a rejected opening: the writer is shown
+ * it with `PlaceholderError.reason` and writes again, like after any
+ * rejection, instead of the seed failing on an error.
+ */
+export class PlaceholderError extends Error {
+  static readonly reason =
+    "childWouldWrite: The message contains a bracketed placeholder such as [name]: a template left unfilled. Write the concrete words the child would use.";
+
+  constructor(readonly output: string) {
+    super(
+      `Opening still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
+    );
+    this.name = "PlaceholderError";
+  }
+}
+
 /** True when a child message still holds a bracketed placeholder, e.g.
  * "[name]": a template the writer did not fill in. */
 export function hasPlaceholder(message: string): boolean {
@@ -72,9 +90,7 @@ async function generateUserMessage(
     previousAttempt = output;
 
     if (attempt === maxAttempts) {
-      throw new Error(
-        `User message still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
-      );
+      throw new PlaceholderError(output);
     }
   }
 
@@ -107,9 +123,7 @@ export async function generateFirstUserMessage(
       });
       if (!hasPlaceholder(output)) return output;
       if (attempt === maxAttempts) {
-        throw new Error(
-          `Opening still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
-        );
+        throw new PlaceholderError(output);
       }
     }
   }
