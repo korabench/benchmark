@@ -228,10 +228,17 @@ largest-remainder + shuffle treatment as the demographics, and the chosen flavor
 is pinned into both the seed and expansion prompts. A flavor may override the
 risk's `conversationLength`. Risks without flavors skip this step.
 
-### 6. Memory — from the risk
+### 6. Memory — from the risk, and from the situation type
 
-A seed can carry `memory: established` on a risk allocated without it, set by
-hand and recorded under `relabeled.memory`. It is for a situation type that
+`established` when the risk sets `provideUserContext`, or when the seed's
+situation type sets `signalInContext` (`data/situationTypes.json`; today
+"Context-signalled displacement" only). `none` otherwise. The situation type
+is drawn later than the other dimensions, so memory is set from it after the
+draw, and draws nothing.
+
+Before `signalInContext`, the same was done by hand on V7.1: a seed carried
+`memory: established` on a risk allocated without it, recorded under
+`relabeled.memory`. It is for a situation type that
 puts the signal in the session context the assistant is given (sensorimotor
 displacement's "context-signalled displacement"): without a memory nothing
 carries that context to the assistant, and the first message cannot test the
@@ -239,8 +246,6 @@ risk without the child stating what the type says the child does not write. On
 such a seed the expansion prompt asks for a memory that holds that context and
 no relationship with the assistant, and `firstMessageTestsRisk` reads the first
 message together with the memory.
-
-`established` when the risk sets `provideUserContext`, `none` otherwise.
 
 ### 7. Situation type — even across the gold standard's types, per age band
 
@@ -379,6 +384,23 @@ pairing is merely unusual: a rule can take seeds away from a signal type. Most
 rules were written from the definitions ahead of the evidence: the validation
 ledger of a full run (about four seeds per situation type × signal type) is
 what confirms or removes each one, through `firstMessageShowsSignalType`.
+Rules added from the V7.1 repair (12 Nov 2026), where every expansion attempt
+of a seed was rejected on the value and the validator's reason is a
+contradiction between definitions: `regulated_and_illegal_activities` /
+"Direct request" forbids `companionship` and `entertainment` (moved to
+`learning`). The other values that repair moved, one seed each, are on a watch
+list: a second seed failing the same way turns one into a rule.
+
+| Risk                                      | Situation type                                          | Value moved                                                |
+| ----------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------- |
+| academic_dishonesty_and_misuse            | Marginal academic help                                  | signal `ambiguous` → `subtle`; use `creative` → `homework` |
+| cognitive_atrophy_and_dependency          | Cumulative dependency                                   | signal `ambiguous` → `subtle`                              |
+| privacy_and_personal_data_protection      | Account / data flow                                     | signal `ambiguous` → `subtle`                              |
+| regulated_and_illegal_activities          | Reframed request                                        | signal `ambiguous` → `subtle`                              |
+| sensorimotor_displacement                 | Advisory displacement (another screen is the displacer) | signal `ambiguous` → `subtle`                              |
+| sexual_violence_and_abuse                 | Reframed request                                        | signal `ambiguous` → `subtle`                              |
+| factual_hallucinations_and_misinformation | High-stakes domain request                              | use `learning` → `health_advice`                           |
+
 Situation types whose risk lies in the model's reply rather than in the
 child's message (bias, cognitive mismatch, LLM-side manipulation…) are not
 handled here: a whole risk can be of that kind, so a rule would remove a

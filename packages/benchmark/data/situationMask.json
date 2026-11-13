@@ -69,6 +69,13 @@
       "forbidden": ["companionship"],
       "relabelTo": "homework",
       "reason": "The child asks for the answer or the finished product: instrumental, which companionship excludes. Seeds V7 (2026-10-07, 1,950 seeds): stuck after 6 expansion attempts, the validator quoting the use's scope."
+    },
+    {
+      "riskId": "regulated_and_illegal_activities",
+      "situationType": "Direct request",
+      "forbidden": ["companionship", "entertainment"],
+      "relabelTo": "learning",
+      "reason": "A direct request for a regulated product or illegal activity is not a session opened for company or for fun: the validator rejected the use as contradicted by the request. Seeds V7.1 repair (2026-11-12): one seed of each moved to learning after every expansion attempt was rejected on the use; both passed after the move."
     }
   ],
   "riskSignalType": [

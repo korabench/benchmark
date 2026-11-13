@@ -316,3 +316,46 @@ describe("situation mask in the allocation (75 seeds per risk)", () => {
     );
   });
 });
+
+describe("memory by situation type", () => {
+  const corpus = allocateCorpus(mask);
+  const contextSignalled = (c: Allocated) =>
+    c.assignment.situation?.situationType === "Context-signalled displacement";
+
+  it("gives a memory to every seed whose situation type puts the signal in the session context", () => {
+    const seeds = corpus.filter(contextSignalled);
+    expect(seeds.length).toBeGreaterThan(0);
+    expect(seeds.every(c => c.assignment.memory === "established")).toBe(true);
+  });
+
+  it("leaves the other seeds of that risk to the risk's own default", () => {
+    const others = corpus.filter(
+      c => c.riskId === "sensorimotor_displacement" && !contextSignalled(c)
+    );
+    expect(others.length).toBeGreaterThan(0);
+    expect(others.every(c => c.assignment.memory === "none")).toBe(true);
+  });
+});
+
+describe("a direct request for a regulated product", () => {
+  it("is never a companionship or entertainment session, and moves to learning", () => {
+    ["companionship", "entertainment"].forEach(use => {
+      expect(
+        SituationMask.allowsUse(
+          mask,
+          "regulated_and_illegal_activities",
+          "Direct request",
+          use as never
+        )
+      ).toBe(false);
+      expect(
+        SituationMask.relabeledUseFor(
+          mask,
+          "regulated_and_illegal_activities",
+          "Direct request",
+          use as never
+        )
+      ).toBe("learning");
+    });
+  });
+});
