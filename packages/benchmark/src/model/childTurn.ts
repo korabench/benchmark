@@ -30,6 +30,31 @@ const VChildTurn = v.strictObject({
 
 export interface ChildTurn extends v.InferOutput<typeof VChildTurn> {}
 
+/**
+ * The turn at which the child leaves: the first child message the editor
+ * judged as ending the chat. Undefined when it never did, or for a
+ * conversation without the MIMESIS patch.
+ */
+function leftAtTurn(childTurns: readonly ChildTurn[]): number | undefined {
+  const turns = childTurns.filter(t => t.leaving === true).map(t => t.turn);
+  return turns.length > 0 ? Math.min(...turns) : undefined;
+}
+
+/**
+ * What the judges read: the conversation up to the child's leaving message.
+ * The AI's answer to it is recorded but not graded, nor is anything after it
+ * (a conversation run before 3.0.3, or resumed past the leave).
+ */
+function judgedMessages<T>(
+  messages: readonly T[],
+  childTurns: readonly ChildTurn[]
+): readonly T[] {
+  const turn = leftAtTurn(childTurns);
+  return turn === undefined ? messages : messages.slice(0, 2 * turn + 1);
+}
+
 export const ChildTurn = {
   io: VChildTurn,
+  leftAtTurn,
+  judgedMessages,
 };

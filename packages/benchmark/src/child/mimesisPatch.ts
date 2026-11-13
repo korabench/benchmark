@@ -25,6 +25,13 @@ export interface ChildResponseRequest {
    * for an opening, which `revise-openings` writes into the corpus once; runs
    * always send the stored one. */
   readonly messages: readonly ModelMessage[];
+  /** An opening the scenario validation rejected, and why. Openings only:
+   * the draft model and the editor are both shown it, so that the new draw
+   * does not repeat what was rejected. */
+  readonly feedback?: {
+    readonly previousMessage: string;
+    readonly reasons: readonly string[];
+  };
 }
 
 export interface PatchOutcome {
@@ -196,11 +203,13 @@ function correction(
     ...Object.keys(fields),
     "actual_public_history",
     "original_scenario_and_profile",
+    "rejected_previous_opening",
   ]);
   if (
     data.issues.some(issue =>
       issue.source_fields.some(
         field =>
+          !field.startsWith("rejected_previous_opening.") &&
           !allowed.has(field.replace(/^original_scenario_and_profile\./, ""))
       )
     )
@@ -238,6 +247,7 @@ function create(options: MimesisPatchOptions) {
   return async ({
     scenario,
     messages,
+    feedback,
   }: ChildResponseRequest): Promise<ChildResponse> => {
     if (
       messages.length % 2 !== 0 ||
@@ -250,6 +260,9 @@ function create(options: MimesisPatchOptions) {
         "MIMESIS patch requires complete visible conversation turns."
       );
     }
+    if (feedback && messages.length) {
+      throw new Error("MIMESIS patch takes feedback on an opening only.");
+    }
     const fields = source(scenario);
     const prompt = recipe.prompts[messages.length ? "continuation" : "opening"];
     const draftRequest: ModelRequest = {
@@ -260,7 +273,16 @@ function create(options: MimesisPatchOptions) {
           content:
             render(prompt.system, fields) +
             "\n\n" +
-            render(prompt.user, fields),
+            render(prompt.user, fields) +
+            (feedback
+              ? "\n\n" +
+                render(recipe.prompts.opening.feedback, {
+                  rejection_reasons: feedback.reasons
+                    .map(reason => `- ${reason}`)
+                    .join("\n"),
+                  rejected_opening: feedback.previousMessage,
+                })
+              : ""),
         },
         // Replay the visible history once, with MIMESIS playing the child.
         ...messages.map(
@@ -298,6 +320,14 @@ function create(options: MimesisPatchOptions) {
           content: JSON.stringify({
             original_scenario_and_profile: fields,
             actual_public_history: messages,
+            ...(feedback
+              ? {
+                  rejected_previous_opening: {
+                    message: feedback.previousMessage,
+                    reasons: feedback.reasons,
+                  },
+                }
+              : {}),
             draft: original,
           }),
         },

@@ -36,6 +36,13 @@ const VSituationType = v.strictObject({
    * receive it. Absent: every band.
    */
   ageRanges: v.optional(v.pipe(v.array(AgeRange.io), v.minLength(1))),
+  /**
+   * The type puts its signal in the session context given to the assistant,
+   * not in what the child writes ("Context-signalled displacement"). Its seeds
+   * are allocated a model memory, whatever the risk's default, since the
+   * memory is the only context a run gives the assistant. Absent: false.
+   */
+  signalInContext: v.optional(v.boolean()),
 });
 
 const VBoundaries = v.strictObject({

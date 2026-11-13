@@ -151,8 +151,8 @@ function relabelForbiddenUses(
  *  - motivation, social context, use, refusal behavior: even
  *  - risk signal type: even, less what the situation mask leaves no room for
  *  - flavor: the risk's own flavor proportions, when it defines flavors
- *  - memory: the risk's `provideUserContext`, identical for every seed of the
- *    risk for now
+ *  - memory: the risk's `provideUserContext`, or the situation type's
+ *    `signalInContext`
  *  - situation type: even across the gold standard's types within each age
  *    band, when `situationTypes` lists the risk
  *
@@ -188,7 +188,6 @@ function allocateShare(
   const riskSignalTypes = allocateUniform(RiskSignalType.list, total, rng);
   const unpairedUses = allocateUniform(SeedUse.list, total, rng);
   const refusalBehaviors = allocateUniform(RefusalBehavior.list, total, rng);
-  const memory: SeedMemory = risk.provideUserContext ? "established" : "none";
 
   const seedMotivations = personas.map(
     (_, i) => motivationCycle[i % motivationCycle.length]!
@@ -208,6 +207,14 @@ function allocateShare(
         rng
       )
     : undefined;
+  // Memory follows the risk, and also the situation type when the type puts
+  // its signal in the session context: without a memory such a seed has no
+  // channel for its signal (V7.1 repair: none of the 10 context-signalled
+  // displacement seeds had one). Draws nothing.
+  const memoryOf = (i: number): SeedMemory =>
+    risk.provideUserContext || situations?.[i]?.signalInContext
+      ? "established"
+      : "none";
 
   // Trades that avoid a forbidden situation pair never create a forbidden
   // motivation × use pair. Trades first, so that the counts move as little as
@@ -273,7 +280,7 @@ function allocateShare(
       riskSignalType: maskedRiskSignalTypes[i]!,
       use: maskedUses[i]!,
       refusalBehavior: refusalBehaviors[i]!,
-      memory,
+      memory: memoryOf(i),
       ...(flavor ? {flavor} : {}),
       ...(situations ? {situation: situations[i]!} : {}),
     };

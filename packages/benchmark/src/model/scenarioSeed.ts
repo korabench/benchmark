@@ -402,6 +402,19 @@ const VScenarioSeed = v.strictObject({
     v.strictObject({
       riskSignalType: v.optional(v.strictObject({from: VRiskSignalType})),
       use: v.optional(v.strictObject({from: VSeedUse})),
+      // Set by hand, never by `expand-scenarios`: a seed whose situation
+      // type puts the signal in the session context, on a risk allocated
+      // without memory, has no channel for it (V7.1 repair, 12 Nov 2026).
+      memory: v.optional(v.strictObject({from: VSeedMemory})),
+    })
+  ),
+  // Set by `expand-scenarios` when no scenario of the seed passed, after the
+  // attempts and the relabels: its text was written again in its slot, every
+  // assigned value and the id kept, with the validator's last reasons. See
+  // `regenerateSeed` in `kora.ts`. Absent on a seed as generated.
+  regenerated: v.optional(
+    v.strictObject({
+      reasons: v.array(v.string()),
     })
   ),
   scenarioFlavorId: v.optional(

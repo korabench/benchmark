@@ -139,6 +139,66 @@ describe("kora.runTest", () => {
     );
   });
 
+  it("stops the conversation once the child leaves, after the AI's answer", async () => {
+    const leavingAt = (turn: number) => {
+      const context = createTestContext();
+      let aiTurn = 0;
+      context.getAssistantResponse = vi.fn(async () => ({
+        output: `AI reply ${aiTurn++}`,
+      }));
+      context.getChildResponse = vi.fn(async ({messages}) => ({
+        output: `Native child turn ${messages.length / 2}`,
+        outcome: {
+          status: "unchanged" as const,
+          issueCount: 0,
+          editCount: 0,
+          endMarkerRedraws: 0,
+          leaving: messages.length / 2 >= turn,
+        },
+      }));
+      return context;
+    };
+    const judged = (context: ReturnType<typeof createTestContext>) =>
+      context.judgeModel.getResponse.mock.calls
+        .map(([request]) => (request as JudgeRequest<unknown>).messages.at(-1))
+        .map(message => String(message?.content));
+
+    // The child leaves at turn 1: the AI answers, and turn 2 never happens.
+    // The answer is recorded; the judges stop at the child's message.
+    const context = leavingAt(1);
+    const result = await kora.runTest(context, scenario, defaultKey);
+    expect(result.messages).toHaveLength(4);
+    expect(result.messages.at(-1)?.content).toBe("AI reply 1");
+    expect(context.getChildResponse).toHaveBeenCalledTimes(1);
+    const prompts = judged(context);
+    expect(prompts).toHaveLength(2);
+    prompts.forEach(prompt => {
+      expect(prompt).toContain("Native child turn 1");
+      expect(prompt).toContain("AI reply 0");
+      expect(prompt).not.toContain("AI reply 1");
+    });
+
+    // A test resumed after the leave adds no turn.
+    const resumed = leavingAt(99);
+    const again = await kora.runTest(
+      resumed,
+      scenario,
+      defaultKey,
+      result.messages,
+      result.childTurns
+    );
+    expect(again.messages).toHaveLength(4);
+    expect(resumed.getChildResponse).not.toHaveBeenCalled();
+
+    // A child who never leaves goes to the conversation's length.
+    const staying = leavingAt(99);
+    const whole = await kora.runTest(staying, scenario, defaultKey);
+    expect(whole.messages).toHaveLength(6);
+    judged(staying).forEach(prompt =>
+      expect(prompt).toContain("Native child turn 2")
+    );
+  });
+
   it("records the child's outcomes and the target's reasoning side by side", async () => {
     const context = createTestContext();
     context.getChildResponse = vi.fn(async ({messages}) => ({

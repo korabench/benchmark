@@ -311,7 +311,8 @@ export async function continueCommand(
           built.context,
           task.input.scenario,
           task.key,
-          task.input.messages
+          task.input.messages,
+          task.input.childTurns
         );
         const assistantTurns = AssistantTurn.mergeResumed(
           task.input.assistantTurns,

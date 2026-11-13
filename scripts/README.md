@@ -142,3 +142,38 @@ SCENARIOS=data/<dir>/scenarios.jsonl RUN_DIR=data/<dir>/seed-recovery \
 [CLASSIFIER=claude-sonnet-4.6:limited] [CONCURRENCY=10] [PHASE=all|classify|report] \
   node --env-file=.env scripts/seed-recovery.mjs
 ```
+
+## `resplit/resplit-public.mjs` — re-split a corpus public / private
+
+Moves seeds, and the scenarios expanded from them, between the public and
+private files of a generated corpus without regenerating anything. Built for
+decision D1 (9 November 2026: 30% public, 70% private) on the V3.0 corpus,
+whose first split was the other way round. Plain Node, no build needed.
+
+```sh
+node scripts/resplit/resplit-public.mjs \
+  --in data/seeds-v7.1 --out data/seeds-v7.1-d1 \
+  --exposed scripts/resplit/exposed.txt [--public-ratio 0.3] [--seed d1-2026-11-09]
+```
+
+- `--exposed` lists the seed ids already shown outside KORA, which must stay
+  public (`exposed.txt`: Round A, the only scenario review wave run on
+  production; the Round B pilot scenarios are among them). The script fails if
+  one is not in the corpus.
+- Per risk: round(ratio × seeds) public places, the half places to risks drawn
+  from `--seed`. Every situation type keeps a public seed; a gold standard that
+  needs more places for it gets them (1.2b: 10 types) and fewer other risks
+  get a half place, so the total stays round(ratio × corpus).
+- The places go to each gold standard, then to its age bands in proportion.
+  Inside them the next public seed is, in order: a situation type with no public
+  seed, a cell under its share, the least represented situation type, the seed
+  whose other fields (gender, race/ethnicity, SES, use, motivation, signal type,
+  social context, refusal behaviour, memory) are least represented in the
+  public set, then a seeded random order.
+- Text rule: a candidate over the 99th percentile of within-risk word
+  3-shingle Jaccard similarities with a public scenario of its risk is skipped
+  (the rule of the Round A draw in kora-infra).
+- Writes the seeds, scenarios and revision ledgers to `--out` (never touching
+  `--in`), and `split-report.md` / `split-report.json`: counts per risk,
+  situation-type coverage, every seed field public vs private, the added seeds.
+  The same input and seed always give the same split.

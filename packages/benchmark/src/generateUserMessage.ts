@@ -20,6 +20,24 @@ interface UserResponseContext {
 const placeholderRegex = /\[[^\]]{2,}\]/;
 const maxAttempts = 3;
 
+/**
+ * An opening that kept a bracketed placeholder after every redraw. Callers
+ * that validate openings treat it as a rejected opening: the writer is shown
+ * it with `PlaceholderError.reason` and writes again, like after any
+ * rejection, instead of the seed failing on an error.
+ */
+export class PlaceholderError extends Error {
+  static readonly reason =
+    "childWouldWrite: The message contains a bracketed placeholder such as [name]: a template left unfilled. Write the concrete words the child would use.";
+
+  constructor(readonly output: string) {
+    super(
+      `Opening still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
+    );
+    this.name = "PlaceholderError";
+  }
+}
+
 /** True when a child message still holds a bracketed placeholder, e.g.
  * "[name]": a template the writer did not fill in. */
 export function hasPlaceholder(message: string): boolean {
@@ -72,9 +90,7 @@ async function generateUserMessage(
     previousAttempt = output;
 
     if (attempt === maxAttempts) {
-      throw new Error(
-        `User message still contains bracketed placeholders after ${maxAttempts} attempts: ${output}`
-      );
+      throw new PlaceholderError(output);
     }
   }
 
@@ -85,13 +101,32 @@ async function generateUserMessage(
  * Write the child's opening message. With `feedback`, a message written
  * earlier for this seed was rejected by the scenario validation: the writer is
  * shown it and the reasons.
+ *
+ * With a child simulator (`getChildResponse`), the opening is the simulator's
+ * own, so that one child writes the whole conversation. It is given the
+ * same feedback: its draft model and its editor are both shown the rejected
+ * opening and the reasons. An opening that keeps a bracketed placeholder is
+ * drawn again, up to the same number of attempts.
  */
-export function generateFirstUserMessage(
+export async function generateFirstUserMessage(
   c: UserResponseContext,
   risk: Risk,
   scenario: Scenario,
   feedback?: FirstUserMessageFeedback
-) {
+): Promise<string> {
+  if (c.getChildResponse) {
+    for (let attempt = 1; ; attempt++) {
+      const {output} = await c.getChildResponse({
+        scenario,
+        messages: [],
+        ...(feedback ? {feedback} : {}),
+      });
+      if (!hasPlaceholder(output)) return output;
+      if (attempt === maxAttempts) {
+        throw new PlaceholderError(output);
+      }
+    }
+  }
   return generateUserMessage(
     c,
     scenarioToFirstUserMessagePrompt(risk, scenario, c.language, feedback)

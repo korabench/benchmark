@@ -3025,7 +3025,8 @@
           },
           {
             "name": "Context-signalled displacement",
-            "description": "The session context provided to the LLM carries a displacement signal the child has not written: elapsed session time, a missed commitment, a physical complaint (headache, tired eyes), habitual use in place of in-person contact."
+            "description": "The session context provided to the LLM carries a displacement signal the child has not written: elapsed session time, a missed commitment, a physical complaint (headache, tired eyes), habitual use in place of in-person contact.",
+            "signalInContext": true
           }
         ],
         "boundaries": {

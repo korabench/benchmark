@@ -9,6 +9,7 @@ import {
 import {ScenarioValidation} from "../model/scenarioValidation.js";
 import {ScenarioValidationError} from "../model/scenarioValidationError.js";
 import {
+  answeringRiskCalls,
   createMinimalScenarioSeed,
   createScenarioSeed,
   testRiskCategoryId,
@@ -51,6 +52,7 @@ function passingValidation(
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
+    firstMessageTestsRisk: yes,
     ...overrides,
   };
 }
@@ -81,7 +83,9 @@ function createExpandContext(
   );
 
   return {
-    getResponse: getResponse as ExpandScenarioContext["getResponse"],
+    getResponse: answeringRiskCalls(
+      getResponse
+    ) as ExpandScenarioContext["getResponse"],
     getUserResponse,
   };
 }
@@ -136,7 +140,7 @@ describe("kora.expandScenario", () => {
       passingValidation(),
     ]);
 
-    const result = await kora.expandScenario(context, seed);
+    const result = await kora.expandScenario(context, seed, {recheck: false});
 
     expect(result).toHaveLength(1);
     expect(result[0]!.firstUserMessage).toBe("Hello, can you help me?");
@@ -155,7 +159,7 @@ describe("kora.expandScenario", () => {
       passingValidation(),
     ]);
 
-    const result = await kora.expandScenario(context, seed);
+    const result = await kora.expandScenario(context, seed, {recheck: false});
 
     expect(result).toHaveLength(1);
     expect(context.getResponse).toHaveBeenCalledTimes(4);
@@ -180,7 +184,7 @@ describe("kora.expandScenario", () => {
       },
     };
 
-    await kora.expandScenario(context, seed);
+    await kora.expandScenario(context, seed, {recheck: false});
 
     expect(events.map(e => [e.attempt, e.maxAttempts, e.verdict])).toEqual([
       [1, 2, "fail"],
@@ -210,7 +214,7 @@ describe("kora.expandScenario", () => {
     };
 
     await expect(
-      kora.expandScenario(context, createScenarioSeed())
+      kora.expandScenario(context, createScenarioSeed(), {recheck: false})
     ).rejects.toThrow(ScenarioValidationError);
     expect(events.map(e => e.verdict)).toEqual(["fail", "fail"]);
   });
@@ -236,7 +240,7 @@ describe("kora.expandScenario", () => {
         },
       };
       const outcome = await kora
-        .expandScenario(context, seed, {priorRejections})
+        .expandScenario(context, seed, {recheck: false, priorRejections})
         .then(
           () => "kept",
           () => "rejected"
@@ -284,7 +288,10 @@ describe("kora.expandScenario", () => {
       ]);
 
       await expect(
-        kora.expandScenario(context, young(), {priorRejections: 10})
+        kora.expandScenario(context, young(), {
+          recheck: false,
+          priorRejections: 10,
+        })
       ).rejects.toThrow(ScenarioValidationError);
     });
 
@@ -312,9 +319,9 @@ describe("kora.expandScenario", () => {
       ),
     ]);
 
-    await expect(kora.expandScenario(context, seed)).rejects.toThrow(
-      ScenarioValidationError
-    );
+    await expect(
+      kora.expandScenario(context, seed, {recheck: false})
+    ).rejects.toThrow(ScenarioValidationError);
 
     try {
       await kora.expandScenario(
@@ -328,7 +335,8 @@ describe("kora.expandScenario", () => {
             "Second failure reason that is long enough for validation."
           ),
         ]),
-        seed
+        seed,
+        {recheck: false}
       );
     } catch (e) {
       const err = e as ScenarioValidationError;
@@ -353,7 +361,8 @@ describe("kora.expandScenario", () => {
           validModelScenarioLight(),
           onSignalType,
         ]),
-        seed
+        seed,
+        {recheck: false}
       )
       .catch((e: unknown) => e as ScenarioValidationError);
     expect(stuck).toBeInstanceOf(ScenarioValidationError);
@@ -367,7 +376,8 @@ describe("kora.expandScenario", () => {
           validModelScenarioLight(),
           failingValidation("Another problem, the signal type was fine."),
         ]),
-        seed
+        seed,
+        {recheck: false}
       )
       .catch((e: unknown) => e as ScenarioValidationError);
     expect((mixed as ScenarioValidationError).stuckOnSignalType).toBe(false);
@@ -389,7 +399,8 @@ describe("kora.expandScenario", () => {
           validModelScenarioLight(),
           onFirstMessageUse,
         ]),
-        seed
+        seed,
+        {recheck: false}
       )
       .catch((e: unknown) => e as ScenarioValidationError);
     expect((stuckOnUse as ScenarioValidationError).stuckOnUse).toBe(true);
@@ -404,12 +415,38 @@ describe("kora.expandScenario", () => {
       ["hey can u help me with smth"]
     );
 
-    const [scenario] = await kora.expandScenario(context, createScenarioSeed());
+    const [scenario] = await kora.expandScenario(
+      context,
+      createScenarioSeed(),
+      {recheck: false}
+    );
 
     expect(promptText(requestAt(context, 1))).toContain(
       "): hey can u help me with smth"
     );
     expect(scenario!.firstUserMessage).toBe("hey can u help me with smth");
+  });
+
+  it("validates the child simulator's opening when the profile has one", async () => {
+    const context = {
+      ...createExpandContext(
+        [validModelScenarioLight(), passingValidation()],
+        ["written by the expansion user model"]
+      ),
+      getChildResponse: vi.fn(async () => ({output: "opening by the child"})),
+    };
+
+    const [scenario] = await kora.expandScenario(
+      context,
+      createScenarioSeed(),
+      {recheck: false}
+    );
+
+    expect(promptText(requestAt(context, 1))).toContain(
+      "): opening by the child"
+    );
+    expect(scenario!.firstUserMessage).toBe("opening by the child");
+    expect(context.getUserResponse).not.toHaveBeenCalled();
   });
 
   const firstMessageQuestions: readonly string[] =
@@ -440,7 +477,8 @@ describe("kora.expandScenario", () => {
 
       const [scenario] = await kora.expandScenario(
         context,
-        createScenarioSeed()
+        createScenarioSeed(),
+        {recheck: false}
       );
 
       expect(events.map(e => e.verdict)).toEqual(["fail", "pass"]);
@@ -459,7 +497,14 @@ describe("kora.expandScenario", () => {
   );
 
   describe("a rejection of the first user message alone", () => {
-    it.each(ScenarioValidation.firstMessageQuestions)(
+    // `firstMessageTestsRisk` is a first-message question too, but expansion
+    // answers it with a new narrative: see "a first message that does not
+    // test the risk" below.
+    it.each(
+      ScenarioValidation.firstMessageQuestions.filter(
+        q => q !== "firstMessageTestsRisk"
+      )
+    )(
       "keeps the scenario and writes only the message again when %s is answered no",
       async question => {
         const events: ScenarioValidationEvent[] = [];
@@ -479,12 +524,15 @@ describe("kora.expandScenario", () => {
 
         const [scenario] = await kora.expandScenario(
           context,
-          createScenarioSeed()
+          createScenarioSeed(),
+          {recheck: false}
         );
 
         // One expansion, two validations: no second expansion.
         expect(context.getResponse).toHaveBeenCalledTimes(3);
-        expect(requestAt(context, 2).outputType).toBe(ScenarioValidation.io);
+        expect(requestAt(context, 2).outputType).toBe(
+          ScenarioValidation.callIo
+        );
         expect(events.map(e => [e.verdict, e.firstMessageRewrite])).toEqual([
           ["fail", false],
           ["pass", true],
@@ -508,6 +556,41 @@ describe("kora.expandScenario", () => {
       }
     );
 
+    it("expands again, with the reason, when the first message does not test the risk", async () => {
+      const events: ScenarioValidationEvent[] = [];
+      const context = {
+        ...createExpandContext(
+          [
+            validModelScenarioLight(),
+            passingValidation({firstMessageTestsRisk: no}),
+            validModelScenarioLight(),
+            passingValidation(),
+          ],
+          ["First message.", "Second message."]
+        ),
+        onValidation: (event: ScenarioValidationEvent) => {
+          events.push(event);
+        },
+      };
+
+      const [scenario] = await kora.expandScenario(
+        context,
+        createScenarioSeed(),
+        {recheck: false}
+      );
+
+      // Two expansions, two validations: the narrative is written again.
+      expect(context.getResponse).toHaveBeenCalledTimes(4);
+      expect(events.map(e => [e.verdict, e.firstMessageRewrite])).toEqual([
+        ["fail", false],
+        ["pass", false],
+      ]);
+      expect(promptText(requestAt(context, 2))).toContain(
+        "firstMessageTestsRisk: Clear problem here."
+      );
+      expect(scenario!.firstUserMessage).toBe("Second message.");
+    });
+
     it("gives up after the same number of attempts", async () => {
       const seed = createScenarioSeed();
       const context = createExpandContext(
@@ -524,10 +607,12 @@ describe("kora.expandScenario", () => {
         ["First message.", "Second message."]
       );
 
-      const error = await kora.expandScenario(context, seed).then(
-        () => undefined,
-        (e: unknown) => e
-      );
+      const error = await kora
+        .expandScenario(context, seed, {recheck: false})
+        .then(
+          () => undefined,
+          (e: unknown) => e
+        );
 
       expect(error).toBeInstanceOf(ScenarioValidationError);
       expect((error as ScenarioValidationError).attempts).toBe(2);
@@ -554,7 +639,9 @@ describe("kora.expandScenario", () => {
         },
       };
 
-      await kora.expandScenario(context, createScenarioSeed());
+      await kora.expandScenario(context, createScenarioSeed(), {
+        recheck: false,
+      });
 
       expect(context.getResponse).toHaveBeenCalledTimes(4);
       expect(events.map(e => e.firstMessageRewrite)).toEqual([false, false]);
@@ -579,7 +666,9 @@ describe("kora.expandScenario", () => {
         passingValidation(),
       ]);
 
-      await kora.expandScenario(context, createScenarioSeed());
+      await kora.expandScenario(context, createScenarioSeed(), {
+        recheck: false,
+      });
 
       expect(context.getResponse).toHaveBeenCalledTimes(4);
     });
@@ -591,7 +680,7 @@ describe("kora.expandScenario", () => {
       passingValidation(),
     ]);
 
-    await kora.expandScenario(context, createScenarioSeed());
+    await kora.expandScenario(context, createScenarioSeed(), {recheck: false});
 
     const request = requestAt(context, 0);
     expect(request.outputType).toBe(ModelScenarioLight.io);
@@ -620,7 +709,7 @@ describe("kora.expandScenario", () => {
         ["Hey, I need to talk about something private."]
       );
 
-      const result = await kora.expandScenario(context, seed);
+      const result = await kora.expandScenario(context, seed, {recheck: false});
 
       expect(result[0]!.modelMemory).toBeDefined();
       const request = requestAt(context, 0);
@@ -635,7 +724,7 @@ describe("kora.expandScenario", () => {
         passingValidation(),
       ]);
 
-      const result = await kora.expandScenario(context, seed);
+      const result = await kora.expandScenario(context, seed, {recheck: false});
 
       expect(result[0]!.modelMemory).toBeUndefined();
       const request = requestAt(context, 0);
@@ -650,10 +739,46 @@ describe("kora.expandScenario", () => {
         ["Hey, I need to talk about something private."]
       );
 
-      const result = await kora.expandScenario(context, seed);
+      const result = await kora.expandScenario(context, seed, {recheck: false});
 
       expect(result[0]!.modelMemory).toBeDefined();
       expect(requestAt(context, 0).outputType).toBe(ModelScenarioWithMemory.io);
     });
+  });
+
+  it("writes an opening again when it keeps a placeholder, without expanding again", async () => {
+    const context = createExpandContext(
+      [validModelScenarioLight(), passingValidation()],
+      ["Hi [name]", "Hi [friend]", "Hi [teacher]", "Hi Sam, quick question"]
+    );
+    const [scenario] = await kora.expandScenario(
+      context,
+      createScenarioSeed(),
+      {
+        recheck: false,
+      }
+    );
+    expect(scenario!.firstUserMessage).toBe("Hi Sam, quick question");
+  });
+
+  it("takes as many attempts as maxAttempts allows", async () => {
+    const rejected = failingValidation("Not yet.");
+    const context = createExpandContext([
+      validModelScenarioLight(),
+      rejected,
+      validModelScenarioLight(),
+      rejected,
+      validModelScenarioLight(),
+      passingValidation(),
+    ]);
+    const [scenario] = await kora.expandScenario(
+      context,
+      createScenarioSeed(),
+      {
+        recheck: false,
+        maxAttempts: 3,
+      }
+    );
+    expect(scenario).toBeDefined();
   });
 });

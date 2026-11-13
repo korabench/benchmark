@@ -63,6 +63,7 @@ describe("ScenarioValidation", () => {
     showsUse: yes,
     firstMessageShowsUse: yes,
     firstMessageShowsSignalType: yes,
+    firstMessageTestsRisk: yes,
   };
 
   it("passes only when the checklist passes and every question is yes", () => {

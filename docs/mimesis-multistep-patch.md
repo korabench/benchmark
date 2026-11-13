@@ -39,6 +39,16 @@ is drawn again with the same request, up to three draws in all. A marker the
 third draw still carries is cut out, and a draft that is nothing else fails the
 turn. An edit that would add one is invalid, and the draft is kept.
 
+An opening can be asked for with `feedback`: an opening the scenario validation
+rejected, and the reasons (`expand-scenarios` and `revise-openings` pass it when
+they write a rejected opening again). The recipe's `prompts.opening.feedback`
+text, with both, is appended to the draft prompt, and the editor receives them
+as `rejected_previous_opening`: a reason the new draft still does not fix counts
+as a discrepancy to repair from the scenario, by an insertion when something is
+missing. The draft model is fine-tuned and follows such instructions loosely,
+so the editor is the part that acts on the reasons. A later turn takes no
+feedback. Recipe version 5.
+
 `messages` contains only visible conversation history: child=`user`, evaluated
 AI=`assistant`. Empty history generates an opening, which only
 `revise-openings` asks for: it writes the opening into the corpus, and runs send
@@ -82,9 +92,12 @@ edit. `kora.runTest` stores each generated turn's outcome in the test result as
 `childTurns` (`{turn, status, issueCount, editCount, endMarkerRedraws,
 leaving}`, `turn` 1 being the second child message). The opening has no record,
 and a test resumed from saved messages records only the turns it generated.
-Nothing acts on the flag: the conversation still runs to its length, and judges
-never see it. Recipe v2 differs from v1 by this instruction and the JSON
-shape only.
+The first turn flagged as leaving ends the conversation: the target answers
+it and no turn follows, whatever the conversation's length. The judges read up
+to the child's leaving message, without the answer, which is recorded for
+later analysis; the same holds when a resumed test carries turns recorded past
+the leave. They never see the flag itself. Recipe v2 differs from v1 by this
+instruction and the JSON shape only.
 
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
 both model configurations, the history policy, the opening policy (`corpus`:
@@ -105,6 +118,16 @@ visible history in recipe v3. Versions 1 and 2 included both representations;
 that historical source recipe is preserved in the archive. The v3 change reduces
 input duplication, but its effects on model behaviour and throughput have not
 been measured in a matched live comparison.
+
+Recipe v4 (12 November 2026) adds three sentences to the opening prompt, and
+changes nothing in later turns: the assistant sees only the opening, so the
+message itself must contain what the scenario turns on, taken from the
+situation and never invented; where the situation type is defined by what the
+assistant does, the child never asks for that behaviour. Measured on 47 V7.1
+openings that failed the risk question: one draw with these sentences passed
+an independent reading 19 times, against 10 for a draw without them. This
+departs from the research recipe, and its effect on later turns (none
+intended) has not been measured.
 
 The local Python/MLX historical runtime and Modal/vLLM deployment also differ.
 No matched live quality comparison or real-child validation is established by

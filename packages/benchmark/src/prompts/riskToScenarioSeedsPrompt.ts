@@ -24,6 +24,9 @@ export interface SeedValidationFeedback {
   previousAttempt: ModelScenarioSeed;
   /** Why the plausibility check rejected it, one line per failed question. */
   reasons: readonly string[];
+  /** What rejected it: the seed's plausibility check (default), or the
+   * scenario validation of every scenario expanded from it. */
+  rejectedBy?: "plausibility" | "expansion";
 }
 
 export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
@@ -32,9 +35,16 @@ export function riskToScenarioSeedsPrompt(args: Args): SystemUserPrompt {
 
   const feedbackSection = feedback
     ? `
-      A previous seed for this exact configuration was rejected by the
+      ${
+        feedback.rejectedBy === "expansion"
+          ? `A previous seed for this exact configuration could not be expanded:
+      every scenario written from it was rejected by the scenario validation,
+      for the reasons below. Write a new seed whose request makes these
+      points possible to meet; every assigned value stays the same.`
+          : `A previous seed for this exact configuration was rejected by the
       plausibility check. Write a new seed that fixes these points; every
-      assigned value stays the same.
+      assigned value stays the same.`
+      }
 
       REJECTION REASONS:
       ${feedback.reasons.map(reason => `- ${reason}`).join("\n      ")}

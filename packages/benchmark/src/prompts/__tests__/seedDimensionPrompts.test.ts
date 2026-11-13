@@ -20,6 +20,7 @@ import {SeedValidation} from "../../model/seedValidation.js";
 import {planSeedSlots} from "../../seedSlots.js";
 import {conversationToAssessmentPrompt} from "../conversationToAssessmentPrompt.js";
 import {conversationToMechanismAssessmentPrompt} from "../conversationToMechanismAssessmentPrompt.js";
+import {firstMessageRiskPrompt} from "../firstMessageRiskPrompt.js";
 import {riskToScenarioSeedsPrompt} from "../riskToScenarioSeedsPrompt.js";
 import {scenarioToFirstUserMessagePrompt} from "../scenarioToFirstUserMessagePrompt.js";
 import {scenarioToNextUserMessagePrompt} from "../scenarioToNextUserMessagePrompt.js";
@@ -270,6 +271,56 @@ describe("maturity rendering", () => {
 });
 
 //
+// The risk question reads the first message against every risk.
+//
+
+describe("firstMessageRiskPrompt", () => {
+  it("shows the risk, the first message and every risk's name, never the narrative", () => {
+    const scenario = createScenario();
+    const prompt = firstMessageRiskPrompt(scenario).user;
+    expect(prompt).toContain("firstMessageTestsRisk:");
+    expect(prompt).toContain(scenario.firstUserMessage);
+    expect(prompt).not.toContain(scenario.narrative);
+    for (const category of RiskCategory.listAll()) {
+      for (const risk of category.risks) {
+        expect(prompt).toContain(risk.name);
+      }
+    }
+  });
+
+  it("shows the model memory when the scenario has one, and nothing more otherwise", () => {
+    const without = firstMessageRiskPrompt(createScenario()).user;
+    expect(without).not.toContain("ASSISTANT'S MEMORY");
+    const withMemory = firstMessageRiskPrompt(
+      createScenario({modelMemory: "- Has skipped swim practice twice."})
+    ).user;
+    expect(withMemory).toContain("ASSISTANT'S MEMORY OF THE CHILD");
+    expect(withMemory).toContain("- Has skipped swim practice twice.");
+    // Same question, same order: the memory sits between message and question.
+    expect(withMemory.indexOf("ASSISTANT'S MEMORY")).toBeGreaterThan(
+      withMemory.indexOf("FIRST MESSAGE:")
+    );
+    expect(
+      withMemory.endsWith(
+        without.slice(without.indexOf("firstMessageTestsRisk:"))
+      )
+    ).toBe(true);
+  });
+
+  it("is not asked inside the scenario validation prompt", () => {
+    const scenario = createScenario();
+    expect(
+      scenarioToValidationPrompt(
+        privacyCategory,
+        privacy,
+        scenario.seed.ageRange,
+        scenario
+      ).user
+    ).not.toContain("firstMessageTestsRisk");
+  });
+});
+
+//
 // Use reaches expansion and validation.
 //
 
@@ -459,6 +510,7 @@ describe("seed fields in the expansion and validation prompts", () => {
     taxonomyVersion: undefined,
     stamp: undefined,
     relabeled: undefined,
+    regenerated: undefined,
     id: undefined,
     riskCategoryId: undefined,
     riskId: undefined,
@@ -510,6 +562,12 @@ describe("seed fields in the expansion and validation prompts", () => {
     ).user;
     expect(established).toContain("MODEL MEMORY REQUIREMENT");
     expect(established).not.toContain("NO MODEL MEMORY");
+    // Privacy is not a relationship risk: its memory holds the session
+    // context, not an attachment to the assistant.
+    expect(established).toContain(
+      "where the session context of this scenario lives"
+    );
+    expect(established).not.toContain("MOST LIKELY to materialize");
   });
 
   it('defines the "other" race/ethnicity group, and only that one', () => {
@@ -643,10 +701,12 @@ describe("scenarioToValidationPrompt questions", () => {
     scenario
   ).user;
 
-  it("asks every question of the schema", () => {
-    ScenarioValidation.questions.forEach(question => {
-      expect(prompt).toContain(`) ${question}: `);
-    });
+  it("asks every question of the schema but the one with a call of its own", () => {
+    ScenarioValidation.questions
+      .filter(question => question !== "firstMessageTestsRisk")
+      .forEach(question => {
+        expect(prompt).toContain(`) ${question}: `);
+      });
   });
 
   it("leaves motivation and use to the questions, not to the checklist", () => {

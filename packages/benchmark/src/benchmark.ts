@@ -7,6 +7,7 @@ import {
   TypedModelResponse,
 } from "@korabench/core";
 import {AgeRange} from "./model/ageRange.js";
+import {ChildTurn} from "./model/childTurn.js";
 import {PopulationDistribution} from "./model/populationDistribution.js";
 import {Scenario} from "./model/scenario.js";
 import {ScenarioPrompt} from "./model/scenarioPrompt.js";
@@ -62,12 +63,21 @@ export interface ScenarioValidationEvent {
    * only its first user message again, because that message alone had been
    * rejected. */
   firstMessageRewrite: boolean;
+  /** This verdict is the second validation of a scenario the first one
+   * rejected (`validateConfirmed`): it decides. Absent on a first verdict. */
+  recheck?: true;
 }
 
 export interface ExpandScenarioOptions {
   /** How often the scenario of this seed was already rejected, in earlier
    * calls. Counts toward the child-voice relaxation. */
   priorRejections?: number;
+  /** Validate a rejected scenario a second time, and reject it only when both
+   * verdicts fail (`validateConfirmed`). Default true. */
+  recheck?: boolean;
+  /** Attempts (expansions or rewrites of the first message) before the seed
+   * is given up on. Default 2. */
+  maxAttempts?: number;
 }
 
 export interface GenerateSeedsContext {
@@ -92,6 +102,10 @@ export interface ExpandScenarioContext {
     request: TypedModelRequest<T>
   ) => Promise<TypedModelResponse<T>>;
   getUserResponse: (request: ModelRequest) => Promise<ModelResponse>;
+  /** The profile's child simulator, when it names one. The opening is then
+   * written by the same child that writes every later turn of a run, and
+   * validated like any other opening; `getUserResponse` is not used for it. */
+  getChildResponse?: TestContext["getChildResponse"];
   /** Natural language the simulated child writes in (e.g. "Estonian"). The
    * scenario itself stays English; only the generated first user message is
    * translated. Undefined keeps the default English. */
@@ -228,7 +242,10 @@ export interface Benchmark<TScenarioSeed, TScenario, TTestResult, TRunResult> {
     c: TestContext,
     scenario: TScenario,
     key: string,
-    startMessages?: readonly ModelMessage[]
+    startMessages?: readonly ModelMessage[],
+    // The child turns recorded for startMessages, so the judges stop where
+    // the child left even when it left before this attempt.
+    startChildTurns?: readonly ChildTurn[]
   ): Promise<TTestResult>;
   mapTestResultToRunResult(result: TTestResult): TRunResult;
   reduceRunResult(result1: TRunResult, result2: TRunResult): TRunResult;

@@ -29,7 +29,7 @@ export const DEFAULT_TOTAL_SEEDS = 75;
  * Share of each risk's seeds held out as private when the caller does not say.
  * Private seeds, and the scenarios expanded from them, are never published.
  */
-export const DEFAULT_PRIVATE_RATIO = 0.3;
+export const DEFAULT_PRIVATE_RATIO = 0.7;
 
 //
 // Seed slots.

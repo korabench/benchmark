@@ -1,4 +1,5 @@
 import {
+  ChildTurn,
   JudgeModel,
   kora,
   Packs,
@@ -258,14 +259,22 @@ export async function reassessCommand(
           judgeContext,
           task.input.scenario,
           task.input.prompt,
-          task.input.messages,
+          ChildTurn.judgedMessages(
+            task.input.messages,
+            task.input.childTurns ?? []
+          ),
           undefined,
           roles.mechanismJudges
         );
-        const {assistantTurns} = task.input;
-        const testResult = assistantTurns
-          ? {...judged, assistantTurns}
-          : judged;
+        // The judges read up to the child's leave; the record keeps the
+        // whole conversation and its child turns.
+        const {assistantTurns, childTurns, messages} = task.input;
+        const testResult = {
+          ...judged,
+          messages,
+          ...(assistantTurns && {assistantTurns}),
+          ...(childTurns && {childTurns}),
+        };
         await fs.writeFile(tempFile, JSON.stringify(testResult, null, 2));
         progress.increment(true);
         return [

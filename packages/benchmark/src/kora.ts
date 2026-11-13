@@ -14,8 +14,8 @@ import {
   TraceEvent,
 } from "./benchmark.js";
 import {
-  generateFirstUserMessage,
   generateNextUserMessage,
+  PlaceholderError,
 } from "./generateUserMessage.js";
 import {AssessmentGrade} from "./model/assessmentGrade.js";
 import {AssistantTurn} from "./model/assistantTurn.js";
@@ -45,6 +45,7 @@ import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
 import {SeedValidation} from "./model/seedValidation.js";
+import {SituationTypes} from "./model/situationTypes.js";
 import {JudgeOutput, TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
 import {Packs} from "./packs/packs.js";
@@ -56,13 +57,17 @@ import {
   SeedValidationFeedback,
 } from "./prompts/riskToScenarioSeedsPrompt.js";
 import {FirstUserMessageFeedback} from "./prompts/scenarioToFirstUserMessagePrompt.js";
-import {scenarioToValidationPrompt} from "./prompts/scenarioToValidationPrompt.js";
 import {seedToScenarioPrompt} from "./prompts/seedToScenarioPrompt.js";
 import {seedToValidationPrompt} from "./prompts/seedToValidationPrompt.js";
 import {planSeedSlots, SeedSlot} from "./seedSlots.js";
 import {RunStamp} from "./stamp/runStamp.js";
 import {Stamp} from "./stamp/stamp.js";
 import {validateAssistantTurn} from "./validateAssistantTurn.js";
+import {
+  openingOrPlaceholder,
+  validateConfirmed,
+  verdictsOf,
+} from "./validateOpening.js";
 
 export {DEFAULT_PRIVATE_RATIO, DEFAULT_TOTAL_SEEDS} from "./seedSlots.js";
 
@@ -183,6 +188,102 @@ async function fillSlot(
     previousAttempt: output,
     reasons: SeedValidation.failedReasons(validation),
   });
+}
+
+/**
+ * Write a seed's text again in its own slot, when no scenario of it passed
+ * expansion: same id, same risk, situation type and every assigned value
+ * (relabels included), only the narrative fields new. The seed model is shown
+ * the seed and the validator's last reasons, and the new seed goes through the
+ * plausibility check as any seed does. Undefined when every rewrite was
+ * rejected by that check. The last step before a seed is given up (the V7.1
+ * repair did it by hand once: a request with no hook for its risk).
+ */
+export async function regenerateSeed(
+  c: GenerateSeedsContext,
+  seed: ScenarioSeed,
+  reasons: readonly string[],
+  options?: {maxAttempts?: number; isPrivate?: boolean}
+): Promise<ScenarioSeed | undefined> {
+  const riskCategory = RiskCategory.find(seed.riskCategoryId);
+  const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
+  const flavor = seed.scenarioFlavorId
+    ? risk.scenarioFlavors?.find(f => f.id === seed.scenarioFlavorId)
+    : undefined;
+  const goldStandard = SituationTypes.forRisk(
+    SituationTypes.bundled(),
+    seed.riskId
+  )?.find(gs => gs.id === seed.goldStandardId);
+  const situationDescription = goldStandard?.situationTypes.find(
+    type => type.name === seed.situationType
+  )?.description;
+  const {use, refusalBehavior, memory, childGender, childSES} = seed;
+  if (
+    !use ||
+    !refusalBehavior ||
+    !memory ||
+    !childSES ||
+    (childGender !== "girl" && childGender !== "boy")
+  ) {
+    throw new Error(
+      `Seed ${seed.id} was not allocated by the current generator (use, refusal behavior, memory, gender or SES missing or not pinned): its slot cannot be rebuilt.`
+    );
+  }
+  const slot: SeedSlot = {
+    key: seed.id,
+    riskCategory,
+    risk,
+    isPrivate: options?.isPrivate ?? false,
+    assignment: {
+      ageRange: seed.ageRange,
+      childAge: seed.childAge,
+      childGender,
+      childRaceEthnicity: seed.childRaceEthnicity,
+      childSES,
+      motivation: seed.motivation,
+      socialContext: seed.socialContext,
+      riskSignalType: seed.riskSignalType,
+      use,
+      refusalBehavior,
+      memory,
+      ...(flavor ? {flavor} : {}),
+      ...(goldStandard && seed.situationType
+        ? {
+            situation: {
+              goldStandardId: goldStandard.id,
+              goldStandardName: goldStandard.name,
+              situationType: seed.situationType,
+              ...(situationDescription ? {situationDescription} : {}),
+            },
+          }
+        : {}),
+    },
+  };
+  const written = await fillSlot(
+    c,
+    slot,
+    options?.maxAttempts ?? DEFAULT_SEED_VALIDATION_ATTEMPTS,
+    1,
+    0,
+    {
+      previousAttempt: {
+        shortTitle: seed.shortTitle,
+        coreBehavior: seed.coreBehavior,
+        context: seed.context,
+        notes: seed.notes,
+      },
+      reasons,
+      rejectedBy: "expansion",
+    }
+  );
+  return written
+    ? {
+        ...written,
+        id: seed.id,
+        ...(seed.relabeled ? {relabeled: seed.relabeled} : {}),
+        regenerated: {reasons: [...reasons]},
+      }
+    : undefined;
 }
 
 /**
@@ -358,7 +459,7 @@ export const kora = Benchmark.new({
     }
   },
   async expandScenario(c, seed, options) {
-    const maxAttempts = 2;
+    const maxAttempts = options?.maxAttempts ?? 2;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
     const motivation = Motivation.listAll().find(
@@ -417,51 +518,54 @@ export const kora = Benchmark.new({
         ...modelScenario,
         ...stampField(),
       };
+      const opening = await openingOrPlaceholder(
+        c,
+        risk,
+        draft,
+        messageFeedback
+      );
+      if (opening.placeholder) {
+        // An unfilled template: the scenario stands, its opening is written
+        // again with the reason, as after any first-message rejection.
+        lastReasons = PlaceholderError.reason;
+        keptScenario = modelScenario;
+        messageFeedback = {
+          previousMessage: opening.placeholder.output,
+          reasons: [PlaceholderError.reason],
+        };
+        continue;
+      }
       const scenario: Scenario = {
         ...draft,
-        firstUserMessage: await generateFirstUserMessage(
-          c,
-          risk,
-          draft,
-          messageFeedback
-        ),
+        firstUserMessage: opening.firstUserMessage,
       };
 
-      const relaxChildVoice = ScenarioValidation.relaxesChildVoice(
-        seed.ageRange,
-        (options?.priorRejections ?? 0) + attempt
-      );
-      const validationPrompt = scenarioToValidationPrompt(
-        riskCategory,
-        risk,
-        seed.ageRange,
+      const confirmed = await validateConfirmed(
+        c,
         scenario,
-        {relaxChildVoice}
+        (options?.priorRejections ?? 0) + attempt,
+        {recheck: options?.recheck}
       );
-
-      const {output: validation} = await c.getResponse({
-        messages: [
-          {role: "system", content: validationPrompt.system},
-          {role: "user", content: validationPrompt.user},
-        ],
-        outputType: ScenarioValidation.io,
-      });
-      const verdict = ScenarioValidation.verdict(validation, {
-        relaxChildVoice,
-      });
-      const reasons = ScenarioValidation.reasons(validation);
-
-      await c.onValidation?.({
-        seed,
-        attempt: attempt + 1,
-        maxAttempts,
-        scenario,
+      for (const given of verdictsOf(confirmed)) {
+        await c.onValidation?.({
+          seed,
+          attempt: attempt + 1,
+          maxAttempts,
+          scenario,
+          validation: given.verdict.validation,
+          verdict: given.verdict.verdict,
+          reasons: given.verdict.reasons,
+          childVoiceRelaxed: given.verdict.childVoiceRelaxed,
+          firstMessageRewrite,
+          ...(given.recheck ? {recheck: true as const} : {}),
+        });
+      }
+      const {
         validation,
         verdict,
         reasons,
         childVoiceRelaxed: relaxChildVoice,
-        firstMessageRewrite,
-      });
+      } = confirmed;
 
       if (verdict === "pass") {
         return [scenario];
@@ -492,7 +596,11 @@ export const kora = Benchmark.new({
       // A scenario rejected for its first user message alone was accepted as
       // a scenario: expanding it again would spend the expensive call on text
       // that passed, and would not tell the message writer what went wrong.
+      // A first message that does not test the risk is the narrative's doing
+      // (the risk sits in its backstory): the scenario is expanded again, with
+      // the reason.
       if (
+        validation.firstMessageTestsRisk.answer !== "no" &&
         ScenarioValidation.rejectsFirstMessageOnly(validation, {
           relaxChildVoice,
         })
@@ -522,7 +630,7 @@ export const kora = Benchmark.new({
       R.map(ScenarioKey.toString)
     );
   },
-  async runTest(c, scenario, keyString, startMessages) {
+  async runTest(c, scenario, keyString, startMessages, startChildTurns) {
     const key = ScenarioKey.ofString(keyString);
     const riskCategory = RiskCategory.find(scenario.seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, scenario.seed.riskId);
@@ -549,7 +657,14 @@ export const kora = Benchmark.new({
     // resumed test records only its own turns.
     const childTurns: ChildTurn[] = [];
 
-    for (let i = startTurn; i < conversationLength; i++) {
+    // The conversation stops once the child has said they are leaving: the AI
+    // answers that message, and no turn follows. A resumed attempt counts the
+    // turns it was given.
+    const hasLeft = () =>
+      ChildTurn.leftAtTurn([...(startChildTurns ?? []), ...childTurns]) !==
+      undefined;
+
+    for (let i = startTurn; i < conversationLength && !hasLeft(); i++) {
       const tUserMessage = Date.now();
       const userMessage = await (async () => {
         // The opening is part of the corpus, written once per scenario: every
@@ -624,16 +739,24 @@ export const kora = Benchmark.new({
       });
     }
 
+    // The judges stop at the child's leaving message, counting the turns of a
+    // resumed attempt too. The AI's answer to it is kept in the result but
+    // not graded.
     const result = await runJudges(
       c.judgeModels,
       scenario,
       prompt,
-      messages,
+      ChildTurn.judgedMessages(messages, [
+        ...(startChildTurns ?? []),
+        ...childTurns,
+      ]),
       c.trace,
       c.mechanismJudges
     );
     return {
       ...result,
+      // The whole conversation is kept, the turns after a leave included.
+      messages,
       ...(childTurns.length > 0 && {childTurns}),
       ...(assistantTurns.length > 0 && {assistantTurns}),
     };
