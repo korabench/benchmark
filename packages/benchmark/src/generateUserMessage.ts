@@ -17,7 +17,11 @@ interface UserResponseContext {
   language?: string;
 }
 
-const placeholderRegex = /\[[^\]]{2,}\]/;
+// Catches unsubstituted placeholders like `[name]` or `[specific group]`
+// (the prompt tells the simulated child not to emit these). Requires 2+
+// non-digit chars inside so code and citations — `[1, 2, 3]`, `numbers[10]`,
+// `[12]` — pass through. See issue #52.
+const placeholderRegex = /\[[^\]\d]{2,}\]/;
 const maxAttempts = 3;
 
 /**
