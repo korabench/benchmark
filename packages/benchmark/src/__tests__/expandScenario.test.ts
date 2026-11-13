@@ -760,4 +760,25 @@ describe("kora.expandScenario", () => {
     );
     expect(scenario!.firstUserMessage).toBe("Hi Sam, quick question");
   });
+
+  it("takes as many attempts as maxAttempts allows", async () => {
+    const rejected = failingValidation("Not yet.");
+    const context = createExpandContext([
+      validModelScenarioLight(),
+      rejected,
+      validModelScenarioLight(),
+      rejected,
+      validModelScenarioLight(),
+      passingValidation(),
+    ]);
+    const [scenario] = await kora.expandScenario(
+      context,
+      createScenarioSeed(),
+      {
+        recheck: false,
+        maxAttempts: 3,
+      }
+    );
+    expect(scenario).toBeDefined();
+  });
 });
