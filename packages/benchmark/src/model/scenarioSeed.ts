@@ -408,6 +408,15 @@ const VScenarioSeed = v.strictObject({
       memory: v.optional(v.strictObject({from: VSeedMemory})),
     })
   ),
+  // Set by `expand-scenarios` when no scenario of the seed passed, after the
+  // attempts and the relabels: its text was written again in its slot, every
+  // assigned value and the id kept, with the validator's last reasons. See
+  // `regenerateSeed` in `kora.ts`. Absent on a seed as generated.
+  regenerated: v.optional(
+    v.strictObject({
+      reasons: v.array(v.string()),
+    })
+  ),
   scenarioFlavorId: v.optional(
     v.pipe(
       v.string(),

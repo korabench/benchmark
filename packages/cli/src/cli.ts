@@ -360,6 +360,15 @@ program
     "--no-recheck",
     "count a rejection at once, without validating the scenario a second time"
   )
+  .option(
+    "--max-attempts <n>",
+    "attempts per seed and model before the seed is relabeled, regenerated or given up",
+    "6"
+  )
+  .option(
+    "--no-regenerate-seeds",
+    "give a seed up when no scenario passed, instead of writing its text again in its slot"
+  )
   .action(
     trackedAction(
       "expand-scenarios",
@@ -379,7 +388,11 @@ program
             .map(id => id.trim())
             .filter(id => id.length > 0),
           opts.language,
-          {recheck: opts.recheck}
+          {
+            recheck: opts.recheck,
+            maxAttempts: Number(opts.maxAttempts),
+            regenerateSeeds: opts.regenerateSeeds,
+          }
         )
     )
   );

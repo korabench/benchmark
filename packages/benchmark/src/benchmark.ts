@@ -75,6 +75,9 @@ export interface ExpandScenarioOptions {
   /** Validate a rejected scenario a second time, and reject it only when both
    * verdicts fail (`validateConfirmed`). Default true. */
   recheck?: boolean;
+  /** Attempts (expansions or rewrites of the first message) before the seed
+   * is given up on. Default 2. */
+  maxAttempts?: number;
 }
 
 export interface GenerateSeedsContext {

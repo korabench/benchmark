@@ -45,6 +45,7 @@ import {ModelScenarioSeed, ScenarioSeed} from "./model/scenarioSeed.js";
 import {ScenarioValidation} from "./model/scenarioValidation.js";
 import {ScenarioValidationError} from "./model/scenarioValidationError.js";
 import {SeedValidation} from "./model/seedValidation.js";
+import {SituationTypes} from "./model/situationTypes.js";
 import {JudgeOutput, TestAssessment} from "./model/testAssessment.js";
 import {TestResult} from "./model/testResult.js";
 import {Packs} from "./packs/packs.js";
@@ -187,6 +188,102 @@ async function fillSlot(
     previousAttempt: output,
     reasons: SeedValidation.failedReasons(validation),
   });
+}
+
+/**
+ * Write a seed's text again in its own slot, when no scenario of it passed
+ * expansion: same id, same risk, situation type and every assigned value
+ * (relabels included), only the narrative fields new. The seed model is shown
+ * the seed and the validator's last reasons, and the new seed goes through the
+ * plausibility check as any seed does. Undefined when every rewrite was
+ * rejected by that check. The last step before a seed is given up (the V7.1
+ * repair did it by hand once: a request with no hook for its risk).
+ */
+export async function regenerateSeed(
+  c: GenerateSeedsContext,
+  seed: ScenarioSeed,
+  reasons: readonly string[],
+  options?: {maxAttempts?: number; isPrivate?: boolean}
+): Promise<ScenarioSeed | undefined> {
+  const riskCategory = RiskCategory.find(seed.riskCategoryId);
+  const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
+  const flavor = seed.scenarioFlavorId
+    ? risk.scenarioFlavors?.find(f => f.id === seed.scenarioFlavorId)
+    : undefined;
+  const goldStandard = SituationTypes.forRisk(
+    SituationTypes.bundled(),
+    seed.riskId
+  )?.find(gs => gs.id === seed.goldStandardId);
+  const situationDescription = goldStandard?.situationTypes.find(
+    type => type.name === seed.situationType
+  )?.description;
+  const {use, refusalBehavior, memory, childGender, childSES} = seed;
+  if (
+    !use ||
+    !refusalBehavior ||
+    !memory ||
+    !childSES ||
+    (childGender !== "girl" && childGender !== "boy")
+  ) {
+    throw new Error(
+      `Seed ${seed.id} was not allocated by the current generator (use, refusal behavior, memory, gender or SES missing or not pinned): its slot cannot be rebuilt.`
+    );
+  }
+  const slot: SeedSlot = {
+    key: seed.id,
+    riskCategory,
+    risk,
+    isPrivate: options?.isPrivate ?? false,
+    assignment: {
+      ageRange: seed.ageRange,
+      childAge: seed.childAge,
+      childGender,
+      childRaceEthnicity: seed.childRaceEthnicity,
+      childSES,
+      motivation: seed.motivation,
+      socialContext: seed.socialContext,
+      riskSignalType: seed.riskSignalType,
+      use,
+      refusalBehavior,
+      memory,
+      ...(flavor ? {flavor} : {}),
+      ...(goldStandard && seed.situationType
+        ? {
+            situation: {
+              goldStandardId: goldStandard.id,
+              goldStandardName: goldStandard.name,
+              situationType: seed.situationType,
+              ...(situationDescription ? {situationDescription} : {}),
+            },
+          }
+        : {}),
+    },
+  };
+  const written = await fillSlot(
+    c,
+    slot,
+    options?.maxAttempts ?? DEFAULT_SEED_VALIDATION_ATTEMPTS,
+    1,
+    0,
+    {
+      previousAttempt: {
+        shortTitle: seed.shortTitle,
+        coreBehavior: seed.coreBehavior,
+        context: seed.context,
+        notes: seed.notes,
+      },
+      reasons,
+      rejectedBy: "expansion",
+    }
+  );
+  return written
+    ? {
+        ...written,
+        id: seed.id,
+        ...(seed.relabeled ? {relabeled: seed.relabeled} : {}),
+        regenerated: {reasons: [...reasons]},
+      }
+    : undefined;
 }
 
 /**
@@ -362,7 +459,7 @@ export const kora = Benchmark.new({
     }
   },
   async expandScenario(c, seed, options) {
-    const maxAttempts = 2;
+    const maxAttempts = options?.maxAttempts ?? 2;
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
     const motivation = Motivation.listAll().find(
