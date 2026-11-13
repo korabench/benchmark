@@ -30,6 +30,9 @@ const VProfileRef = v.object({
 const VRunnerTarget = v.object({
   kind: v.picklist(["web-runner", "native-runner", "custom"]),
   slug: v.string(),
+  /** Model id a `custom-http:<url>` target was asked for; the slug only
+   * names the endpoint, which may serve several models. */
+  model: v.optional(v.string()),
 });
 
 const VTargetRef = v.union([ModelSpec.io, VRunnerTarget]);
