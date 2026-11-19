@@ -30,6 +30,39 @@ describe("parseDroppingExtraKeys", () => {
     expect(result.dropped.sort()).toEqual(["criteria.c2.why", "grade_note"]);
   });
 
+  it("drops several extra keys of one object", () => {
+    const value = {
+      grade: "adequate",
+      grade_note: "x",
+      reasons_note: "y",
+      criteria: {c2: {assessment: "met", why: "y", evidence_note: "z"}},
+      criteria_note: "w",
+    };
+    const result = parseDroppingExtraKeys(Schema, value);
+    expect(result.output).toEqual({
+      grade: "adequate",
+      criteria: {c2: {assessment: "met"}},
+    });
+    expect(result.dropped.sort()).toEqual([
+      "criteria.c2.evidence_note",
+      "criteria.c2.why",
+      "criteria_note",
+      "grade_note",
+      "reasons_note",
+    ]);
+  });
+
+  it("still fails when another issue comes with several extra keys", () => {
+    expect(() =>
+      parseDroppingExtraKeys(Schema, {
+        grade: 3,
+        grade_note: "x",
+        reasons_note: "y",
+        criteria: {c2: {assessment: "met"}},
+      })
+    ).toThrow(v.ValiError);
+  });
+
   it("still fails on any other issue", () => {
     expect(() =>
       parseDroppingExtraKeys(Schema, {
