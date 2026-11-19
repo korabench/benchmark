@@ -71,7 +71,12 @@ export const DEAD_PROMPT_FILES = [
 ] as const;
 
 export interface PromptsFingerprint {
-  /** Bumped by hand alongside `hash` when a template changes. */
+  /**
+   * The edition id: "3" for every revision of V3. Hosted infrastructure reads
+   * it to tell which edition a checkout is, so it changes only when a new
+   * edition starts, never with a template. A template change updates `hash`,
+   * which is what tells two revisions of an edition apart.
+   */
   version: string;
   /**
    * `Hash.shortHash(stableJson([[file, content], ...]))` over the live files,
@@ -81,7 +86,7 @@ export interface PromptsFingerprint {
 }
 
 export const PROMPTS_FINGERPRINT: PromptsFingerprint = {
-  version: "7",
+  version: "3",
   hash: "b652fb275fce240502f331bdc18efe12",
 };
 
