@@ -46,8 +46,15 @@ describe("PROMPTS_FINGERPRINT", () => {
     const expected = computePromptsHash();
     expect(
       PROMPTS_FINGERPRINT.hash,
-      `Prompt templates changed: bump "version" and set "hash" to "${expected}" in prompts/promptsFingerprint.ts`
+      `Prompt templates changed: set "hash" to "${expected}" in prompts/promptsFingerprint.ts, and leave "version" (the edition id) as it is`
     ).toBe(expected);
+  });
+
+  it("keeps the edition id as its version", () => {
+    expect(
+      PROMPTS_FINGERPRINT.version,
+      `"version" is the edition id, not a count of prompt changes: a template change updates "hash" only`
+    ).toBe("3");
   });
 
   it("is what Prompts.fingerprint() returns", () => {
