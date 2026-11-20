@@ -71,6 +71,9 @@ export async function buildContext(
             (outcome.endMarkerRedraws
               ? ` (${outcome.endMarkerRedraws} end-marker redraws)`
               : "") +
+            (outcome.placeholderRedraws
+              ? ` (${outcome.placeholderRedraws} placeholder redraws)`
+              : "") +
             (outcome.leaving ? " (leaving)" : "")
         ),
     });

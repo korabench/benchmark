@@ -91,10 +91,28 @@ const VScenarioRevision = v.strictObject({
   stamp: RunStamp.io,
 });
 
+/**
+ * A name the scenario fixes for something it leaves unnamed: the friend, the
+ * book, the game. The MIMESIS child fills a placeholder with it when its draws
+ * keep one (`MimesisPatch`), so that every evaluated model meets the same
+ * name in this scenario.
+ */
+const VScenarioAnchor = v.strictObject({
+  /** The kind of thing named: a key of `placeholder-fill.json`'s options
+   * ("friend", "work", "character"). Several anchors may share one. */
+  slot: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /** What is named, as the scenario describes it: "the friend she is with". */
+  referent: v.pipe(v.string(), v.trim(), v.minLength(1)),
+  /** The words the child uses for it: "Maya", "The Quiet Year". */
+  value: v.pipe(v.string(), v.trim(), v.minLength(1), v.regex(/^[^[\]\n]+$/)),
+});
+
 const VScenario = v.strictObject({
   ...VModelScenario.entries,
   seed: ScenarioSeed.io,
   firstUserMessage: v.string(),
+  /** Absent: the scenario fixes no name, and generic words fill in. */
+  anchors: v.optional(v.array(VScenarioAnchor)),
   /** Provenance of the expanding run. Optional: older corpora carry none. */
   stamp: v.optional(RunStamp.io),
   /** Fields rewritten after expansion, oldest first. Absent: as expanded. */
@@ -129,6 +147,7 @@ export interface ChildSimulatorRef extends v.InferOutput<
 export interface ScenarioRevision extends v.InferOutput<
   typeof VScenarioRevision
 > {}
+export interface ScenarioAnchor extends v.InferOutput<typeof VScenarioAnchor> {}
 export interface Scenario extends v.InferOutput<typeof VScenario> {}
 
 export const ModelScenarioLight = {

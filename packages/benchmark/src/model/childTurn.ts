@@ -19,6 +19,9 @@ const VChildTurn = v.strictObject({
   issueCount: v.number(),
   editCount: v.number(),
   endMarkerRedraws: v.number(),
+  /** Absent in results written before placeholders were drawn again. */
+  placeholderRedraws: v.optional(v.number()),
+  placeholdersFilled: v.optional(v.number()),
   /** The editor's judgement that the child is ending the chat; null when it
    * gave none. */
   leaving: v.nullable(v.boolean()),

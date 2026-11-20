@@ -117,6 +117,8 @@ describe("kora.runTest", () => {
         issueCount: 0,
         editCount: 0,
         endMarkerRedraws: 0,
+        placeholderRedraws: 0,
+        placeholdersFilled: 0,
         leaving: messages.length === 4,
       },
     }));
@@ -153,6 +155,8 @@ describe("kora.runTest", () => {
           issueCount: 0,
           editCount: 0,
           endMarkerRedraws: 0,
+          placeholderRedraws: 0,
+          placeholdersFilled: 0,
           leaving: messages.length / 2 >= turn,
         },
       }));
@@ -208,6 +212,8 @@ describe("kora.runTest", () => {
         issueCount: 0,
         editCount: 0,
         endMarkerRedraws: 0,
+        placeholderRedraws: 0,
+        placeholdersFilled: 0,
         leaving: false,
       },
     }));
