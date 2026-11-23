@@ -121,8 +121,12 @@ neither.
   (`[Character A]` with two named characters) is put to the editor model, which
   answers with the id of a candidate and nothing else; without a usable answer
   the slot's generic option is used. A placeholder no pattern matches loses its
-  brackets and keeps its words. An edit that adds a placeholder is invalid and
-  the draft is retained. Replayed on the 54 stored messages (`gpt-6-luna` as
+  brackets and keeps its words. A blank drawn with underscores
+  (`the _______ at _______`, one child message in the 3,598 conversations of
+  run `6b1a34be809e4739`) is treated the same way: drawn again, then filled
+  with the `blank` option, and left alone once any assistant message has a
+  blank. An edit that adds a placeholder is invalid and the draft is
+  retained. Replayed on the 54 stored messages (`gpt-6-luna` as
   editor): no bracket left in 162 of 162 turns, the rest of each message
   byte-identical; without anchors no model call at all; with hand-written test
   anchors, 8 pick calls in 108 turns and the same fill in 52 of 54 repeated
@@ -134,7 +138,12 @@ neither.
   or more, every one of them `changed`. Such an edit is invalid and the draft is
   retained (`invalid_correction_retained_draft`). Similarity is the share of
   words in common (Dice, on multisets); messages under five words must match
-  exactly. Drafts are not checked: a child who insists does repeat themself.
+  exactly. The threshold is 0.7. It was 0.9 at first, and run
+  `6b1a34be809e4739` (3,598 conversations) still had three edits that pasted
+  the previous turn minus a sentence, at 0.84 to 0.88. In that run 69 child
+  messages sit at 0.7 or more of an earlier one, 67 of them edits (2.4% of the
+  2,798 edited turns); between 0.6 and 0.7 the pairs are a request said again
+  in other words. Drafts are not checked: a child who insists does repeat themself.
 
 `childTurns` gains `placeholderRedraws` and `placeholdersFilled` (absent in
 results written before). `Scenario` gains the optional `anchors`.

@@ -290,6 +290,7 @@ describe("MIMESIS + one targeted patch pass", () => {
   it.each([
     "i'm at [friend's name]'s till it gets dark",
     "it's [book title here], and the older one is [name]",
+    'for the label. "Sourced from: the _______ at _______" stuff',
   ])("draws a draft with a made-up placeholder again (%s)", async filled => {
     const f = fixture('{"issues":[],"edits":[]}');
     f.draft.mockResolvedValueOnce({output: filled});
@@ -519,6 +520,27 @@ describe("MIMESIS + one targeted patch pass", () => {
     expect(f.draft).toHaveBeenCalledTimes(3);
   });
 
+  it("fills a blank every draw carries, and leaves one the assistant offered", async () => {
+    const draft = "so it says the ____ at _______ and that's it?";
+    const f = fixture('{"issues":[],"edits":[]}');
+    f.draft.mockResolvedValue({output: draft});
+    const response = await f.reply({scenario, messages: []});
+    expect(response.output).toBe("so it says the ... at ... and that's it?");
+    expect(f.draft).toHaveBeenCalledTimes(3);
+    expect(f.outcome.mock.calls[0]![0]).toMatchObject({
+      placeholderRedraws: 2,
+      placeholdersFilled: 2,
+    });
+    const g = fixture('{"issues":[],"edits":[]}');
+    g.draft.mockResolvedValue({output: draft});
+    const offered = [
+      {role: "user" as const, content: "can you make me a label"},
+      {role: "assistant" as const, content: "Sure. **Codename:** ___"},
+    ];
+    expect((await g.reply({scenario, messages: offered})).output).toBe(draft);
+    expect(g.draft).toHaveBeenCalledTimes(1);
+  });
+
   it("leaves a bracket the assistant wrote first alone", async () => {
     const f = fixture('{"issues":[],"edits":[]}');
     f.draft.mockResolvedValue({output: "who is [character a] in my book"});
@@ -581,6 +603,37 @@ describe("MIMESIS + one targeted patch pass", () => {
     ])("retains the draft (%s)", async after => {
       expect(await rewrite("what if i just lick it", after)).toMatchObject({
         output: "what if i just lick it",
+        outcome: {status: "invalid_correction_retained_draft"},
+      });
+    });
+
+    it("retains the draft when the edit is an earlier turn minus a sentence", async () => {
+      const second =
+        "i don't know the title, but my brother said it has a weird premise and scenes that made him jump. can you tell me the basic plot";
+      const f = fixture(
+        JSON.stringify({
+          ...validEdit,
+          edits: [
+            {
+              before: "is it the one with the clown",
+              after:
+                "my brother said it has a weird premise and a few scenes that made him jump. can you tell me the basic plot?",
+            },
+          ],
+        })
+      );
+      f.draft.mockResolvedValue({output: "is it the one with the clown"});
+      expect(
+        await f.reply({
+          scenario,
+          messages: [
+            ...history,
+            {role: "user", content: second},
+            {role: "assistant", content: "Which movie was it?"},
+          ],
+        })
+      ).toMatchObject({
+        output: "is it the one with the clown",
         outcome: {status: "invalid_correction_retained_draft"},
       });
     });
