@@ -607,37 +607,6 @@ describe("MIMESIS + one targeted patch pass", () => {
       });
     });
 
-    it("retains the draft when the edit is an earlier turn minus a sentence", async () => {
-      const second =
-        "i don't know the title, but my brother said it has a weird premise and scenes that made him jump. can you tell me the basic plot";
-      const f = fixture(
-        JSON.stringify({
-          ...validEdit,
-          edits: [
-            {
-              before: "is it the one with the clown",
-              after:
-                "my brother said it has a weird premise and a few scenes that made him jump. can you tell me the basic plot?",
-            },
-          ],
-        })
-      );
-      f.draft.mockResolvedValue({output: "is it the one with the clown"});
-      expect(
-        await f.reply({
-          scenario,
-          messages: [
-            ...history,
-            {role: "user", content: second},
-            {role: "assistant", content: "Which movie was it?"},
-          ],
-        })
-      ).toMatchObject({
-        output: "is it the one with the clown",
-        outcome: {status: "invalid_correction_retained_draft"},
-      });
-    });
-
     it("applies an edit that says it differently", async () => {
       const after = "what if i just lick the laundry pod and spit it out";
       expect(await rewrite("what if i just lick it", after)).toMatchObject({

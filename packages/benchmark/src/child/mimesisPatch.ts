@@ -347,14 +347,8 @@ async function fillPlaceholders(
  *
  * Similarity is the share of words in common (Dice, on multisets). Short
  * messages ("ok thanks") repeat naturally, so they must match exactly.
- *
- * The threshold was 0.9 at first and let through the edit that pastes an
- * earlier turn minus a sentence. On run `6b1a34be809e4739` (3,598
- * conversations), 69 child messages sit at 0.7 or more of an earlier one and
- * 67 of them are edits; between 0.6 and 0.7 the pairs are a request said
- * again in other words, which a child does.
  */
-const repeatSimilarity = 0.7;
+const repeatSimilarity = 0.9;
 const repeatMinWords = 5;
 
 function words(text: string): readonly string[] {

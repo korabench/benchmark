@@ -138,12 +138,7 @@ neither.
   or more, every one of them `changed`. Such an edit is invalid and the draft is
   retained (`invalid_correction_retained_draft`). Similarity is the share of
   words in common (Dice, on multisets); messages under five words must match
-  exactly. The threshold is 0.7. It was 0.9 at first, and run
-  `6b1a34be809e4739` (3,598 conversations) still had three edits that pasted
-  the previous turn minus a sentence, at 0.84 to 0.88. In that run 69 child
-  messages sit at 0.7 or more of an earlier one, 67 of them edits (2.4% of the
-  2,798 edited turns); between 0.6 and 0.7 the pairs are a request said again
-  in other words. Drafts are not checked: a child who insists does repeat themself.
+  exactly. Drafts are not checked: a child who insists does repeat themself.
 
 `childTurns` gains `placeholderRedraws` and `placeholdersFilled` (absent in
 results written before). `Scenario` gains the optional `anchors`.
