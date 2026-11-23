@@ -256,6 +256,12 @@ export async function expandScenariosCommand(
   language?: string,
   options?: ExpandScenariosOptions
 ) {
+  const maxAttempts = options?.maxAttempts ?? DEFAULT_EXPANSION_ATTEMPTS;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new Error(
+      `--max-attempts must be a positive integer (got ${maxAttempts}).`
+    );
+  }
   const effective = resolveEffectiveProfile(modelsJsonPath, overrides);
   const {roles} = effective;
   console.log(`Profile: ${describeProfileRef(effective.ref)}`);
@@ -495,7 +501,7 @@ export async function expandScenariosCommand(
               const scenarios = await kora.expandScenario(context, current, {
                 priorRejections: rejections,
                 recheck: options?.recheck,
-                maxAttempts: options?.maxAttempts ?? DEFAULT_EXPANSION_ATTEMPTS,
+                maxAttempts,
               });
               return {scenarios};
             } catch (error) {

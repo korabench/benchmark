@@ -781,4 +781,15 @@ describe("kora.expandScenario", () => {
     );
     expect(scenario).toBeDefined();
   });
+
+  it.each([0, -1, 1.5, Number.NaN])(
+    "refuses maxAttempts %s instead of reporting a seed stuck without trying it",
+    async maxAttempts => {
+      const context = createExpandContext([]);
+      await expect(
+        kora.expandScenario(context, createScenarioSeed(), {maxAttempts})
+      ).rejects.toThrow(/maxAttempts must be a positive integer/);
+      expect(context.getResponse).not.toHaveBeenCalled();
+    }
+  );
 });
