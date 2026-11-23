@@ -42,6 +42,21 @@ describe("assertResumable", () => {
     );
   });
 
+  it("refuses the conversations of another target", async () => {
+    const dir = freshDir();
+    const withTarget = (name: string) =>
+      makeStamp({
+        models: {...makeStamp().models, target: {name, model: `p/${name}`}},
+      });
+    await assertResumable(dir, withTarget("model-a"));
+    await expect(assertResumable(dir, withTarget("model-a"))).resolves.toBe(
+      undefined
+    );
+    await expect(assertResumable(dir, withTarget("model-b"))).rejects.toThrow(
+      /another target\.\n\s+cached:\s+model-a \(p\/model-a\)\n\s+current: model-b \(p\/model-b\)/
+    );
+  });
+
   it("warns and proceeds for a legacy directory without a stamp", async () => {
     const dir = freshDir();
     writeFileSync(path.join(dir, "abc.json"), "{}");
