@@ -35,6 +35,38 @@ export interface ChildResponseRequest {
   };
 }
 
+/**
+ * Why an edit was not applied and the draft kept: the editor's answer was cut
+ * short ("truncated"), was not the JSON asked for ("unreadable"), held edits
+ * that do not apply to the draft or issues that cite no source
+ * ("invalid_edit"), gave a message that cannot be sent ("invalid_output"),
+ * brought in a placeholder ("adds_placeholder"), or turned the draft into a
+ * message the child already sent ("repeat").
+ */
+export type EditRejection =
+  | "truncated"
+  | "unreadable"
+  | "invalid_edit"
+  | "invalid_output"
+  | "adds_placeholder"
+  | "repeat";
+
+/** Where the replacements of a draft's placeholders came from. */
+export interface PlaceholderFills {
+  /** The scenario's own anchor for the slot. */
+  readonly anchor: number;
+  /** The slot's generic option (`placeholder-fill.json`). */
+  readonly option: number;
+  /** No slot matched: the placeholder's own words, unbracketed. */
+  readonly bare: number;
+  /** Of those, the ones the editor chose among several candidates. */
+  readonly picked: number;
+}
+
+/** Which of its two jobs the editor is called for: its pass over the draft,
+ * or the choice of a placeholder's replacement. */
+export type EditorCall = "edit" | "pick";
+
 export interface PatchOutcome {
   readonly status:
     | "unchanged"
@@ -50,6 +82,11 @@ export interface PatchOutcome {
   /** Placeholders the last draw kept, replaced by the scenario's anchors or
    * the generic options (`fillPlaceholders`). */
   readonly placeholdersFilled: number;
+  /** Where those replacements came from. Absent when nothing was filled. */
+  readonly fills?: PlaceholderFills;
+  /** Why the edit was not applied, with `invalid_correction_retained_draft`.
+   * Recorded only: the draft is kept whatever the reason. */
+  readonly editRejection?: EditRejection;
   /** The editor's judgement that the draft closes the child's side of the
    * conversation; null when its reply carried no readable flag. Recorded
    * only: the conversation still runs to its length. */
@@ -64,7 +101,12 @@ export interface ChildResponse {
 
 export interface MimesisPatchOptions {
   readonly draft: (request: ModelRequest) => Promise<ChildCompletion>;
-  readonly editor: (request: ModelRequest) => Promise<ChildCompletion>;
+  /** `call` says which of the editor's jobs the request is, for the caller's
+   * own records; it is not part of the request. */
+  readonly editor: (
+    request: ModelRequest,
+    call: EditorCall
+  ) => Promise<ChildCompletion>;
   /** Optional text-free audit hook; never receives draft, reasoning or edits. */
   readonly onOutcome?: (outcome: PatchOutcome) => void;
 }
@@ -230,6 +272,9 @@ interface FillCandidate {
   readonly id: string;
   readonly description: string;
   readonly value: string;
+  /** Where the value comes from. An option with no word of its own gives the
+   * placeholder's words back: "bare", like an unmatched slot. */
+  readonly source: "anchor" | "option" | "bare";
 }
 
 /** A matched slot's own anchors, then its option. Empty when unmatched. */
@@ -244,6 +289,7 @@ function candidatesOf(found: string, scenario: Scenario): FillCandidate[] {
               id: `anchor:${i}`,
               description: anchor.referent,
               value: anchor.value,
+              source: "anchor" as const,
             },
           ]
         : []
@@ -252,6 +298,7 @@ function candidatesOf(found: string, scenario: Scenario): FillCandidate[] {
       id: `option:${option.key}`,
       description: option.description,
       value: optionValue(option, found),
+      source: (option.value ?? undefined) === undefined ? "bare" : "option",
     },
   ];
 }
@@ -268,42 +315,43 @@ async function fillPlaceholders(
   scenario: Scenario,
   messages: readonly ModelMessage[],
   editor: MimesisPatchOptions["editor"]
-): Promise<{output: string; filled: number}> {
+): Promise<{output: string; filled: number; fills?: PlaceholderFills}> {
   const found = [...new Set(madeUpPlaceholders(draft, messages))];
   if (!found.length) return {output: draft, filled: 0};
   const candidates = new Map(found.map(f => [f, candidatesOf(f, scenario)]));
   // Put to the model: a slot with several anchors on it, and nothing else.
   const open = found.filter(f => candidates.get(f)!.length > 2);
   const picked = open.length
-    ? await (async (): Promise<ReadonlyMap<string, string>> => {
+    ? await (async (): Promise<ReadonlyMap<string, FillCandidate>> => {
         try {
-          const reply = await editor({
-            maxTokens: recipe.editor.maxTokens,
-            messages: [
-              {role: "system", content: placeholderFill.prompt},
-              {
-                role: "user",
-                content: JSON.stringify({
-                  conversation: messages,
-                  draft,
-                  placeholders: open.map(f => ({
-                    placeholder: f,
-                    candidates: candidates
-                      .get(f)!
-                      .map(({id, description}) => ({id, description})),
-                  })),
-                }),
-              },
-            ],
-          });
+          const reply = await editor(
+            {
+              maxTokens: recipe.editor.maxTokens,
+              messages: [
+                {role: "system", content: placeholderFill.prompt},
+                {
+                  role: "user",
+                  content: JSON.stringify({
+                    conversation: messages,
+                    draft,
+                    placeholders: open.map(f => ({
+                      placeholder: f,
+                      candidates: candidates
+                        .get(f)!
+                        .map(({id, description}) => ({id, description})),
+                    })),
+                  }),
+                },
+              ],
+            },
+            "pick"
+          );
           if (reply.truncated) return new Map();
           const {picks} = v.parse(VPicks, editorJson(reply.output));
           return new Map(
             picks.flatMap(({placeholder: f, pick}) => {
               const chosen = candidates.get(f)?.find(c => c.id === pick);
-              return open.includes(f) && chosen
-                ? [[f, chosen.value] as const]
-                : [];
+              return open.includes(f) && chosen ? [[f, chosen] as const] : [];
             })
           );
         } catch {
@@ -311,17 +359,32 @@ async function fillPlaceholders(
           return new Map();
         }
       })()
-    : new Map<string, string>();
+    : new Map<string, FillCandidate>();
   // Without a pick: the slot's one anchor, else its option (the last
   // candidate), never one anchor among several; unmatched, the bare words.
-  const fills = new Map(
-    found.map(f => {
-      const list = candidates.get(f)!;
-      const fallback = list.length === 2 ? list[0] : list.at(-1);
-      return [f, picked.get(f) ?? fallback?.value ?? f.slice(1, -1).trim()];
-    })
-  );
-  return {output: replaceEach(draft, fills), filled: found.length};
+  const chosen = found.map(f => {
+    const list = candidates.get(f)!;
+    const candidate =
+      picked.get(f) ?? (list.length === 2 ? list[0] : list.at(-1));
+    return {
+      found: f,
+      value: candidate?.value ?? f.slice(1, -1).trim(),
+      source: candidate?.source ?? ("bare" as const),
+      picked: picked.has(f),
+    };
+  });
+  const count = (source: "anchor" | "option" | "bare") =>
+    chosen.filter(c => c.source === source).length;
+  return {
+    output: replaceEach(draft, new Map(chosen.map(c => [c.found, c.value]))),
+    filled: found.length,
+    fills: {
+      anchor: count("anchor"),
+      option: count("option"),
+      bare: count("bare"),
+      picked: chosen.filter(c => c.picked).length,
+    },
+  };
 }
 
 /**
@@ -417,13 +480,32 @@ function leavingFlag(text: string): boolean | null {
   }
 }
 
+/** An edit that is not applied, and why (`EditRejection`). */
+class EditRejected extends Error {
+  constructor(
+    readonly reason: EditRejection,
+    message: string
+  ) {
+    super(message);
+    this.name = "EditRejected";
+  }
+}
+
+function correctionOf(text: string): v.InferOutput<typeof VCorrection> {
+  try {
+    return v.parse(VCorrection, editorJson(text));
+  } catch {
+    throw new EditRejected("unreadable", "Unreadable correction.");
+  }
+}
+
 function correction(
   text: string,
   draft: string,
   fields: Record<string, unknown>,
   messages: readonly ModelMessage[]
 ) {
-  const data = v.parse(VCorrection, editorJson(text));
+  const data = correctionOf(text);
   const allowed = new Set([
     ...Object.keys(fields),
     "actual_public_history",
@@ -439,19 +521,25 @@ function correction(
       )
     )
   )
-    throw new Error("Invalid issue source field.");
+    throw new EditRejected("invalid_edit", "Invalid issue source field.");
   if (Boolean(data.issues.length) !== Boolean(data.edits.length))
-    throw new Error("Issues and edits must both be empty or present.");
+    throw new EditRejected(
+      "invalid_edit",
+      "Issues and edits must both be empty or present."
+    );
   const spans = data.edits
     .map(edit => {
       if (draft.split(edit.before).length !== 2)
-        throw new Error("Edit must match one nonempty draft span.");
+        throw new EditRejected(
+          "invalid_edit",
+          "Edit must match one nonempty draft span."
+        );
       const start = draft.indexOf(edit.before);
       return {start, end: start + edit.before.length, after: edit.after};
     })
     .toSorted((a, b) => a.start - b.start);
   if (spans.some((span, i) => i > 0 && spans[i - 1]!.end > span.start))
-    throw new Error("Overlapping edits.");
+    throw new EditRejected("invalid_edit", "Overlapping edits.");
   const output = spans
     .toReversed()
     .reduce(
@@ -464,18 +552,21 @@ function correction(
     /<think>|<\/think>|<\|im_start\|>/.test(output) ||
     endMarker.test(output)
   )
-    throw new Error("Invalid edited output.");
+    throw new EditRejected("invalid_output", "Invalid edited output.");
   // Checked on a changed draft only: an edit must not bring in what a draft is
   // drawn again for, nor a message the child already sent.
   if (output !== draft) {
     const kept = new Set(madeUpPlaceholders(draft, messages));
     if (madeUpPlaceholders(output, messages).some(found => !kept.has(found)))
-      throw new Error("Edit adds a placeholder.");
+      throw new EditRejected("adds_placeholder", "Edit adds a placeholder.");
     if (
       repeatsEarlierMessage(output, messages) &&
       !repeatsEarlierMessage(draft, messages)
     )
-      throw new Error("Edit repeats an earlier child message.");
+      throw new EditRejected(
+        "repeat",
+        "Edit repeats an earlier child message."
+      );
   }
   return {output, issueCount: data.issues.length, editCount: data.edits.length};
 }
@@ -562,12 +653,11 @@ function create(options: MimesisPatchOptions) {
       endMarker: 0,
       placeholder: 0,
     });
-    const {output: original, filled} = await fillPlaceholders(
-      drawn,
-      scenario,
-      messages,
-      options.editor
-    );
+    const {
+      output: original,
+      filled,
+      fills,
+    } = await fillPlaceholders(drawn, scenario, messages, options.editor);
     // The scenario's anchors are source facts for the editor too: without
     // them it takes a filled-in name for an invented detail and edits it out
     // ("Zoe's mom" came back as "my friend's parent"). Shown only when the
@@ -575,32 +665,36 @@ function create(options: MimesisPatchOptions) {
     const editorFields = scenario.anchors?.length
       ? {...fields, anchors: scenario.anchors}
       : fields;
-    const edited = await options.editor({
-      maxTokens: recipe.editor.maxTokens,
-      messages: [
-        {role: "system", content: recipe.editorPrompt},
-        {
-          role: "user",
-          content: JSON.stringify({
-            original_scenario_and_profile: editorFields,
-            actual_public_history: messages,
-            ...(feedback
-              ? {
-                  rejected_previous_opening: {
-                    message: feedback.previousMessage,
-                    reasons: feedback.reasons,
-                  },
-                }
-              : {}),
-            draft: original,
-          }),
-        },
-      ],
-    });
+    const edited = await options.editor(
+      {
+        maxTokens: recipe.editor.maxTokens,
+        messages: [
+          {role: "system", content: recipe.editorPrompt},
+          {
+            role: "user",
+            content: JSON.stringify({
+              original_scenario_and_profile: editorFields,
+              actual_public_history: messages,
+              ...(feedback
+                ? {
+                    rejected_previous_opening: {
+                      message: feedback.previousMessage,
+                      reasons: feedback.reasons,
+                    },
+                  }
+                : {}),
+              draft: original,
+            }),
+          },
+        ],
+      },
+      "edit"
+    );
     const leaving = edited.truncated ? null : leavingFlag(edited.output);
     const result = ((): {output: string; outcome: PatchOutcome} => {
       try {
-        if (edited.truncated) throw new Error("Editor response truncated.");
+        if (edited.truncated)
+          throw new EditRejected("truncated", "Editor response truncated.");
         const result = correction(
           edited.output,
           original,
@@ -616,10 +710,11 @@ function create(options: MimesisPatchOptions) {
             endMarkerRedraws: redraws.endMarker,
             placeholderRedraws: redraws.placeholder,
             placeholdersFilled: filled,
+            ...(fills && {fills}),
             leaving,
           },
         };
-      } catch {
+      } catch (err) {
         return {
           output: original,
           outcome: {
@@ -629,6 +724,9 @@ function create(options: MimesisPatchOptions) {
             endMarkerRedraws: redraws.endMarker,
             placeholderRedraws: redraws.placeholder,
             placeholdersFilled: filled,
+            ...(fills && {fills}),
+            editRejection:
+              err instanceof EditRejected ? err.reason : "unreadable",
             leaving,
           },
         };
