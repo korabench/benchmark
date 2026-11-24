@@ -22,6 +22,28 @@ const VChildTurn = v.strictObject({
   /** Absent in results written before placeholders were drawn again. */
   placeholderRedraws: v.optional(v.number()),
   placeholdersFilled: v.optional(v.number()),
+  /** Where the replacements came from; absent when nothing was filled, and
+   * in results written before it was recorded. */
+  fills: v.optional(
+    v.strictObject({
+      anchor: v.number(),
+      option: v.number(),
+      bare: v.number(),
+      picked: v.number(),
+    })
+  ),
+  /** Why the edit was not applied (`invalid_correction_retained_draft`);
+   * absent in results written before it was recorded. */
+  editRejection: v.optional(
+    v.picklist([
+      "truncated",
+      "unreadable",
+      "invalid_edit",
+      "invalid_output",
+      "adds_placeholder",
+      "repeat",
+    ])
+  ),
   /** The editor's judgement that the child is ending the chat; null when it
    * gave none. */
   leaving: v.nullable(v.boolean()),

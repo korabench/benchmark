@@ -25,7 +25,12 @@ const validEdit = {
 
 function fixture(output = JSON.stringify(validEdit), truncated = false) {
   const draft = vi.fn(async (_request: ModelRequest) => ({output: original}));
-  const editor = vi.fn(async (_request: ModelRequest) => ({output, truncated}));
+  const editor = vi.fn(
+    async (_request: ModelRequest, _call: "edit" | "pick") => ({
+      output,
+      truncated,
+    })
+  );
   const outcome = vi.fn();
   return {
     draft,
@@ -136,31 +141,52 @@ describe("MIMESIS + one targeted patch pass", () => {
   });
 
   it.each([
-    "not JSON",
-    JSON.stringify({...validEdit, issues: []}),
-    JSON.stringify({...validEdit, edits: []}),
-    JSON.stringify({
-      ...validEdit,
-      issues: [{problem: "claim", source_fields: ["invented"]}],
-    }),
-    JSON.stringify({...validEdit, edits: [{before: "missing", after: "x"}]}),
-    JSON.stringify({...validEdit, edits: [{before: "", after: "x"}]}),
-    JSON.stringify({
-      ...validEdit,
-      edits: [
-        {before: "blue plant", after: "x"},
-        {before: "plant", after: "y"},
-      ],
-    }),
-    JSON.stringify({...validEdit, edits: [{before: original, after: ""}]}),
-    JSON.stringify({
-      ...validEdit,
-      edits: [{before: "blue", after: "<think>leak</think>"}],
-    }),
-    JSON.stringify({...validEdit, edits: [{before: "blue", after: "[end]"}]}),
-  ])(
-    "retains and flags the first draft for invalid edits without another content attempt (%s)",
-    async output => {
+    ["not JSON", "unreadable"],
+    [JSON.stringify({...validEdit, issues: []}), "invalid_edit"],
+    [JSON.stringify({...validEdit, edits: []}), "invalid_edit"],
+    [
+      JSON.stringify({
+        ...validEdit,
+        issues: [{problem: "claim", source_fields: ["invented"]}],
+      }),
+      "invalid_edit",
+    ],
+    [
+      JSON.stringify({...validEdit, edits: [{before: "missing", after: "x"}]}),
+      "invalid_edit",
+    ],
+    [
+      JSON.stringify({...validEdit, edits: [{before: "", after: "x"}]}),
+      "unreadable",
+    ],
+    [
+      JSON.stringify({
+        ...validEdit,
+        edits: [
+          {before: "blue plant", after: "x"},
+          {before: "plant", after: "y"},
+        ],
+      }),
+      "invalid_edit",
+    ],
+    [
+      JSON.stringify({...validEdit, edits: [{before: original, after: ""}]}),
+      "invalid_output",
+    ],
+    [
+      JSON.stringify({
+        ...validEdit,
+        edits: [{before: "blue", after: "<think>leak</think>"}],
+      }),
+      "invalid_output",
+    ],
+    [
+      JSON.stringify({...validEdit, edits: [{before: "blue", after: "[end]"}]}),
+      "invalid_output",
+    ],
+  ] as const)(
+    "retains and flags the first draft for invalid edits without another content attempt (%s), saying why (%s)",
+    async (output, editRejection) => {
       const f = fixture(output);
       expect(await f.reply({scenario, messages: []})).toMatchObject({
         output: original,
@@ -174,6 +200,7 @@ describe("MIMESIS + one targeted patch pass", () => {
         endMarkerRedraws: 0,
         placeholderRedraws: 0,
         placeholdersFilled: 0,
+        editRejection,
         leaving: null,
       });
     }
@@ -184,9 +211,24 @@ describe("MIMESIS + one targeted patch pass", () => {
     expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: original,
     });
-    expect(f.outcome.mock.calls[0]![0].status).toBe(
-      "invalid_correction_retained_draft"
-    );
+    expect(f.outcome.mock.calls[0]![0]).toMatchObject({
+      status: "invalid_correction_retained_draft",
+      editRejection: "truncated",
+    });
+  });
+
+  it("says no reason, and no fill, for an edit that is applied to a draft without placeholders", async () => {
+    const f = fixture();
+    const {outcome} = await f.reply({scenario, messages: []});
+    expect(outcome).toMatchObject({status: "changed"});
+    expect(outcome).not.toHaveProperty("editRejection");
+    expect(outcome).not.toHaveProperty("fills");
+  });
+
+  it("tells the caller the edit pass from a placeholder pick", async () => {
+    const f = fixture();
+    await f.reply({scenario, messages: []});
+    expect(f.editor.mock.calls.map(call => call[1])).toEqual(["edit"]);
   });
 
   it("accepts unchanged and fenced-JSON corrections, plus simultaneous disjoint edits", async () => {
@@ -344,6 +386,7 @@ describe("MIMESIS + one targeted patch pass", () => {
           status: "unchanged",
           placeholderRedraws: 2,
           placeholdersFilled: 3,
+          fills: {anchor: 0, option: 3, bare: 0, picked: 0},
         },
       });
       expect(f.draft).toHaveBeenCalledTimes(3);
@@ -362,7 +405,10 @@ describe("MIMESIS + one targeted patch pass", () => {
       });
       expect(await f.reply({scenario: anchored, messages: []})).toMatchObject({
         output: "i'm at Maya's. the book is Tin Sky. ...",
-        outcome: {placeholdersFilled: 3},
+        outcome: {
+          placeholdersFilled: 3,
+          fills: {anchor: 2, option: 1, bare: 0, picked: 0},
+        },
       });
       expect(f.editor).toHaveBeenCalledTimes(1);
     });
@@ -402,8 +448,15 @@ describe("MIMESIS + one targeted patch pass", () => {
         .mockResolvedValueOnce(noEdit);
       expect(await f.reply({scenario: anchored, messages: []})).toMatchObject({
         output: "Mr. Hale flatters Nina",
-        outcome: {placeholdersFilled: 2},
+        outcome: {
+          placeholdersFilled: 2,
+          fills: {anchor: 2, option: 0, bare: 0, picked: 2},
+        },
       });
+      expect(f.editor.mock.calls.map(call => call[1])).toEqual([
+        "pick",
+        "edit",
+      ]);
       const request = f.editor.mock.calls[0]![0];
       expect(request.messages[0]!.content).toBe(
         MimesisPatch.placeholderFill.prompt
@@ -450,9 +503,15 @@ describe("MIMESIS + one targeted patch pass", () => {
       f.editor
         .mockRejectedValueOnce(new Error("transport"))
         .mockResolvedValueOnce(noEdit);
-      expect((await f.reply({scenario: anchored, messages: []})).output).toBe(
-        "who is the character"
-      );
+      const failed = await f.reply({scenario: anchored, messages: []});
+      expect(failed.output).toBe("who is the character");
+      // The option, and not the editor's choice.
+      expect(failed.outcome?.fills).toEqual({
+        anchor: 0,
+        option: 1,
+        bare: 0,
+        picked: 0,
+      });
       f.editor
         .mockResolvedValueOnce({
           ...pick({"[Character A]": "anchor:2"}),
@@ -475,6 +534,12 @@ describe("MIMESIS + one targeted patch pass", () => {
         "tell him the colour of the plant and the girl i sit with"
       );
       expect(response.output).not.toMatch(/[[\]]/);
+      expect(response.outcome?.fills).toEqual({
+        anchor: 0,
+        option: 0,
+        bare: 3,
+        picked: 0,
+      });
       expect(f.editor).toHaveBeenCalledTimes(1);
     });
 
@@ -555,7 +620,10 @@ describe("MIMESIS + one targeted patch pass", () => {
     );
     expect(await f.reply({scenario, messages: []})).toMatchObject({
       output: original,
-      outcome: {status: "invalid_correction_retained_draft"},
+      outcome: {
+        status: "invalid_correction_retained_draft",
+        editRejection: "adds_placeholder",
+      },
     });
   });
 
@@ -581,7 +649,10 @@ describe("MIMESIS + one targeted patch pass", () => {
     ])("retains the draft (%s)", async after => {
       expect(await rewrite("what if i just lick it", after)).toMatchObject({
         output: "what if i just lick it",
-        outcome: {status: "invalid_correction_retained_draft"},
+        outcome: {
+          status: "invalid_correction_retained_draft",
+          editRejection: "repeat",
+        },
       });
     });
 

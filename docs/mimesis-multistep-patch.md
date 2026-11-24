@@ -139,6 +139,20 @@ neither.
 `childTurns` gains `placeholderRedraws` and `placeholdersFilled` (absent in
 results written before). `Scenario` gains the optional `anchors`.
 
+Two more fields say what happened, and change nothing of it. `editRejection`
+says why an edit was not applied (with `invalid_correction_retained_draft`):
+`truncated`, `unreadable` (not the JSON asked for), `invalid_edit` (edits that
+do not apply to the draft, or issues that cite no source), `invalid_output`
+(nothing left, a thinking tag, an end marker), `adds_placeholder` or `repeat`.
+`fills` says where the replacements counted by `placeholdersFilled` came from:
+`{anchor, option, bare, picked}`, the scenario's anchor, the slot's generic
+word, or the placeholder's own words (an unmatched slot, or an option with no
+word of its own), and how many of them the editor chose. Both are absent in
+results written before, `editRejection` when the edit was applied, and `fills`
+when nothing was filled. The editor callback takes a second argument, `"edit"`
+or `"pick"`, so that a caller can tell its two calls apart; it is not part of
+the request. None of this is in the fingerprint.
+
 `MimesisPatch.fingerprint(benchmarkFingerprint)` includes exact recipe prompts,
 both model configurations, the history policy, the opening policy (`corpus`:
 runs that sampled the opening per test carry a different hash), the
