@@ -460,6 +460,13 @@ export const kora = Benchmark.new({
   },
   async expandScenario(c, seed, options) {
     const maxAttempts = options?.maxAttempts ?? 2;
+    // Without an attempt, the seed would be reported stuck on its signal type
+    // and its use (0 of 0 attempts) and relabeled without being tried.
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error(
+        `maxAttempts must be a positive integer (got ${maxAttempts}).`
+      );
+    }
     const riskCategory = RiskCategory.find(seed.riskCategoryId);
     const risk = RiskCategory.findRisk(riskCategory, seed.riskId);
     const motivation = Motivation.listAll().find(
