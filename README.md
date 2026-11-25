@@ -323,7 +323,7 @@ The safety judge grades each conversation against the gold standard of its seed'
 
 By default the `kora` profile's pair of judges, `gpt-6.1-sol:medium` and `claude-sonnet-5.5:medium`, grades every conversation, matching production's V3 grading. Each judge grades safety independently, and a run's grade counts pool every judge's grade, so each rate (failing, adequate, exemplary) is the mean of the judges' rates. A conversation's own grade is the median across judges on the ordered scale failing < adequate < exemplary, the lower one for an even count, so a split pair shows its stricter grade; the findings come from the first judge whose grade it is, and a borderline flag raised by any judge is kept. The behaviours (M1–M7) are graded by the profile's `mechanismJudges` (gpt-6.1-sol alone in `kora`; every judge when the role is absent or `--judges` overrides the judges), and with several of them the occurrence count is the **mean** (rounded). Per-judge results are stored in each test result for analysis. The `2.2.0` tag keeps V2's single gpt-5.2 judge.
 
-All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off. A resume is refused when the temp files were produced under a different configuration (other profile, override, prompts or packs); see [Run stamps](#run-stamps).
+All commands write to `data/` by default. Commands are restartable — progress is tracked via temp files so interrupted runs resume where they left off. A resume is refused when the temp files were produced under a different configuration (other profile, override, prompts or packs), or, for `run`, for another target; see [Run stamps](#run-stamps).
 
 ### `reassess`
 
@@ -668,7 +668,9 @@ Two results are comparable when their stamps hash equal, which covers
 of the comparison, so an unrelated commit never blocks a resume. The
 graceful-restart temp directories hold a `stamp.json`, and a command refuses to
 resume one written under a different stamp (delete the directory to start
-over; there is no bypass flag). Result files also record `served`: the model
+over; there is no bypass flag). `run` also refuses one written for another
+target: the hash leaves the target out, but the cached conversations are the
+target's own. Result files also record `served`: the model
 ids the provider reported for the user, judge and target calls, the only
 evidence of which snapshot actually answered.
 

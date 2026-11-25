@@ -1,4 +1,4 @@
-import {RunStamp} from "@korabench/benchmark";
+import {RunStamp, stableJson, TargetRef} from "@korabench/benchmark";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as v from "valibot";
@@ -34,6 +34,10 @@ export async function listCachedFiles(tempDir: string): Promise<string[]> {
   }
 }
 
+function targetLabel(target: TargetRef): string {
+  return "slug" in target ? target.slug : `${target.name} (${target.model})`;
+}
+
 export async function hasCachedFiles(tempDir: string): Promise<boolean> {
   return (await listCachedFiles(tempDir)).length > 0;
 }
@@ -54,6 +58,22 @@ export async function assertResumable(
           `  cached:  ${RunStamp.describe(cached)}\n` +
           `  current: ${RunStamp.describe(stamp)}\n` +
           `Delete ${tempDir} to start over, or re-run with the same --profile and overrides.`
+      );
+    }
+    // The stamp hash leaves the target out, so that results of different
+    // targets compare; their cached conversations must not be mixed.
+    const cachedTarget = cached.models.target;
+    const target = stamp.models.target;
+    if (
+      cachedTarget &&
+      target &&
+      stableJson(cachedTarget) !== stableJson(target)
+    ) {
+      throw new Error(
+        `Refusing to resume ${tempDir}: it holds the conversations of another target.\n` +
+          `  cached:  ${targetLabel(cachedTarget)}\n` +
+          `  current: ${targetLabel(target)}\n` +
+          `Delete ${tempDir} to start over, or write this target's results to another directory.`
       );
     }
   } else if (await hasCachedFiles(tempDir)) {
