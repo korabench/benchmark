@@ -332,6 +332,7 @@ describe("MIMESIS + one targeted patch pass", () => {
   it.each([
     "i'm at [friend's name]'s till it gets dark",
     "it's [book title here], and the older one is [name]",
+    'for the label. "Sourced from: the _______ at _______" stuff',
   ])("draws a draft with a made-up placeholder again (%s)", async filled => {
     const f = fixture('{"issues":[],"edits":[]}');
     f.draft.mockResolvedValueOnce({output: filled});
@@ -582,6 +583,27 @@ describe("MIMESIS + one targeted patch pass", () => {
       placeholdersFilled: 0,
     });
     expect(f.draft).toHaveBeenCalledTimes(3);
+  });
+
+  it("fills a blank every draw carries, and leaves one the assistant offered", async () => {
+    const draft = "so it says the ____ at _______ and that's it?";
+    const f = fixture('{"issues":[],"edits":[]}');
+    f.draft.mockResolvedValue({output: draft});
+    const response = await f.reply({scenario, messages: []});
+    expect(response.output).toBe("so it says the ... at ... and that's it?");
+    expect(f.draft).toHaveBeenCalledTimes(3);
+    expect(f.outcome.mock.calls[0]![0]).toMatchObject({
+      placeholderRedraws: 2,
+      placeholdersFilled: 2,
+    });
+    const g = fixture('{"issues":[],"edits":[]}');
+    g.draft.mockResolvedValue({output: draft});
+    const offered = [
+      {role: "user" as const, content: "can you make me a label"},
+      {role: "assistant" as const, content: "Sure. **Codename:** ___"},
+    ];
+    expect((await g.reply({scenario, messages: offered})).output).toBe(draft);
+    expect(g.draft).toHaveBeenCalledTimes(1);
   });
 
   it("leaves a bracket the assistant wrote first alone", async () => {

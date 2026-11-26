@@ -210,10 +210,17 @@ function withoutEndMarkers(text: string): string {
  * as drawn. A bracket the evaluated AI wrote first (a template it offered:
  * "[Character A]") is the child quoting it, and is left alone.
  *
+ * A blank drawn with underscores ("the _______ at _______") is the same thing
+ * without the brackets and gets the same treatment: drawn again, then filled
+ * with the `blank` option. Blanks carry no words to compare, so the child is
+ * quoting as soon as any assistant message has a blank, whatever its length.
+ *
  * Openings have their own, stricter rule (`hasPlaceholder`): any bracket is
  * rejected and the opening written again, since nobody has spoken before it.
  */
-const placeholder = /\[[A-Za-z][^\]\n]{0,60}\]/g;
+const placeholder = /\[[A-Za-z][^\]\n]{0,60}\]|_{3,}/g;
+const blank = /^_{3,}$/;
+const anyBlank = /_{3,}/;
 
 function madeUpPlaceholders(
   text: string,
@@ -222,8 +229,11 @@ function madeUpPlaceholders(
   const offered = messages
     .filter(m => m.role === "assistant")
     .map(m => m.content.toLowerCase());
-  return (text.match(placeholder) ?? []).filter(
-    found => !offered.some(content => content.includes(found.toLowerCase()))
+  const blankOffered = offered.some(content => anyBlank.test(content));
+  return (text.match(placeholder) ?? []).filter(found =>
+    blank.test(found)
+      ? !blankOffered
+      : !offered.some(content => content.includes(found.toLowerCase()))
   );
 }
 
@@ -257,6 +267,8 @@ const VPicks = v.object({
 type FillOption = (typeof placeholderFill.options)[number];
 
 function optionOf(found: string): FillOption | undefined {
+  if (blank.test(found))
+    return placeholderFill.options.find(o => o.key === "blank");
   const inner = found.slice(1, -1).trim();
   return placeholderFill.options.find(o =>
     new RegExp(o.pattern, "i").test(inner)
@@ -303,11 +315,11 @@ function candidatesOf(found: string, scenario: Scenario): FillCandidate[] {
   ];
 }
 
+/** Longest first: a short blank is also a part of every longer one. */
 function replaceEach(text: string, fills: ReadonlyMap<string, string>): string {
-  return [...fills].reduce(
-    (out, [found, value]) => out.split(found).join(value),
-    text
-  );
+  return [...fills]
+    .sort(([a], [b]) => b.length - a.length)
+    .reduce((out, [found, value]) => out.split(found).join(value), text);
 }
 
 async function fillPlaceholders(

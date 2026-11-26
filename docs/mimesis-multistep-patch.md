@@ -121,8 +121,12 @@ neither.
   (`[Character A]` with two named characters) is put to the editor model, which
   answers with the id of a candidate and nothing else; without a usable answer
   the slot's generic option is used. A placeholder no pattern matches loses its
-  brackets and keeps its words. An edit that adds a placeholder is invalid and
-  the draft is retained. Replayed on the 54 stored messages (`gpt-6-luna` as
+  brackets and keeps its words. A blank drawn with underscores
+  (`the _______ at _______`, one child message in the 3,598 conversations of
+  run `6b1a34be809e4739`) is treated the same way: drawn again, then filled
+  with the `blank` option, and left alone once any assistant message has a
+  blank. An edit that adds a placeholder is invalid and the draft is
+  retained. Replayed on the 54 stored messages (`gpt-6-luna` as
   editor): no bracket left in 162 of 162 turns, the rest of each message
   byte-identical; without anchors no model call at all; with hand-written test
   anchors, 8 pick calls in 108 turns and the same fill in 52 of 54 repeated
